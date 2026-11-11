@@ -1,0 +1,160 @@
+@font-face {
+  font-family: "Inter"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("fonts/Inter-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter"; font-weight: 600; font-style: normal; font-display: swap;
+  src: url("fonts/Inter-SemiBold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("fonts/JetBrainsMono-Regular.woff2") format("woff2");
+}
+
+:root {
+  /* The program's neutral greys, without a colour accent */
+  --bg: #ffffff;
+  --fg: #2a2a2a;
+  --muted: #6e6e6e;
+  --line: #e0e0e0;
+  --soft: #f5f5f5;
+  --accent: #2a2a2a;
+  --on-accent: #fafafa;
+  color-scheme: light;
+}
+/* Dark by the system's setting, unless the switch chose light; or dark
+   by the switch */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1e1e1e;
+    --fg: #e6e6e6;
+    --muted: #a0a0a0;
+    --line: #3a3a3a;
+    --soft: #262626;
+    --accent: #e0e0e0;
+    --on-accent: #1e1e1e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1e1e1e;
+  --fg: #e6e6e6;
+  --muted: #a0a0a0;
+  --line: #3a3a3a;
+  --soft: #262626;
+  --accent: #e0e0e0;
+  --on-accent: #1e1e1e;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.65 "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-feature-settings: "ss01", "tnum";
+  -webkit-font-smoothing: antialiased;
+}
+/* Underlined: links have the text colour, not an accent of their own */
+a { color: var(--fg); text-decoration: underline; text-underline-offset: 2px; }
+img { max-width: 100%; height: auto; }
+.wrap { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+
+nav { border-bottom: 1px solid var(--line); }
+nav .wrap { display: flex; align-items: center; gap: 20px; height: 56px; }
+nav .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--fg); text-decoration: none; }
+nav .brand img { width: 26px; height: 26px; }
+nav .links { margin-left: auto; display: flex; gap: 20px; }
+nav .links a { color: var(--muted); text-decoration: none; font-size: 0.95rem; }
+nav .links a:hover { color: var(--fg); }
+/* Sun in dark mode, moon in light: the design a click switches to */
+.theme-switch {
+  display: grid; place-items: center; width: 34px; height: 34px; margin-left: -6px;
+  padding: 0; border: 1px solid transparent; border-radius: 8px;
+  background: none; color: var(--muted); cursor: pointer;
+}
+.theme-switch:hover { color: var(--fg); border-color: var(--line); }
+.theme-switch svg { width: 18px; height: 18px; }
+/* Phones: no room for the links beside the name; the page's own buttons
+   lead to the download and the source */
+@media (max-width: 560px) {
+  nav .links { display: none; }
+  .theme-switch { margin-left: auto; }
+}
+.theme-switch .sun { display: none; }
+:root[data-theme="dark"] .theme-switch .sun { display: block; }
+:root[data-theme="dark"] .theme-switch .moon { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-switch .sun { display: block; }
+  :root:not([data-theme="light"]) .theme-switch .moon { display: none; }
+}
+
+header.hero { padding: 64px 0 8px; }
+h1 { font-weight: 600; font-size: clamp(2rem, 5vw, 2.8rem); line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 12px; }
+.tagline { color: var(--muted); font-size: 1.15rem; max-width: 600px; margin: 0 0 28px; }
+
+.buttons { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.button {
+  display: inline-block; padding: 10px 18px; border-radius: 8px; font-weight: 600;
+  text-decoration: none; color: var(--fg); border: 1px solid var(--line); background: var(--bg);
+}
+.button:hover { border-color: var(--muted); }
+.button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.button.primary:hover { opacity: 0.9; }
+.release-info { color: var(--muted); font-size: 0.9rem; margin: 12px 0 0; min-height: 1.5em; }
+
+.shot { display: block; margin: 40px 0 0; border: 1px solid var(--line); border-radius: 8px; }
+
+section { padding: 64px 0 0; }
+h2 { font-weight: 600; font-size: 1.5rem; letter-spacing: -0.01em; margin: 0 0 6px; }
+.lead { color: var(--muted); margin: 0 0 24px; max-width: 640px; }
+
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 28px 32px; }
+.features h3 { font-size: 1rem; margin: 0 0 4px; font-weight: 600; }
+.features .icon { width: 20px; height: 20px; color: var(--fg); margin-bottom: 8px; }
+.features p { margin: 0; color: var(--muted); }
+
+.split { display: grid; grid-template-columns: 1fr 1.4fr; gap: 36px; align-items: center; margin-top: 56px; }
+.split h3 { font-size: 1.15rem; margin: 0 0 6px; }
+.split p { color: var(--muted); margin: 0 0 8px; }
+.split img { border: 1px solid var(--line); border-radius: 8px; }
+.split img.page { width: 100%; height: 420px; object-fit: cover; object-position: top; background: #fff; }
+@media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
+
+.downloads { border-top: 1px solid var(--line); }
+.download {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 16px; align-items: center;
+  padding: 16px 0; border-bottom: 1px solid var(--line);
+}
+.download h3 { margin: 0; font-size: 1rem; }
+.download .meta { color: var(--muted); font-size: 0.92rem; }
+.download .nightly { font-size: 0.9rem; color: var(--muted); }
+.download.current h3::after { content: "  · your system"; color: var(--muted); font-weight: 500; font-size: 0.85rem; }
+@media (max-width: 600px) {
+  .download { grid-template-columns: 1fr; gap: 6px; }
+  .download .button { justify-self: start; }
+}
+.note { color: var(--muted); font-size: 0.92rem; margin-top: 16px; }
+
+#fragen h2 { margin-bottom: 16px; }
+details { border-bottom: 1px solid var(--line); padding: 14px 0; }
+details:first-of-type { border-top: 1px solid var(--line); }
+summary { cursor: pointer; font-weight: 600; }
+details p, details ol { color: var(--muted); margin: 10px 0 0; }
+.guide summary { font-size: 1.05rem; }
+.guide h3 { font-size: 0.95rem; margin: 18px 0 0; }
+.guide ol li { margin: 6px 0; }
+.guide strong { color: var(--fg); }
+details ol { padding-left: 20px; }
+
+code { font: 0.88em "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 4px; }
+
+footer { color: var(--muted); font-size: 0.9rem; padding: 64px 0 40px; }
+footer .wrap { display: flex; gap: 16px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 20px; }
+footer a { color: var(--muted); }
+
+article { padding: 48px 0 0; max-width: 680px; }
+article h1 { font-size: 2rem; }
+article h2 { font-size: 1.2rem; margin-top: 32px; }
+article p { color: var(--muted); }

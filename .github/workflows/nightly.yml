@@ -1,0 +1,311 @@
+# Every night: build and test on Linux, Windows and macOS and replace the
+# nightly release with the new downloads. Nights without new commits are
+# skipped, a run by hand builds anyway.
+name: Nightly
+
+on:
+  schedule:
+    - cron: "37 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  QT_VERSION: "6.12.0"
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - id: check
+        name: Anything new since the last nightly?
+        run: |
+          last=$(git rev-parse -q --verify "refs/tags/nightly^{commit}" || true)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$last" != "$GITHUB_SHA" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nothing new since $last"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  linux:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
+    # The oldest runner, an AppImage runs on systems at least as new
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgl1-mesa-dev libegl1 libxkbcommon-dev libxkbcommon-x11-0 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 \
+            libxcb-shape0 libxcb-xinerama0 libfontconfig1 libfuse2 libpulse0 dpkg-dev
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          modules: qtmultimedia
+          cache: true
+
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-log-linux
+          path: build/Testing/Temporary/LastTest.log
+          retention-days: 7
+
+      - name: AppImage
+        run: |
+          base=https://github.com/linuxdeploy
+          wget -q $base/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q $base/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy-*.AppImage
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          export QMAKE="$QT_ROOT_DIR/bin/qmake"
+          # Our QML and what igitt's style builds on (packaging/qml-imports)
+          export QML_SOURCES_PATHS="$GITHUB_WORKSPACE/qml:$GITHUB_WORKSPACE/packaging/qml-imports"
+          # Videos, web pages and links (TLS), the SVG icons
+          export EXTRA_PLATFORM_PLUGINS="libqoffscreen.so"
+          export EXTRA_QT_MODULES="multimedia;network;svg"
+          export EXTRA_QT_PLUGINS="$EXTRA_QT_MODULES" # name in older plugin versions
+          export LD_LIBRARY_PATH="$QT_ROOT_DIR/lib:$LD_LIBRARY_PATH"
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --executable build/cache \
+            --desktop-file logo/cache.desktop --icon-file logo/cache.svg \
+            --plugin qt --output appimage
+          mv Cache-*.AppImage cache-linux-x64.AppImage
+          find AppDir/usr/plugins -maxdepth 2 | sort
+
+      # The AppImage has to start and show its window without a display
+      - name: Smoke test
+        run: |
+          APPIMAGE_EXTRACT_AND_RUN=1 QT_QPA_PLATFORM=offscreen ./cache-linux-x64.AppImage \
+            --workspace "$RUNNER_TEMP/workspace" --grab "$RUNNER_TEMP/window.png"
+          test -s "$RUNNER_TEMP/window.png"
+          test -s "$RUNNER_TEMP/workspace/Welcome/canvas.json"
+
+      # A version after the one in CMake, rising with the commit time, so
+      # package managers upgrade every nightly
+      - name: Debian package
+        run: |
+          base=$(sed -n 's/^CMAKE_PROJECT_VERSION:STATIC=//p' build/CMakeCache.txt)
+          stamp=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d%H%M%S)
+          packaging/deb/build-deb.sh AppDir "$base+git$stamp.${GITHUB_SHA::7}" cache-linux-x64.deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cache-linux
+          path: |
+            cache-linux-x64.AppImage
+            cache-linux-x64.deb
+          retention-days: 1
+
+  windows:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v5
+
+      # Since 6.11 each Windows toolchain has its own folder in the Qt
+      # repository, aqt 3.3.0 doesn't know that yet but its master does
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: qtmultimedia
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7
+          cache: true
+
+      - name: Build
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+          cmake --build build --config Release
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-log-windows
+          path: build/Testing/Temporary/LastTest.log
+          retention-days: 7
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory Cache | Out-Null
+          # Visual Studio adds a folder per configuration
+          Copy-Item build/Release/cache.exe Cache/
+          # Our QML and what igitt's style builds on (packaging/qml-imports)
+          windeployqt --release --qmldir qml --qmldir packaging/qml-imports Cache/cache.exe
+          Copy-Item LICENSE Cache/LICENSE.txt
+          Compress-Archive -Path Cache -DestinationPath cache-windows-x64.zip
+
+      # Inno Setup is on the runner image; install it should it go missing
+      - name: Installer
+        shell: pwsh
+        run: |
+          $paths = "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe", "$env:ProgramFiles\Inno Setup*\ISCC.exe"
+          $iscc = Get-ChildItem $paths -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup --no-progress -y
+            $iscc = Get-ChildItem $paths -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if (-not $iscc) { throw "Inno Setup not found" }
+          $version = (Select-String -Path build/CMakeCache.txt -Pattern '^CMAKE_PROJECT_VERSION:STATIC=(.+)$').Matches[0].Groups[1].Value
+          & $iscc.FullName /Q "/O$PWD" "/DAppVersion=$version" "/DAppFiles=$PWD\Cache" packaging/windows/cache.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with $LASTEXITCODE" }
+
+      - name: Smoke test
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          # The installer as users meet it: fixed folder, Start menu entry
+          # and desktop shortcut, notes the uninstaller leaves alone
+          $dir = "$env:LOCALAPPDATA\Programs\Cache"
+          $menu = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Cache.lnk"
+          $desktop = Join-Path ([Environment]::GetFolderPath("Desktop")) "Cache.lnk"
+          $workspace = "$env:RUNNER_TEMP\workspace"
+          $png = "$env:RUNNER_TEMP\window.png"
+
+          $p = Start-Process ./cache-windows-x64-setup.exe -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/NOLAUNCH=1" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Setup failed with $($p.ExitCode)" }
+          foreach ($f in "$dir\cache.exe", "$dir\unins000.exe", $menu, $desktop) {
+            if (-not (Test-Path $f)) { throw "Missing after installing: $f" }
+          }
+
+          # The installed program shows its window, in igitt's style
+          $p = Start-Process "$dir\cache.exe" -ArgumentList "--workspace", $workspace, "--grab", $png -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0 -or -not (Test-Path $png)) { throw "The window did not show" }
+          if (-not (Test-Path "$workspace\Welcome\canvas.json")) { throw "No workspace at $workspace" }
+
+          $p = Start-Process "$dir\unins000.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Uninstall failed with $($p.ExitCode)" }
+          # The uninstaller runs on from a copy and removes itself
+          for ($i = 0; $i -lt 30 -and (Test-Path "$dir\cache.exe"); $i++) { Start-Sleep -Seconds 1 }
+          foreach ($f in "$dir\cache.exe", $menu, $desktop) {
+            if (Test-Path $f) { throw "Still there after uninstalling: $f" }
+          }
+          if (-not (Test-Path "$workspace\Welcome\canvas.json")) { throw "Uninstalling removed the notes" }
+
+          # The zip, without installing
+          Remove-Item $png
+          $p = Start-Process Cache/cache.exe -ArgumentList "--workspace", $workspace, "--grab", $png -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0 -or -not (Test-Path $png)) { throw "The window did not show from the zip" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cache-windows
+          path: |
+            cache-windows-x64-setup.exe
+            cache-windows-x64.zip
+          retention-days: 1
+
+  macos:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: mac
+          target: desktop
+          arch: clang_64
+          modules: qtmultimedia
+          cache: true
+
+      - name: Build
+        run: |
+          # Apple silicon and Intel in one app, like the Qt it builds on
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+          cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-log-macos
+          path: build/Testing/Temporary/LastTest.log
+          retention-days: 7
+
+      - name: Disk image
+        run: |
+          mv build/cache.app build/Cache.app
+          # Our QML and what igitt's style builds on (packaging/qml-imports)
+          macdeployqt build/Cache.app -qmldir="$GITHUB_WORKSPACE/qml" \
+            -qmldir="$GITHUB_WORKSPACE/packaging/qml-imports" -dmg
+          mv build/Cache.dmg cache-macos.dmg
+
+      - name: Smoke test
+        run: |
+          QT_QPA_PLATFORM=offscreen build/Cache.app/Contents/MacOS/cache \
+            --workspace "$RUNNER_TEMP/workspace" --grab "$RUNNER_TEMP/window.png"
+          test -s "$RUNNER_TEMP/window.png"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cache-macos
+          path: cache-macos.dmg
+          retention-days: 1
+
+  release:
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cache-*
+          path: artifacts
+          merge-multiple: true
+
+      # One rolling pre-release, its tag moves to the commit it was built from
+      - name: Replace the nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete nightly --cleanup-tag --yes || true
+          gh release create nightly artifacts/* --prerelease --target "$GITHUB_SHA" \
+            --title "Nightly $(date -u +%Y-%m-%d)" \
+            --notes "Built from $GITHUB_SHA. The newest development version, not tried in daily use yet. Windows: run cache-windows-x64-setup.exe (or unzip the zip and start cache.exe); SmartScreen warns because the program isn't signed (More info, Run anyway). macOS: drag the app from the dmg into Applications; macOS blocks the first start, then choose Open Anyway under System Settings › Privacy & Security."

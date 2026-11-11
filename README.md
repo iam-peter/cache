@@ -1,9 +1,51 @@
-# Note Canvas
+# Cache
 
-A note-taking app built with Qt 6 and QML. Each project is an infinite canvas
-of Markdown notes with images and videos embedded in them. A sidebar lists
-your projects and the notes on the current canvas. The look comes from
-[igitt](../igitt): its Qt Quick Controls style, themes, fonts and icons.
+Notes on an infinite canvas: Markdown notes with their images and videos,
+linked into mindmaps, searched across every project, and copied with their
+pictures into Teams or mail.
+
+**[Website](https://iam-peter.github.io/cache/)** ·
+**[Download](https://github.com/iam-peter/cache/releases)** ·
+[Nightly](https://github.com/iam-peter/cache/releases/tag/nightly)
+
+![A project in Cache, light and dark](docs/screenshots/canvas-themes.png)
+
+Built with Qt 6 (C++ and Qt Quick). Each project is a folder, each note a
+plain Markdown file. A sidebar lists your projects and the notes on the
+current canvas. The look comes from [igitt](https://github.com/iam-peter/igitt):
+its Qt Quick Controls style, themes, fonts and icons.
+
+## Download
+
+Each [release](https://github.com/iam-peter/cache/releases) has:
+
+| File | For |
+|---|---|
+| `cache-windows-x64-setup.exe` | Windows 10/11: installer, no administrator rights needed |
+| `cache-windows-x64.zip` | Windows 10/11 without installing: unzip, start `cache.exe` |
+| `cache-macos.dmg` | macOS, Apple silicon and Intel |
+| `cache-linux-x64.AppImage` | any Linux |
+| `cache-linux-x64.deb` | Debian and Ubuntu, with its own Qt |
+
+The programs aren't signed: Windows SmartScreen asks once (*More info*,
+*Run anyway*). macOS blocks the first start; then choose *Open Anyway*
+under System Settings › Privacy & Security. Step-by-step guides for every
+system are on the [website](https://iam-peter.github.io/cache/#installation).
+
+**Windows installer.** It puts the program into a fixed folder
+(`%LOCALAPPDATA%\Programs\Cache`, or Program Files when installed for all
+users), offers two checkboxes for a Start menu entry and a desktop shortcut
+(both ticked) and registers an uninstaller under Windows' *Apps*. Neither
+updating nor uninstalling touches the notes.
+
+**Nightly and releases.** Every night with new commits, the
+[Nightly](.github/workflows/nightly.yml) workflow builds and tests on Linux,
+Windows and macOS, smoke-tests the packages and replaces the rolling
+`nightly` pre-release. *Promote Release* (run by hand with a version)
+turns the current nightly into a stable release with the same files.
+[CI](.github/workflows/ci.yml) builds and tests every push and pull
+request; the [website](pages/) is published from `pages/` by the
+*Website* workflow.
 
 ## Features
 
@@ -75,7 +117,7 @@ your projects and the notes on the current canvas. The look comes from
     in the background (one that can't be had, say behind a sign-in, stays
     a link)
   - Markdown and text files become notes of their own, and notes copied
-    from Note Canvas paste back exactly
+    from Cache paste back exactly
 - **For Teams, mail and documents**:
   - **Copy note** (`Ctrl+C`, or `Ctrl+Shift+C` while editing) puts a note on
     the clipboard as rich text with its images embedded, code as coloured
@@ -111,7 +153,7 @@ your projects and the notes on the current canvas. The look comes from
   typo matches.
 - **igitt's themes**: Light, Dark, Dracula, Alucard and the four Catppuccin
   flavours, or System. The canvas, note tints and controls all follow the
-  theme. Your own themes go in `~/.config/Note Canvas/themes` (format:
+  theme. Your own themes go in `~/.config/Cache/themes` (format:
   `style/` and igitt's `docs/THEMES.md`).
 - Colours, duplicate, copy and paste between canvases, bring to front or
   send to back, resize handles, arrow-key nudging, undo and redo of
@@ -121,7 +163,7 @@ Press `F1` for all shortcuts and `Ctrl+,` for settings.
 
 ## Storage
 
-The default workspace is `~/Documents/Note Canvas`; change it from the
+The default workspace is `~/Documents/Cache`; change it from the
 sidebar footer. Each project is a plain folder:
 
 ```
@@ -140,7 +182,7 @@ notes holding that media.
 ## Building
 
 Needs Qt 6.9 or newer (developed against 6.12) with Qt Quick, Quick
-Controls 2, Qt Multimedia and Qt Network, plus CMake 3.21+ and a C++20 compiler.
+Controls 2, Qt Multimedia, Qt Network and Qt SVG, plus CMake 3.21+ and a C++20 compiler.
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=$HOME/Qt/6.12.0/gcc_64
@@ -151,8 +193,14 @@ cmake --build build
 ```
 
 ```bash
-./build/notecanvas
+./build/cache
 ```
+
+`--workspace <folder>` opens another workspace for that start without
+saving it, and `--grab <png>` saves a screenshot of the window and quits
+(the smoke tests of the packages use both). Cache used to be called Note
+Canvas: on its first start it takes over Note Canvas' settings, and keeps
+using `~/Documents/Note Canvas` if there is no `~/Documents/Cache` yet.
 
 The search's matching, the Markdown and code helpers, the board model and
 the history have unit tests:
@@ -177,6 +225,10 @@ ctest --test-dir build --output-on-failure
 | `src/documentfilter.*` | Reading-order sort of the sidebar's note list |
 | `src/searchmodel.*` | Search over all projects; links, backlinks and tasks across them (`Search` in QML) |
 | `src/fuzzy.*` | Typo-tolerant matching: accent folding, edit distance |
+| `logo/` | The icon (SVG, PNG, ICO, ICNS) and the desktop entry |
+| `packaging/` | Debian package, Windows installer, QML imports for the deploy tools |
+| `pages/` | The website, published on GitHub Pages |
+| `.github/workflows/` | CI, nightly builds, releases and the website |
 | `tests/` | Tests of the matching, Markdown and code helpers, board model and history |
 | `templates/` | The built-in templates |
 | `src/gridbackground.*` | Scene-graph dot grid |
@@ -195,3 +247,10 @@ ctest --test-dir build --output-on-failure
 | `qml/Icon*.qml`, `SplitterHandle.qml` | Helpers from igitt |
 
 To update the style, copy igitt's `src/style` over `style/`.
+
+## License
+
+MIT, see [LICENSE](LICENSE). Qt is used under the LGPL v3; igitt's style
+(`style/`) is MIT; Inter and JetBrains Mono are under the SIL Open Font
+License 1.1 and the Lucide icons under the ISC license (their license
+files are beside them).

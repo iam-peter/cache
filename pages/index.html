@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cache</title>
+<meta name="description" content="Markdown notes, images and videos on an infinite canvas. Mindmaps, checklists, code and full-text search over every project. Free and open source.">
+<meta property="og:title" content="Cache – notes on an infinite canvas">
+<meta property="og:description" content="Markdown notes with images and videos on an infinite canvas, linked into mindmaps, searched across every project.">
+<meta property="og:image" content="https://iam-peter.github.io/cache/canvas.png">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<script src="theme.js"></script>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="./"><img src="cache.svg" alt=""> Cache</a>
+    <div class="links">
+      <a href="#download">Download</a>
+      <a href="#installation">Installation</a>
+      <a href="#questions">Questions</a>
+      <a href="https://github.com/iam-peter/cache">GitHub</a>
+    </div>
+    <button class="theme-switch" id="theme-switch" type="button" aria-label="Dark theme">
+      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" /></svg>
+      <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /> <path d="M12 2v2" /> <path d="M12 20v2" /> <path d="m4.93 4.93 1.41 1.41" /> <path d="m17.66 17.66 1.41 1.41" /> <path d="M2 12h2" /> <path d="M20 12h2" /> <path d="m6.34 17.66-1.41 1.41" /> <path d="m19.07 4.93-1.41 1.41" /></svg>
+    </button>
+  </div>
+</nav>
+
+<main class="wrap">
+  <header class="hero">
+    <h1>Notes on an infinite canvas</h1>
+    <p class="tagline">Markdown notes with their images and videos, side by side on a canvas that never ends.
+      Link them into mindmaps, tick off tasks, find anything in any project.
+      Free, open source, no account.</p>
+    <div class="buttons">
+      <a class="button primary" id="hero-download" href="#download">Download</a>
+      <a class="button" href="https://github.com/iam-peter/cache">Source code</a>
+    </div>
+    <p class="release-info" id="release-info"></p>
+    <img class="shot" src="canvas-themes.png" width="1440" height="900"
+         alt="A project in Cache: a mindmap of notes inside a section, connected to a meeting note with a wireframe image and a checklist, in light and dark halves">
+  </header>
+
+  <section id="features">
+    <h2>Features</h2>
+    <p class="lead">Somewhere to put everything while you think: text, pictures, code and the lines between them.</p>
+    <div class="features">
+      <div>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>
+        <h3>Infinite canvas</h3>
+        <p>Zoom, pan and arrange notes freely, with a minimap, smart guides and sections that group what lies in them.</p>
+      </div>
+      <div>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+  <circle cx="9" cy="9" r="2" />
+  <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>
+        <h3>Images and videos in notes</h3>
+        <p>Paste or drop screenshots, photos and videos straight into a note. Videos play inside it.</p>
+      </div>
+      <div>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
+        <h3>Copy into Teams</h3>
+        <p>A note goes onto the clipboard as rich text with its images, ready for Teams, Outlook or Word.</p>
+      </div>
+      <div>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg>
+        <h3>Links and mindmaps</h3>
+        <p>Connect any side to any side. <code>Tab</code> grows a mindmap, <code>[[links]]</code> join notes across projects, with previews.</p>
+      </div>
+      <div>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8" />
+  <path d="m21 21-4.3-4.3" /></svg>
+        <h3>Search every project</h3>
+        <p>Full-text search over all notes at once, forgiving of typos and half-typed words.</p>
+      </div>
+      <div>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4" />
+  <path d="m3 7 2 2 4-4" />
+  <path d="M13 6h8" />
+  <path d="M13 12h8" />
+  <path d="M13 18h8" /></svg>
+        <h3>Checklists</h3>
+        <p>Tick tasks right in the note; the sidebar collects the open ones of every project.</p>
+      </div>
+      <div>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        <h3>Code snippets</h3>
+        <p>Fenced code is highlighted in the theme's colours, the language guessed if you leave it out.</p>
+      </div>
+      <div>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z" />
+  <path d="M15 3v4a2 2 0 0 0 2 2h4" /></svg>
+        <h3>Whiteboard tools</h3>
+        <p>Shapes, free text, pen and highlighter, and templates from Kanban board to retrospective.</p>
+      </div>
+      <div>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></svg>
+        <h3>Plain files, with history</h3>
+        <p>Every note is a Markdown file in a folder you choose. Earlier versions are kept, and restored with a click.</p>
+      </div>
+    </div>
+
+    <div class="split">
+      <div>
+        <h3>Notes that hold what you paste</h3>
+        <p>Rich text from Teams, Outlook, Word or a web page keeps its headings, lists, links and tables.
+          Images are saved with the note, spreadsheet cells become a table, a web link gets the page's title,
+          and any other file becomes a card that opens it.</p>
+      </div>
+      <img src="notes.png" width="1440" height="900" loading="lazy"
+           alt="A meeting note with a wireframe image and a checklist, connected to a mindmap branch, next to a code snippet">
+    </div>
+
+    <div class="split">
+      <div>
+        <h3>Find it again, even misspelled</h3>
+        <p>The search box at the top of the sidebar looks through every note of every project.
+          <code>relese</code> still finds “release”; results come grouped by project with the matches in bold,
+          and are highlighted inside the notes.</p>
+      </div>
+      <img src="search.png" width="1440" height="900" loading="lazy"
+           alt="Search results for 'relese notes' from three projects in the sidebar, with the matches highlighted on the canvas, in the dark theme">
+    </div>
+  </section>
+
+  <section id="download">
+    <h2>Download</h2>
+    <p class="lead" id="download-lead">For Windows, macOS and Linux.</p>
+    <div class="downloads">
+      <div class="download" data-os="windows">
+        <div><h3>Windows</h3><div class="meta">Windows 10 and 11, 64-bit. Installs without administrator rights.
+          Without installing: <a data-alt="cache-windows-x64.zip" href="https://github.com/iam-peter/cache/releases">zip archive</a>.</div></div>
+        <a class="nightly" data-nightly="cache-windows-x64-setup.exe" href="https://github.com/iam-peter/cache/releases/tag/nightly">Nightly</a>
+        <a class="button" data-asset="cache-windows-x64-setup.exe" data-fallback="cache-windows-x64.zip" data-fallback-label=".zip" href="https://github.com/iam-peter/cache/releases">Installer</a>
+      </div>
+      <div class="download" data-os="macos">
+        <div><h3>macOS</h3><div class="meta">Apple silicon and Intel. Drag it into Applications; on the first start choose “Open Anyway” under System Settings › Privacy &amp; Security.</div></div>
+        <a class="nightly" data-nightly="cache-macos.dmg" href="https://github.com/iam-peter/cache/releases/tag/nightly">Nightly</a>
+        <a class="button" data-asset="cache-macos.dmg" href="https://github.com/iam-peter/cache/releases">.dmg</a>
+      </div>
+      <div class="download" data-os="linux">
+        <div><h3>Linux</h3><div class="meta">AppImage for any distribution.</div></div>
+        <a class="nightly" data-nightly="cache-linux-x64.AppImage" href="https://github.com/iam-peter/cache/releases/tag/nightly">Nightly</a>
+        <a class="button" data-asset="cache-linux-x64.AppImage" href="https://github.com/iam-peter/cache/releases">.AppImage</a>
+      </div>
+      <div class="download" data-os="debian">
+        <div><h3>Debian / Ubuntu</h3><div class="meta">Package with its own Qt: <code>sudo apt install ./cache-linux-x64.deb</code></div></div>
+        <a class="nightly" data-nightly="cache-linux-x64.deb" href="https://github.com/iam-peter/cache/releases/tag/nightly">Nightly</a>
+        <a class="button" data-asset="cache-linux-x64.deb" href="https://github.com/iam-peter/cache/releases">.deb</a>
+      </div>
+    </div>
+    <p class="note">The nightly is built every night from the newest code.
+      Every version is on <a href="https://github.com/iam-peter/cache/releases">GitHub</a>.</p>
+  </section>
+
+  <section id="installation">
+    <h2>Installation</h2>
+    <p class="lead">Step by step for your system. Your notes live in their own folder and stay where they are through updates and uninstalling.</p>
+
+    <details class="guide" data-os="windows">
+      <summary>Windows 10 and 11</summary>
+      <h3>Install</h3>
+      <ol>
+        <li>Download the <strong>installer</strong> (<code>cache-windows-x64-setup.exe</code>) above and double-click it.</li>
+        <li>Windows says “Windows protected your PC”, because the program isn't digitally signed yet. Click <strong>More info</strong>, then <strong>Run anyway</strong>.</li>
+        <li>Choose who to install for: <strong>only you</strong> (recommended, no administrator rights) or every user of the computer (asks for an administrator).</li>
+        <li>The boxes <strong>Start menu entry</strong> and <strong>Create a desktop shortcut</strong> are ticked; untick what you don't want, then <strong>Install</strong>.</li>
+        <li>Cache starts at the end. Later you find it in the Start menu and on the desktop.</li>
+      </ol>
+      <p>The program always goes to the same place: <code>%LOCALAPPDATA%\Programs\Cache</code> (for all users: <code>C:\Program Files\Cache</code>). Your notes are in <code>Documents\Cache</code>.</p>
+      <h3>Update</h3>
+      <p>Run the installer of the new version; it replaces the old one and keeps your choices of shortcuts.</p>
+      <h3>Remove</h3>
+      <p>Windows Settings › <strong>Apps</strong> › Installed apps › Cache › <strong>Uninstall</strong>. Your notes stay in <code>Documents\Cache</code>.</p>
+      <p class="note">Without installing: unzip the zip archive and start <code>cache.exe</code>. There is no Start menu entry then.</p>
+    </details>
+
+    <details class="guide" data-os="macos">
+      <summary>macOS (Apple silicon and Intel)</summary>
+      <p>Cache isn't notarised by Apple yet (that costs a yearly fee), so macOS blocks its first start. Once allowed, it starts normally from then on.</p>
+      <h3>Install</h3>
+      <ol>
+        <li>Download <code>cache-macos.dmg</code> above and double-click it.</li>
+        <li>Drag <strong>Cache</strong> from the window into the <strong>Applications</strong> folder, then eject the “Cache” drive in the Finder's sidebar.</li>
+        <li>Double-click Cache in Applications. macOS says it can't be opened because Apple couldn't check it for malicious software. Click <strong>Done</strong>, <em>not</em> “Move to Bin”.</li>
+        <li>Open <strong>System Settings</strong> › <strong>Privacy &amp; Security</strong> and scroll down to <strong>Security</strong>, where it says “Cache” was blocked. Click <strong>Open Anyway</strong>. The button shows only for a while after the attempt; if it's missing, repeat step 3.</li>
+        <li>Confirm with your password or Touch ID and choose <strong>Open Anyway</strong> once more. From now on a double-click is enough.</li>
+      </ol>
+      <p class="note">For the experienced: instead of steps 3 to 5, <code>xattr -dr com.apple.quarantine /Applications/Cache.app</code> in the Terminal lifts the block for this app.</p>
+      <h3>Update and remove</h3>
+      <p>Quit Cache, drag the new version into Applications and choose <strong>Replace</strong>, then repeat steps 3 to 5. To remove it, drag Cache from Applications to the Bin; your notes stay in <code>~/Documents/Cache</code>.</p>
+    </details>
+
+    <details class="guide" data-os="linux">
+      <summary>Linux</summary>
+      <h3>AppImage (any distribution)</h3>
+      <ol>
+        <li>Download <code>cache-linux-x64.AppImage</code> and put it somewhere for good, for example <code>~/Applications</code>.</li>
+        <li>Make it executable: in the file manager under Properties › Permissions, or in a terminal with <code>chmod +x cache-linux-x64.AppImage</code>.</li>
+        <li>Double-click it. If it doesn't start and mentions FUSE (on some servers, containers and very slim systems), start it with <code>./cache-linux-x64.AppImage --appimage-extract-and-run</code>, or take the <code>.deb</code> on Debian and Ubuntu.</li>
+      </ol>
+      <h3>Debian and Ubuntu</h3>
+      <p><code>sudo apt install ./cache-linux-x64.deb</code> installs it with an entry in the application menu; a new version installs the same way. Remove it with <code>sudo apt remove cache</code>.</p>
+      <p>Either way your notes are in <code>~/Documents/Cache</code> and stay there when the program goes.</p>
+    </details>
+  </section>
+
+  <section id="questions">
+    <h2>Questions</h2>
+    <details>
+      <summary>What does Cache cost?</summary>
+      <p>Nothing. It is open source under the MIT license and free to use and pass on.</p>
+    </details>
+    <details>
+      <summary>Where are my notes kept?</summary>
+      <p>In a folder on your computer, <code>Documents/Cache</code> unless you choose another one (at the bottom of the sidebar). Each project is a folder, each note a Markdown file any editor can open, and pictures and videos sit in the project's <code>assets</code> folder. Nothing is sent anywhere.</p>
+    </details>
+    <details>
+      <summary>Can I sync notes between computers?</summary>
+      <p>Put the workspace folder into a folder your cloud drive syncs (OneDrive, Dropbox, iCloud Drive, Nextcloud) and choose it in Cache on every computer.</p>
+    </details>
+    <details>
+      <summary>How do I get a note into Teams?</summary>
+      <p>Select the note and press <code>Ctrl+C</code> (<code>Cmd+C</code> on a Mac), then paste in Teams. Text, images, tables, code and checklists come along. <code>Ctrl+Shift+C</code> copies the selection as a picture instead.</p>
+    </details>
+    <details>
+      <summary>Windows or macOS warns at the start. Is that dangerous?</summary>
+      <p>The program isn't digitally signed (yet), so Windows SmartScreen warns and macOS blocks the first start. The <a href="#installation">installation guide</a> shows how to start it anyway. The source code is public.</p>
+    </details>
+    <details>
+      <summary>Something is missing or doesn't work.</summary>
+      <p>Ideas and problems are welcome as an <a href="https://github.com/iam-peter/cache/issues">issue on GitHub</a>.</p>
+    </details>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>MIT license</span>
+    <a href="https://github.com/iam-peter/cache">GitHub</a>
+    <a href="notices.html">Notices</a>
+  </div>
+</footer>
+
+<script>
+  const repo = "iam-peter/cache";
+  const base = `https://github.com/${repo}/releases`;
+
+  function detectOs() {
+    const p = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent;
+    if (/win/i.test(p)) return "windows";
+    if (/mac|iphone|ipad/i.test(p)) return "macos";
+    if (/linux|x11/i.test(p)) return /ubuntu|debian/i.test(navigator.userAgent) ? "debian" : "linux";
+    return "windows";
+  }
+
+  const labels = { windows: "for Windows", macos: "for macOS", linux: "for Linux", debian: "for Debian/Ubuntu" };
+  const os = detectOs();
+  // The installation guide opens at the visitor's system
+  const guideOs = os === "debian" ? "linux" : os;
+  for (const guide of document.querySelectorAll(".guide"))
+    guide.open = guide.dataset.os === guideOs;
+  for (const row of document.querySelectorAll(".download")) {
+    const current = row.dataset.os === os;
+    row.classList.toggle("current", current);
+    row.querySelector("[data-asset]").classList.toggle("primary", current);
+  }
+
+  function date(iso) {
+    return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  }
+
+  fetch(`https://api.github.com/repos/${repo}/releases?per_page=30`,
+        { headers: { Accept: "application/vnd.github+json" } })
+    .then(response => response.ok ? response.json() : Promise.reject(response.status))
+    .then(list => {
+      const stable = list.find(r => !r.draft && !r.prerelease);
+      const nightly = list.find(r => r.tag_name === "nightly");
+      const has = (release, name) => release && release.assets.some(a => a.name === name);
+
+      // The stable release, the nightly until there is one
+      const main = stable || nightly;
+      for (const link of document.querySelectorAll("[data-asset]")) {
+        let name = link.dataset.asset;
+        if (!has(main, name) && link.dataset.fallback && has(main, link.dataset.fallback)) {
+          name = link.dataset.fallback;
+          link.textContent = link.dataset.fallbackLabel;
+        }
+        if (has(main, name)) {
+          link.href = `${base}/download/${main.tag_name}/${name}`;
+          link.dataset.found = "true";
+        }
+      }
+      for (const link of document.querySelectorAll("[data-alt]")) {
+        if (has(main, link.dataset.alt))
+          link.href = `${base}/download/${main.tag_name}/${link.dataset.alt}`;
+      }
+      for (const link of document.querySelectorAll("[data-nightly]")) {
+        if (has(nightly, link.dataset.nightly)) {
+          link.href = `${base}/download/nightly/${link.dataset.nightly}`;
+          link.textContent = `Nightly of ${date(nightly.published_at)}`;
+        } else {
+          link.hidden = true;
+        }
+      }
+
+      const info = document.getElementById("release-info");
+      const hero = document.getElementById("hero-download");
+      const asset = document.querySelector(`.download[data-os="${os}"] [data-asset]`);
+      if (stable) {
+        info.textContent = `Version ${stable.tag_name.replace(/^v/, "")} of ${date(stable.published_at)}`;
+        hero.textContent = `Download ${labels[os]}`;
+        if (asset.dataset.found) hero.href = asset.href;
+      } else if (nightly) {
+        info.textContent = `Preview of ${date(nightly.published_at)}`;
+        document.getElementById("download-lead").textContent =
+          "For Windows, macOS and Linux. So far there is only the preview (nightly).";
+        hero.textContent = `Preview ${labels[os]}`;
+        if (asset.dataset.found) hero.href = asset.href;
+      }
+    })
+    .catch(() => {
+      // Without the API (offline, rate limit) the links lead to the release list.
+    });
+</script>
+</body>
+</html>

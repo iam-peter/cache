@@ -1,0 +1,7 @@
+<!-- The app icon (logo/cache.svg) without its margin -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 8 240 240">
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="#2c2c2a"/>
+  <path d="M172 84 A62 62 0 1 0 172 172" fill="none" stroke="#ffffff" stroke-width="26" stroke-linecap="round"/>
+  <circle cx="182" cy="76" r="22" fill="#ef9f27"/>
+  <circle cx="182" cy="180" r="22" fill="#5dcaa5"/>
+</svg>

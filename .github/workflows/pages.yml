@@ -1,0 +1,47 @@
+# Publishes the website on GitHub Pages. The page looks up the latest
+# release and nightly itself, so new builds need no new deployment.
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "pages/**"
+      - "docs/screenshots/**"
+      - "logo/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Site
+        run: |
+          mkdir site
+          cp -r pages/. site/
+          cp logo/cache.svg logo/cache.png site/
+          cp docs/screenshots/*.png site/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
