@@ -423,7 +423,7 @@ private slots:
         board.addLink(a, b);
         board.copyItems({a, b});
         const QMimeData *mime = QGuiApplication::clipboard()->mimeData();
-        QVERIFY(mime->hasFormat(QStringLiteral("application/x-notecanvas")));
+        QVERIFY(mime->hasFormat(QStringLiteral("application/x-cache-items")));
         QVERIFY(mime->html().contains(QStringLiteral("A")));
         const QStringList pasted = board.pasteFromClipboard(1000, 1000);
         QCOMPARE(pasted.size(), 2);

@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // Theme, fonts and canvas behaviour. Every setting takes effect at once.
 Dialog {

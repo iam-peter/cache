@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Controls
-import NoteApp
+import Cache
 
 // Free text on the canvas, without a card around it: headings, labels.
 Item {

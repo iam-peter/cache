@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // A fenced code block of a note, syntax-highlighted, with a button that
 // copies the code.

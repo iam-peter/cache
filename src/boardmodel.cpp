@@ -876,7 +876,7 @@ void BoardModel::copyToClipboard(int row) const
     mime->setHtml(clipboardHtml(it.text));
     mime->setText(it.text);
     // Pasted back into the app, the Markdown is taken as it is
-    mime->setData(QStringLiteral("application/x-notecanvas-markdown"), QByteArray());
+    mime->setData(QStringLiteral("application/x-cache-markdown"), QByteArray());
 
     QStringList images;
     QString rest = it.text;

@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Controls
-import NoteApp
+import Cache
 
 // The two ends of the selected connector. Drag one onto another side of
 // its item, or onto another item (its own for a loop), to attach it there.

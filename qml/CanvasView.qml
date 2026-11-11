@@ -6,7 +6,7 @@ import QtQuick.Shapes
 import QtCore
 import QtMultimedia
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // The infinite canvas. "world" holds every item in canvas coordinates and
 // is translated by (panX, panY) and scaled by zoom to map onto the viewport.
@@ -1211,7 +1211,7 @@ Item {
             drop.acceptProposedAction()
             const formats = {}
             for (const format of drop.formats) {
-                if (/^(text\/|image\/|application\/x-(qt-image|notecanvas))/.test(format))
+                if (/^(text\/|image\/|application\/x-(qt-image|cache-))/.test(format))
                     formats[format] = drop.getDataAsArrayBuffer(format)
             }
             if (view.isEditing) {

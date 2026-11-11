@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // A file attached to a note: its name, type and size; it opens with the
 // application the system has for it.

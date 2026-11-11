@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // A labelled area grouping what lies in it. The title tab sits above the
 // top-left corner and keeps its size on screen.

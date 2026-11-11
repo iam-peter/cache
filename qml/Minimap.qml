@@ -1,6 +1,6 @@
 import QtQuick
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // The whole canvas, small, with the part on screen marked. Click or drag
 // to go somewhere.

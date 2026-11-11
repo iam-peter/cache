@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Controls
-import NoteApp
+import Cache
 import IgittStyle as Styles
 
 // A tool button with a Lucide icon, tinted like its text. Small, as most

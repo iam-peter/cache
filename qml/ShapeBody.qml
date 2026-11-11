@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Shapes
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // A rectangle, ellipse, diamond or triangle with a label, for flowcharts
 // and diagrams.

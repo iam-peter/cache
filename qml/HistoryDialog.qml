@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // The saved versions of the open project, to go back to one.
 Dialog {

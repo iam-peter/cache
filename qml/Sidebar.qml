@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // Projects of the workspace on top, the notes on the current canvas below.
 Pane {
@@ -390,12 +390,12 @@ Pane {
             Layout.bottomMargin: Styles.Primitives.spacing.sp050
             Label {
                 Layout.fillWidth: true
-                text: Workspace.rootPath
+                text: Workspace.rootDisplayPath
                 elide: Text.ElideMiddle
                 color: Theme.textMuted
                 font.pixelSize: Styles.Primitives.fontSize.small
                 ToolTip.visible: footerHover.hovered
-                ToolTip.text: Workspace.rootPath
+                ToolTip.text: Workspace.rootDisplayPath
                 HoverHandler { id: footerHover }
             }
             IconButton {

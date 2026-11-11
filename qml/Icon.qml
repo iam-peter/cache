@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Controls
-import NoteApp
+import Cache
 import IgittStyle as Styles
 
 // A Lucide icon on its own, tinted to `color`. Drawn by a disabled button,

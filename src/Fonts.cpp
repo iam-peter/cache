@@ -6,7 +6,7 @@
 
 void Fonts::registerBundled()
 {
-    QDirIterator fonts(QStringLiteral(":/qt/qml/NoteApp/fonts"), {QStringLiteral("*.ttf")});
+    QDirIterator fonts(QStringLiteral(":/qt/qml/Cache/fonts"), {QStringLiteral("*.ttf")});
     while (fonts.hasNext()) {
         if (QFontDatabase::addApplicationFont(fonts.next()) < 0)
             qWarning("Could not load the font %s", qPrintable(fonts.filePath()));

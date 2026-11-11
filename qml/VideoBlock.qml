@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtMultimedia
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // A video embedded in a note, playing in place. It shows its first frame
 // until played; the expand button opens it large.

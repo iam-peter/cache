@@ -86,8 +86,8 @@ bool History::commit(const QString &root, const QString &project, const QString 
     QStringList identity;
     QByteArray email;
     if (!run(root, {QStringLiteral("config"), QStringLiteral("user.email")}, &email) || email.trimmed().isEmpty()) {
-        identity = {QStringLiteral("-c"), QStringLiteral("user.name=Note Canvas"),
-                    QStringLiteral("-c"), QStringLiteral("user.email=notecanvas@localhost")};
+        identity = {QStringLiteral("-c"), QStringLiteral("user.name=Cache"),
+                    QStringLiteral("-c"), QStringLiteral("user.email=cache@localhost")};
     }
     // The app's own repository: no signing prompts, no hooks
     identity += {QStringLiteral("-c"), QStringLiteral("commit.gpgsign=false")};

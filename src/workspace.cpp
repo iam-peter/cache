@@ -12,7 +12,7 @@
 
 namespace {
 
-const char kWelcome[] = R"(# Welcome to Note Canvas
+const char kWelcome[] = R"(# Welcome to Cache
 
 An **infinite canvas** of Markdown notes. Each note is a plain `.md` file in this project's `notes/` folder.
 
@@ -35,7 +35,7 @@ def hello():
 
 const char kLinks[] = R"(## Links and mindmaps
 
-- Type `[[` in a note to link another one, in any project: [[Welcome to Note Canvas]]
+- Type `[[` in a note to link another one, in any project: [[Welcome to Cache]]
 - `![[Title]]` shows a preview of the linked note
 - Drag a note's side handle onto another note to connect them, or onto empty space for a new one
 - `Tab` adds a child, `Enter` a sibling: a mindmap in seconds
@@ -57,15 +57,22 @@ const char kShortcuts[] = R"(## Shortcuts
 | F1 | All shortcuts |
 )";
 
+QString startRoot;
+
 } // namespace
+
+void Workspace::setStartRoot(const QString &path)
+{
+    startRoot = path;
+}
 
 Workspace::Workspace(QObject *parent)
     : QAbstractListModel(parent)
 {
     QSettings settings;
     const QString fallback = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
-                             + QStringLiteral("/Note Canvas");
-    m_root = settings.value(QStringLiteral("workspace/root"), fallback).toString();
+                             + QStringLiteral("/Cache");
+    m_root = !startRoot.isEmpty() ? startRoot : settings.value(QStringLiteral("workspace/root"), fallback).toString();
     QDir().mkpath(m_root);
     scan();
     ensureProject();
@@ -77,6 +84,18 @@ Workspace::Workspace(QObject *parent)
             path = p.path;
     }
     m_currentPath = path;
+}
+
+QString Workspace::rootDisplayPath() const
+{
+#ifndef Q_OS_WIN
+    const QString home = QDir::homePath();
+    if (m_root == home)
+        return QStringLiteral("~");
+    if (m_root.startsWith(home + QLatin1Char('/')))
+        return QLatin1Char('~') + m_root.mid(home.size());
+#endif
+    return QDir::toNativeSeparators(m_root);
 }
 
 int Workspace::rowCount(const QModelIndex &parent) const

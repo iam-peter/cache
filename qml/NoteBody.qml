@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // A Markdown document with its images, videos, code and linked notes:
 // rendered when idle, the plain Markdown in an editor while editing.

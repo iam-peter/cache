@@ -210,8 +210,8 @@ void SearchModel::connectSources()
     QQmlEngine *engine = qmlEngine(this);
     if (!engine)
         return;
-    m_board = engine->singletonInstance<BoardModel *>("NoteApp", "Board");
-    m_workspace = engine->singletonInstance<Workspace *>("NoteApp", "Workspace");
+    m_board = engine->singletonInstance<BoardModel *>("Cache", "Board");
+    m_workspace = engine->singletonInstance<Workspace *>("Cache", "Workspace");
     if (m_board) {
         connect(m_board, &QAbstractItemModel::dataChanged, this,
                 [this](const QModelIndex &, const QModelIndex &, const QList<int> &roles) {

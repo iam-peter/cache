@@ -39,9 +39,9 @@ namespace {
 const QStringList kImageExt = {"png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "tif", "tiff"};
 const QStringList kVideoExt = {"mp4", "webm", "mkv", "mov", "avi", "m4v", "ogv"};
 const QStringList kTextExt = {"md", "markdown", "txt", "text"};
-const QString kAppItems = QStringLiteral("application/x-notecanvas");
+const QString kAppItems = QStringLiteral("application/x-cache-items");
 // Put on the clipboard with a note's Markdown: pasting it back takes that
-const QString kAppMarkdown = QStringLiteral("application/x-notecanvas-markdown");
+const QString kAppMarkdown = QStringLiteral("application/x-cache-markdown");
 
 // Text from another application: UTF-16 when it says so (as Firefox's
 // often is), else UTF-8
@@ -516,7 +516,7 @@ void BoardModel::fetch(const QUrl &url, qint64 limit, const std::function<void(c
     if (!m_network)
         m_network = new QNetworkAccessManager(this);
     QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("NoteCanvas/0.2"));
+    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Cache/0.2"));
     request.setTransferTimeout(15000);
     QNetworkReply *reply = m_network->get(request);
     connect(reply, &QNetworkReply::downloadProgress, reply, [reply, limit](qint64 received, qint64) {

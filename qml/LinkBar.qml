@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // At the middle of the selected connector: its route, arrows, line, colour
 // and label.

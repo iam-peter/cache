@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // Above several selected items: aligning, spacing, colour, copying and
 // exporting them. In canvas coordinates, scaled to keep its screen size.

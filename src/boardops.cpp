@@ -967,19 +967,19 @@ void BoardModel::copyItems(const QStringList &ids) const
     for (const BoardLink &link : std::as_const(state.links))
         links.append(toJson(link));
     auto *mime = new QMimeData;
-    mime->setData(QStringLiteral("application/x-notecanvas"),
+    mime->setData(QStringLiteral("application/x-cache-items"),
                   QJsonDocument(QJsonObject{{QStringLiteral("items"), items}, {QStringLiteral("links"), links}})
                       .toJson(QJsonDocument::Compact));
     mime->setHtml(QStringLiteral("<html><body>") + html + QStringLiteral("</body></html>"));
     mime->setText(text.join(QStringLiteral("\n\n")));
-    mime->setData(QStringLiteral("application/x-notecanvas-markdown"), QByteArray());
+    mime->setData(QStringLiteral("application/x-cache-markdown"), QByteArray());
     QGuiApplication::clipboard()->setMimeData(mime);
 }
 
 QString BoardModel::tempPath(const QString &name) const
 {
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
-                        + QStringLiteral("/notecanvas-") + QString::number(QCoreApplication::applicationPid());
+                        + QStringLiteral("/cache-") + QString::number(QCoreApplication::applicationPid());
     QDir().mkpath(dir);
     return QDir(dir).filePath(name);
 }
@@ -1045,7 +1045,7 @@ QVariantList BoardModel::templates(const QString &workspaceRoot) const
             {QStringLiteral("builtIn"), builtIn},
         });
     };
-    QDirIterator builtIns(QStringLiteral(":/qt/qml/NoteApp/templates"), {QStringLiteral("*.json")});
+    QDirIterator builtIns(QStringLiteral(":/qt/qml/Cache/templates"), {QStringLiteral("*.json")});
     QStringList paths;
     while (builtIns.hasNext())
         paths << builtIns.next();

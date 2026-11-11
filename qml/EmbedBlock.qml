@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // A [[link]] on a line of its own: the linked note's title, and while
 // expanded (written ![[…]]) a preview of its content. The chevron hides

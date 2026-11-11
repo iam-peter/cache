@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Cache
+GenericName=Note Canvas
+Comment=Markdown notes, images and videos on an infinite canvas
+Exec=cache
+Icon=cache
+Terminal=false
+Categories=Office;
+Keywords=notes;markdown;canvas;mindmap;whiteboard;
+StartupWMClass=cache

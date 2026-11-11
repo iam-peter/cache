@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Shapes
-import NoteApp
+import Cache
 
 // A pen or highlighter line.
 Item {

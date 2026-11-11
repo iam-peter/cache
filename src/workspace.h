@@ -13,6 +13,8 @@ class Workspace : public QAbstractListModel
     QML_SINGLETON
 
     Q_PROPERTY(QString rootPath READ rootPath NOTIFY rootPathChanged)
+    // The folder as people read it: ~ for the home folder, \ on Windows
+    Q_PROPERTY(QString rootDisplayPath READ rootDisplayPath NOTIFY rootPathChanged)
     Q_PROPERTY(int currentIndex READ currentIndex WRITE setCurrentIndex NOTIFY currentChanged)
     Q_PROPERTY(QString currentPath READ currentPath NOTIFY currentChanged)
     Q_PROPERTY(QString currentName READ currentName NOTIFY currentChanged)
@@ -22,11 +24,16 @@ public:
 
     explicit Workspace(QObject *parent = nullptr);
 
+    // A workspace folder for this start only, not saved (the --workspace
+    // option); set before the QML engine creates the singleton
+    static void setStartRoot(const QString &path);
+
     int rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
     QString rootPath() const { return m_root; }
+    QString rootDisplayPath() const;
     int currentIndex() const;
     void setCurrentIndex(int row);
     QString currentPath() const { return m_currentPath; }

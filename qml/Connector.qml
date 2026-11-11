@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Shapes
 import QtQuick.Controls
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // A connector between two items, in canvas coordinates. Its ends follow
 // the items live, while they are dragged too.

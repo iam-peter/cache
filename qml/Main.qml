@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import QtQuick.Dialogs
 import QtCore
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 ApplicationWindow {
     id: win
@@ -14,7 +14,7 @@ ApplicationWindow {
     minimumWidth: 760
     minimumHeight: 480
     visible: true
-    title: (Workspace.currentName.length ? Workspace.currentName + " — " : "") + "Note Canvas"
+    title: (Workspace.currentName.length ? Workspace.currentName + " — " : "") + "Cache"
     font: Theme.uiFont
 
     Settings {

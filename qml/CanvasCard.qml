@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // One item on the canvas, any type: selection, moving (with the rest of the
 // selection), resizing, connection handles, the folding badge of mindmap

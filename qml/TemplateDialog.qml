@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // Starts a canvas or a part of one from a template: the built-in ones and
 // those saved from a selection (kept in the workspace's .templates folder).

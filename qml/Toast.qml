@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // Short-lived message at the bottom of the canvas, styled like the
 // style's popovers.

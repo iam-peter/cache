@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import IgittStyle as Styles
-import NoteApp
+import Cache
 
 // The tools along the bottom of the canvas, as in FigJam. With the pen or
 // highlighter on, its colours show above it.

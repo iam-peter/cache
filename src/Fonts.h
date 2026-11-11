@@ -4,7 +4,7 @@
 #include <QObject>
 #include <QtQml/qqmlregistration.h>
 
-// The fonts Note Canvas ships with (from igitt): Inter for the interface and JetBrains Mono
+// The fonts Cache ships with (from igitt): Inter for the interface and JetBrains Mono
 // for code, both under the SIL Open Font License.
 class Fonts : public QObject
 {
