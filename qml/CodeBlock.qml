@@ -52,6 +52,8 @@ Rectangle {
             width: parent.width
             text: block.segment.html
             textFormat: Text.RichText
+            // See NoteBody.qml
+            renderType: Text.CurveRendering
             wrapMode: Text.Wrap
             color: Theme.text
             font.family: Theme.monoFont.family

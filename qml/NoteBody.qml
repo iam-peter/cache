@@ -164,6 +164,11 @@ Item {
                             id: rich
                             text: piece.modelData.html
                             textFormat: Text.RichText
+                            // Distance-field text (the default) crashed Qt
+                            // 6.12's renderer when a zoomed-out note with a
+                            // table was resized: this Text is rebuilt at every
+                            // step. Curves also stay sharp at any zoom.
+                            renderType: Text.CurveRendering
                             wrapMode: Text.Wrap
                             color: Theme.text
                             font.pixelSize: body.textSize

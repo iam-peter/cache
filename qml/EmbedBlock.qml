@@ -83,6 +83,8 @@ Rectangle {
                 id: preview
                 width: parent.width
                 textFormat: Text.RichText
+                // See NoteBody.qml
+                renderType: Text.CurveRendering
                 wrapMode: Text.Wrap
                 color: Theme.text
                 font.pixelSize: 12
