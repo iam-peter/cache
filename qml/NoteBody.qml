@@ -60,6 +60,112 @@ Item {
         editor.cursorPosition = at + 3 // right after the opening ```, for the language
     }
 
+    // --- The editing toolbar's Markdown -----------------------------------
+    // `mark` around the selection, or around `placeholder` (selected, to type
+    // over) when nothing is; again on marked text takes the marks off
+    function wrap(mark, placeholder) {
+        const s = editor.selectionStart, e = editor.selectionEnd, n = mark.length
+        const selected = editor.getText(s, e)
+        if (selected.length >= 2 * n && selected.startsWith(mark) && selected.endsWith(mark)) {
+            editor.remove(s, e)
+            editor.insert(s, selected.slice(n, selected.length - n))
+            editor.select(s, e - 2 * n)
+        } else if (editor.getText(Math.max(0, s - n), s) === mark && editor.getText(e, Math.min(editor.length, e + n)) === mark) {
+            editor.remove(e, e + n)
+            editor.remove(s - n, s)
+            editor.select(s - n, e - n)
+        } else {
+            // Spaces at the edges stay outside: "**word **" is not bold
+            const lead = selected.match(/^\s*/)[0], trail = selected.trim().length > 0 ? selected.match(/\s*$/)[0] : ""
+            const core = selected.trim().length > 0 ? selected.slice(lead.length, selected.length - trail.length) : ""
+            const text = core.length > 0 ? core : placeholder
+            const at = s + (core.length > 0 ? lead.length : 0)
+            editor.remove(s, e)
+            editor.insert(s, (core.length > 0 ? lead : selected) + mark + text + mark + trail)
+            editor.select(at + n, at + n + text.length)
+        }
+        editor.forceActiveFocus()
+    }
+    // The whole lines the selection (or the cursor) is on
+    function lineSpan() {
+        const text = editor.text
+        const s = editor.selectionStart, e = editor.selectionEnd
+        const start = s === 0 ? 0 : text.lastIndexOf("\n", s - 1) + 1
+        // A selection that ends at the start of a line leaves that line out
+        const last = e > s ? e - 1 : e
+        const end = text.indexOf("\n", last)
+        return { start: start, end: end < 0 ? text.length : end }
+    }
+    // A heading, list, task list or quote for the selected lines; again on
+    // lines that already are one turns them back into text
+    function setLines(kind) {
+        const span = lineSpan()
+        const lines = editor.getText(span.start, span.end).split("\n")
+        const heading = kind.startsWith("h")
+        const marks = { h1: "# ", h2: "## ", h3: "### ", bullet: "- ", task: "- [ ] ", quote: "> " }
+        const prefixFor = (i) => kind === "number" ? (i + 1) + ". " : marks[kind]
+        // What a line starts with: its indent, any heading, list, task or
+        // quote mark, and the text after it
+        const parse = (line) => {
+            const m = line.match(/^(\s*)(#{1,6}\s+|>\s?|(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?)?(.*)$/)
+            return { indent: m[1], mark: m[2] || "", text: m[3] }
+        }
+        const isKind = (p) => kind === "number" ? /^\d+[.)]\s+$/.test(p.mark)
+                            : kind === "bullet" ? /^[-*+]\s+$/.test(p.mark)
+                            : kind === "task" ? /\[[ xX]\]\s+$/.test(p.mark)
+                            : p.mark.trim() === marks[kind].trim()
+        const parsed = lines.map(parse)
+        const used = parsed.filter(p => (p.mark + p.text).trim().length > 0)
+        const off = used.length > 0 && used.every(isKind)
+        let i = 0
+        const changed = parsed.map((p, n) => {
+            if (lines.length > 1 && (p.mark + p.text).trim().length === 0)
+                return lines[n]
+            // Headings and quotes start at the margin; lists keep their indent
+            const indent = heading || kind === "quote" ? "" : p.indent
+            return off ? indent + p.text : indent + prefixFor(i++) + p.text
+        }).join("\n")
+        const single = lines.length === 1 && editor.selectionStart === editor.selectionEnd
+        editor.remove(span.start, span.end)
+        editor.insert(span.start, changed)
+        if (single)
+            editor.cursorPosition = span.start + changed.length
+        else
+            editor.select(span.start, span.start + changed.length)
+        editor.forceActiveFocus()
+    }
+    function insertLink() {
+        const s = editor.selectionStart, e = editor.selectionEnd
+        const selected = editor.getText(s, e)
+        const isUrl = /^https?:\/\/\S+$/.test(selected)
+        const label = isUrl || selected.length === 0 ? qsTr("text") : selected
+        const target = isUrl ? selected : "https://"
+        editor.remove(s, e)
+        editor.insert(s, "[" + label + "](" + target + ")")
+        if (isUrl || selected.length === 0)
+            editor.select(s + 1, s + 1 + label.length)
+        else
+            editor.select(s + label.length + 3, s + label.length + 3 + target.length)
+        editor.forceActiveFocus()
+    }
+    function format(action) {
+        switch (action) {
+        case "bold": wrap("**", qsTr("bold")); break
+        case "italic": wrap("*", qsTr("italic")); break
+        case "strike": wrap("~~", qsTr("text")); break
+        case "inline-code": wrap("`", qsTr("code")); break
+        case "link": insertLink(); break
+        case "codeblock": insertCode(); break
+        case "table": {
+            const at = insertBlock("| " + qsTr("Column") + " | " + qsTr("Column") + " |\n|---|---|\n|  |  |")
+            editor.select(at + 2, at + 2 + qsTr("Column").length)
+            break
+        }
+        case "rule": editor.cursorPosition = insertBlock("---") + 3; break
+        default: setLines(action) // h1, h2, h3, bullet, number, task, quote
+        }
+    }
+
     function openLink(link) {
         if (link.startsWith("task:")) {
             Board.toggleTask(card.index, parseInt(link.substring(5)))
@@ -109,6 +215,10 @@ Item {
         function onInsertCodeRequested(id) {
             if (id === body.card.itemId)
                 body.insertCode()
+        }
+        function onFormatRequested(id, action) {
+            if (id === body.card.itemId && body.editing)
+                body.format(action)
         }
     }
 
@@ -288,6 +398,12 @@ Item {
                 suggestions.close()
             }
 
+            // The editor's own: Ctrl+B is also the window's sidebar key
+            Keys.onShortcutOverride: (event) => {
+                if ((event.modifiers & Qt.ControlModifier) && !(event.modifiers & Qt.ShiftModifier)
+                        && [Qt.Key_B, Qt.Key_I, Qt.Key_K, Qt.Key_E].indexOf(event.key) >= 0)
+                    event.accepted = true
+            }
             Keys.onPressed: (event) => {
                 if (suggestions.opened) {
                     if (event.key === Qt.Key_Down) {
@@ -327,6 +443,11 @@ Item {
                 } else if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)
                            && (event.modifiers & Qt.ShiftModifier)) {
                     body.insertCode()
+                    event.accepted = true
+                } else if ((event.modifiers & Qt.ControlModifier) && !(event.modifiers & Qt.ShiftModifier)
+                           && [Qt.Key_B, Qt.Key_I, Qt.Key_K, Qt.Key_E].indexOf(event.key) >= 0) {
+                    body.format(event.key === Qt.Key_B ? "bold" : event.key === Qt.Key_I ? "italic"
+                                : event.key === Qt.Key_K ? "link" : "inline-code")
                     event.accepted = true
                 } else if (event.key === Qt.Key_C && (event.modifiers & Qt.ControlModifier)
                            && (event.modifiers & Qt.ShiftModifier)) {

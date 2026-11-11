@@ -39,6 +39,8 @@ Item {
     readonly property bool selected: !canvas.exporting && canvas.selection.indexOf(itemId) >= 0
     readonly property bool soleSelection: selected && canvas.selection.length === 1
     readonly property bool editing: canvas.editingId === itemId
+    // A note being edited: its toolbar holds the Markdown buttons
+    readonly property bool formatting: editing && isNote
     readonly property bool linkTarget: canvas.linkTargetId === itemId
     readonly property real inv: 1 / canvas.zoom
     readonly property real minW: isNote ? 160 : 30
@@ -368,6 +370,39 @@ Item {
                 }
             }
 
+            // While editing a note: Markdown for the selection or its lines
+            Repeater {
+                model: root.formatting ? [
+                    ["h1", "heading-1", qsTr("Heading 1")], ["h2", "heading-2", qsTr("Heading 2")],
+                    ["h3", "heading-3", qsTr("Heading 3")], [],
+                    ["bold", "bold", qsTr("Bold (Ctrl+B)")], ["italic", "italic", qsTr("Italic (Ctrl+I)")],
+                    ["strike", "strikethrough", qsTr("Strikethrough")], ["inline-code", "code", qsTr("Inline code (Ctrl+E)")],
+                    ["link", "link", qsTr("Link (Ctrl+K)")], [],
+                    ["bullet", "list", qsTr("Bulleted list")], ["number", "list-ordered", qsTr("Numbered list")],
+                    ["task", "list-checks", qsTr("Checklist")], ["quote", "quote", qsTr("Quote")], [],
+                    ["codeblock", "square-code", qsTr("Code block (Ctrl+Shift+K)")], ["table", "table", qsTr("Table")],
+                    ["rule", "separator-horizontal", qsTr("Divider")]] : []
+                delegate: Loader {
+                    required property var modelData
+                    anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+                    sourceComponent: modelData.length === 0 ? formatGap : formatButton
+                    Component {
+                        id: formatGap
+                        ToolSeparator { height: 24 }
+                    }
+                    Component {
+                        id: formatButton
+                        Tip {
+                            iconName: modelData[1]
+                            tip: modelData[2]
+                            // The editor keeps its focus and selection
+                            focusPolicy: Qt.NoFocus
+                            onClicked: root.canvas.formatRequested(root.itemId, modelData[0])
+                        }
+                    }
+                }
+            }
+
             // Shapes: which one
             Repeater {
                 model: root.isShape ? [["rect", "square"], ["ellipse", "circle"], ["diamond", "diamond"], ["triangle", "triangle"]] : []
@@ -396,7 +431,7 @@ Item {
             }
 
             Repeater {
-                model: root.isStroke || root.isText ? Theme.penColors : Theme.noteKeys
+                model: root.formatting ? [] : root.isStroke || root.isText ? Theme.penColors : Theme.noteKeys
                 delegate: Swatch {
                     required property string modelData
                     key: modelData
@@ -419,24 +454,25 @@ Item {
                 onClicked: root.canvas.pickMedia(root.index)
             }
             Tip {
-                visible: root.isNote
+                visible: root.isNote && !root.formatting
                 iconName: "code"
                 tip: qsTr("Add a code block (Ctrl+Shift+K while editing)")
                 onClicked: root.canvas.insertCode(root.itemId)
             }
             Tip {
-                visible: root.isNote
+                visible: root.isNote && !root.formatting
                 iconName: "copy"
                 tip: qsTr("Copy with images, to paste into Teams or mail (Ctrl+C)")
                 onClicked: root.canvas.copyRow(root.index)
             }
             Tip {
-                visible: root.childCount > 0 && root.connectable
+                visible: root.childCount > 0 && root.connectable && !root.formatting
                 iconName: "network"
                 tip: qsTr("Tidy this branch")
                 onClicked: Board.tidy(root.itemId)
             }
             Tip {
+                visible: !root.formatting
                 iconName: "trash-2"
                 tip: qsTr("Delete (Del)")
                 onClicked: root.canvas.deleteSelected()

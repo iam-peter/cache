@@ -64,6 +64,8 @@ Item {
 
     clip: true
     focus: true
+    // A button of the editing toolbar: bold, h1, bullet, table, ...
+    signal formatRequested(string id, string action)
     activeFocusOnTab: true
 
     // --- Coordinates and view ------------------------------------------------
