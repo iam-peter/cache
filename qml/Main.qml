@@ -61,6 +61,7 @@ ApplicationWindow {
     Shortcut { sequences: [StandardKey.ZoomOut]; onActivated: canvasView.zoomBy(0.8) }
     Shortcut { sequences: ["Ctrl+0"]; onActivated: canvasView.resetZoom() }
     Shortcut { sequences: ["Ctrl+1"]; onActivated: canvasView.fitAll() }
+    Shortcut { sequences: ["Ctrl+2"]; onActivated: canvasView.fitSelection() }
     Shortcut { sequences: [StandardKey.Preferences, "Ctrl+,"]; onActivated: settingsDialog.open() }
     Shortcut { sequences: ["F1"]; onActivated: helpDialog.open() }
     Shortcut { sequences: ["Ctrl+Shift+T"]; enabled: !win.popupOpen; onActivated: templates.open() }
@@ -154,9 +155,17 @@ ApplicationWindow {
                 ToolTip.text: qsTr("Zoom out (Ctrl+-)")
             }
             ToolButton {
+                id: zoomButton
                 styles: [Styles.ButtonStyle.medium]
                 text: Math.round(canvasView.zoom * 100) + "%"
-                Layout.preferredWidth: 56
+                // As wide as the widest percentage, so it never elides and
+                // the buttons beside it don't move while zooming
+                Layout.preferredWidth: Math.ceil(zoomWidest.advanceWidth) + leftPadding + rightPadding
+                TextMetrics {
+                    id: zoomWidest
+                    font: zoomButton.font
+                    text: "888%"
+                }
                 onClicked: canvasView.resetZoom()
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("Zoom to 100% (Ctrl+0)")
@@ -174,6 +183,14 @@ ApplicationWindow {
                 onClicked: canvasView.fitAll()
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("Fit everything (Ctrl+1)")
+            }
+            IconButton {
+                styles: [Styles.ButtonStyle.medium]
+                iconName: "fit-selection"
+                enabled: canvasView.selection.length > 0
+                onClicked: canvasView.fitSelection()
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Fit selection (Ctrl+2)")
             }
 
             ToolSeparator {}
@@ -301,7 +318,7 @@ ApplicationWindow {
                     ["Arrows (+Shift)", qsTr("Nudge 10 px (1 px)")],
                     ["Alt while dragging", qsTr("Move without snapping")],
                     ["Ctrl+Z / Ctrl+Shift+Z", qsTr("Undo / redo")],
-                    ["Ctrl+0 / Ctrl+1", qsTr("Zoom 100% / fit everything")],
+                    ["Ctrl+0 / Ctrl+1 / Ctrl+2", qsTr("Zoom 100% / fit everything / fit selection")],
                     ["Ctrl+F", qsTr("Search all projects")],
                     ["Ctrl+Shift+T / H", qsTr("Templates / history")],
                     ["Ctrl+B", qsTr("Show or hide the sidebar")],

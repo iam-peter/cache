@@ -125,6 +125,17 @@ Item {
         else
             centerOn(b.x, b.y, b.width, b.height, 1.0)
     }
+    // The selected items, as large as fits (up to 200%); everything when
+    // nothing is selected
+    function fitSelection() {
+        if (selection.length === 0) {
+            fitAll()
+            return
+        }
+        const b = Board.boundsOf(selection)
+        if (b.width > 0 && b.height > 0)
+            centerOn(b.x, b.y, b.width, b.height, 2.0)
+    }
     function applyView(cx, cy, z) {
         if (width <= 0 || height <= 0) {
             pendingView = { cx: cx, cy: cy, z: z }
@@ -1554,6 +1565,7 @@ Item {
         MenuSeparator {}
         MenuItem { text: qsTr("Select all"); onTriggered: view.selectAll() }
         MenuItem { text: qsTr("Fit everything"); onTriggered: view.fitAll() }
+        MenuItem { text: qsTr("Fit selection"); enabled: view.selection.length > 0; onTriggered: view.fitSelection() }
         MenuItem { text: qsTr("Zoom to 100%"); onTriggered: view.resetZoom() }
     }
 
@@ -1568,7 +1580,10 @@ Item {
             onTriggered: view.copySelected()
         }
         MenuItem { text: qsTr("Copy as picture"); onTriggered: view.exportImage(view.selection, "copy") }
-        MenuItem { text: qsTr("Zoom to it"); onTriggered: view.focusItem(cardMenu.item.id) }
+        MenuItem {
+            text: view.selection.length > 1 ? qsTr("Fit selection") : qsTr("Zoom to it")
+            onTriggered: view.selection.length > 1 ? view.fitSelection() : view.focusItem(cardMenu.item.id)
+        }
         MenuSeparator {}
         MenuItem { text: qsTr("Add child (Tab)"); enabled: cardMenu.item.type === "note" || cardMenu.item.type === "shape"; onTriggered: view.addChild() }
         MenuItem { text: qsTr("Tidy branch"); enabled: cardMenu.item.childCount > 0; onTriggered: Board.tidy(cardMenu.item.id) }
