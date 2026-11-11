@@ -1,6 +1,8 @@
 #include "boardmodel.h"
 
 #include <QClipboard>
+#include <QDirIterator>
+#include <QFontDatabase>
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -59,6 +61,21 @@ private:
     }
 
 private slots:
+    // The fonts the app ships with. Qt's Markdown writer asks the font
+    // system whether text is bold, and the offscreen platform on Windows
+    // finds no fonts of its own.
+    void initTestCase()
+    {
+        QDirIterator fonts(QStringLiteral(CACHE_FONT_DIR), {QStringLiteral("*.ttf")});
+        int loaded = 0;
+        while (fonts.hasNext())
+            loaded += QFontDatabase::addApplicationFont(fonts.next()) >= 0;
+        QVERIFY(loaded > 0);
+        QFont font(QStringLiteral("Inter"));
+        font.setPixelSize(14);
+        QGuiApplication::setFont(font);
+    }
+
     void linksPersist()
     {
         const QString path = project("links");

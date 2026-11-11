@@ -134,6 +134,7 @@ if(BUILD_TESTING)
         src/boardmodel.h src/boardmodel.cpp src/boardops.cpp src/importer.cpp
         src/markdown.h src/markdown.cpp src/highlight.h src/highlight.cpp)
     target_include_directories(tst_board PRIVATE src)
+    target_compile_definitions(tst_board PRIVATE CACHE_FONT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fonts")
     target_link_libraries(tst_board PRIVATE Qt6::Gui Qt6::Qml Qt6::Network Qt6::Test)
     qt_add_resources(tst_board "templates" PREFIX /qt/qml/Cache FILES ${template_files})
     add_test(NAME tst_board COMMAND tst_board -platform offscreen
