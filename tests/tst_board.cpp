@@ -213,11 +213,19 @@ private slots:
         BoardModel board;
         board.load(project("own"));
         const int row = board.addNote(0, 0, QStringLiteral("# Own\n\n- [ ] task with **bold**"));
+        board.setGeometry(row, 0, 0, 512, 333);
+        board.setColorOf({board.get(row).value("id").toString()}, QStringLiteral("green"));
         board.copyToClipboard(row);
         QCOMPARE(board.clipboardMarkdown(), QString()); // the editor pastes the text itself
         const QStringList ids = board.pasteFromClipboard(500, 0);
-        QCOMPARE(board.getById(ids.first()).value("text").toString().trimmed(),
-                 QStringLiteral("# Own\n\n- [ ] task with **bold**"));
+        QCOMPARE(ids.size(), 1);
+        const QVariantMap pasted = board.getById(ids.first());
+        QCOMPARE(pasted.value("text").toString().trimmed(), QStringLiteral("# Own\n\n- [ ] task with **bold**"));
+        // The same note, not a new one made from its text
+        QCOMPARE(pasted.value("w").toDouble(), 512.0);
+        QCOMPARE(pasted.value("h").toDouble(), 333.0);
+        QCOMPARE(pasted.value("color").toString(), QStringLiteral("green"));
+        QVERIFY(ids.first() != board.get(row).value("id").toString());
     }
 
     void reverseConnection()

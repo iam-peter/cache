@@ -875,8 +875,13 @@ void BoardModel::copyToClipboard(int row) const
     auto *mime = new QMimeData;
     mime->setHtml(clipboardHtml(it.text));
     mime->setText(it.text);
-    // Pasted back into the app, the Markdown is taken as it is
+    // Pasted back into the app, the Markdown is taken as it is, and on a
+    // canvas the note comes back whole: its size and colour too
     mime->setData(QStringLiteral("application/x-cache-markdown"), QByteArray());
+    mime->setData(QStringLiteral("application/x-cache-items"),
+                  QJsonDocument(QJsonObject{{QStringLiteral("items"), QJsonArray{toJson(it, true)}},
+                                            {QStringLiteral("links"), QJsonArray()}})
+                      .toJson(QJsonDocument::Compact));
 
     QStringList images;
     QString rest = it.text;
