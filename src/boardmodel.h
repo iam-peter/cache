@@ -208,6 +208,11 @@ public:
     // left, hcenter, right, top, vcenter, bottom
     Q_INVOKABLE void align(const QStringList &ids, const QString &edge);
     Q_INVOKABLE void distribute(const QStringList &ids, bool horizontally);
+    // The size pipette: the items of `ids` take the width, the height or
+    // both ("width", "height", "size") of `sourceId`, in one undo step.
+    // Pen lines keep theirs, text keeps the height its font gives it.
+    // Whether anything changed.
+    Q_INVOKABLE bool matchSize(const QStringList &ids, const QString &sourceId, const QString &what);
 
     // Connectors. The sides are top, right, bottom, left or empty (any).
     // Connecting what is already connected the other way round, along the

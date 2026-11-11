@@ -465,6 +465,11 @@ Item {
                 tip: qsTr("Copy with images, to paste into Teams or mail (Ctrl+C)")
                 onClicked: root.canvas.copyRow(root.index)
             }
+            SizePipette {
+                visible: !root.isStroke && !root.formatting
+                canvas: root.canvas
+                ids: [root.itemId]
+            }
             Tip {
                 visible: root.childCount > 0 && root.connectable && !root.formatting
                 iconName: "network"

@@ -360,6 +360,37 @@ private slots:
         }
     }
 
+    void matchSize()
+    {
+        BoardModel board;
+        board.load(project("match"));
+        const auto id = [&](int row) { return board.get(row).value("id").toString(); };
+        const int source = board.addNote(0, 0, QStringLiteral("Source"));
+        board.setGeometry(source, 0, 0, 400, 250);
+        const int a = board.addNote(500, 0, QStringLiteral("A"));
+        board.setGeometry(a, 500, 0, 200, 100);
+        const int b = board.addNote(800, 0, QStringLiteral("B"));
+        board.setGeometry(b, 800, 0, 300, 120);
+        const QStringList ids{id(source), id(a), id(b)};
+
+        QVERIFY(board.matchSize(ids, id(source), QStringLiteral("width")));
+        QCOMPARE(board.get(a).value("w").toDouble(), 400.0);
+        QCOMPARE(board.get(a).value("h").toDouble(), 100.0); // only the width
+        QCOMPARE(board.get(b).value("w").toDouble(), 400.0);
+        QCOMPARE(board.get(a).value("x").toDouble(), 500.0); // stays where it was
+
+        QVERIFY(board.matchSize(ids, id(source), QStringLiteral("size")));
+        QCOMPARE(board.get(b).value("h").toDouble(), 250.0);
+        QVERIFY(!board.matchSize(ids, id(source), QStringLiteral("size"))); // nothing left to do
+
+        // One undo step each
+        board.undo();
+        QCOMPARE(board.get(b).value("h").toDouble(), 120.0);
+        QCOMPARE(board.get(b).value("w").toDouble(), 400.0);
+        board.undo();
+        QCOMPARE(board.get(b).value("w").toDouble(), 300.0);
+    }
+
     void alignAndDistribute()
     {
         BoardModel board;

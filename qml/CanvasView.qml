@@ -48,6 +48,9 @@ Item {
     property string linkTargetSide: ""
     property bool linkLeftSource: false
     property string relinkId: ""   // the connector whose end is being moved
+    // The size pipette while it is picking: { what: width|height|size, ids }
+    property var sizePick: null
+    property string sizePickHover: ""
     property string relinkEnd: ""  // "from" or "to"
     property bool exporting: false
     property var exportSet: ({})
@@ -61,11 +64,11 @@ Item {
     // Asks the note being edited to put Markdown in at its cursor
     signal insertMarkdownRequested(string id, string markdown)
     signal insertCodeRequested(string id)
+    // A button of the editing toolbar: bold, h1, bullet, table, ...
+    signal formatRequested(string id, string action)
 
     clip: true
     focus: true
-    // A button of the editing toolbar: bold, h1, bullet, table, ...
-    signal formatRequested(string id, string action)
     activeFocusOnTab: true
 
     // --- Coordinates and view ------------------------------------------------
@@ -184,6 +187,22 @@ Item {
     }
     function selectRow(row) { if (row >= 0) select(Board.get(row).id) }
     function selectedRow() { return selectedId === "" ? -1 : Board.indexOf(selectedId) }
+    // The size pipette: the next item clicked gives `ids` its width, height
+    // or both
+    function startSizePick(what, ids) {
+        editingId = ""
+        sizePick = { what: what, ids: ids.slice() }
+        forceActiveFocus()
+    }
+    function finishSizePick(sourceId) {
+        const pick = sizePick
+        sizePick = null
+        sizePickHover = ""
+        if (!pick || sourceId === "")
+            return
+        if (Board.matchSize(pick.ids, sourceId, pick.what))
+            setSelection(pick.ids.filter(id => Board.indexOf(id) >= 0))
+    }
     function clearSelection() { editingId = ""; selectedLinkId = ""; selection = [] }
     function startEditing(id) {
         if (!id)
@@ -825,7 +844,9 @@ Item {
         } else if (event.key === Qt.Key_F2 && view.selectedId !== "") {
             view.startEditing(view.selectedId)
         } else if (event.key === Qt.Key_Escape) {
-            if (view.linkFromId !== "")
+            if (view.sizePick)
+                view.finishSizePick("")
+            else if (view.linkFromId !== "")
                 view.linkFromId = ""
             else if (view.tool !== "select")
                 view.tool = "select"
@@ -1141,6 +1162,16 @@ Item {
                     joinStyle: ShapePath.RoundJoin
                     PathPolyline { id: strokePreview; path: [] }
                 }
+                // The highlighter as it will be: its outline, filled
+                ShapePath {
+                    strokeColor: "transparent"
+                    fillColor: view.tool === "highlighter" ? Theme.swatch(view.penColor || "yellow") : "transparent"
+                    fillRule: ShapePath.WindingFill
+                    PathSvg {
+                        path: view.tool === "highlighter" && strokePreview.path.length > 0
+                              ? Board.strokeOutline(strokePreview.path, 18) : ""
+                    }
+                }
                 opacity: view.tool === "highlighter" ? 0.38 : 1
             }
 
@@ -1164,16 +1195,6 @@ Item {
                 delegate: Rectangle {
                     required property var modelData
                     z: 2000000
-                // The highlighter as it will be: its outline, filled
-                ShapePath {
-                    strokeColor: "transparent"
-                    fillColor: view.tool === "highlighter" ? Theme.swatch(view.penColor || "yellow") : "transparent"
-                    fillRule: ShapePath.WindingFill
-                    PathSvg {
-                        path: view.tool === "highlighter" && strokePreview.path.length > 0
-                              ? Board.strokeOutline(strokePreview.path, 18) : ""
-                    }
-                }
                     color: Theme.s.danger_default
                     x: Math.min(modelData.x1, modelData.x2) - (modelData.x1 === modelData.x2 ? 0.5 / view.zoom : 0)
                     y: Math.min(modelData.y1, modelData.y2) - (modelData.y1 === modelData.y2 ? 0.5 / view.zoom : 0)
@@ -1296,6 +1317,84 @@ Item {
         anchors.bottomMargin: Styles.Primitives.spacing.sp200
         canvas: view
         onTemplatesRequested: templateDialog.open()
+    }
+
+    // --- The size pipette, picking -------------------------------------------
+    MouseArea {
+        id: sizePicker
+        anchors.fill: parent
+        z: 3000
+        visible: view.sizePick !== null
+        hoverEnabled: true
+        cursorShape: Qt.CrossCursor
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        function sourceAt(mouse) {
+            const p = view.toWorld(mouse.x, mouse.y)
+            const id = Board.targetAt(p.x, p.y)
+            return id !== "" && view.sizePick && view.sizePick.ids.indexOf(id) < 0 ? id : ""
+        }
+        onPositionChanged: (mouse) => view.sizePickHover = sourceAt(mouse)
+        onExited: view.sizePickHover = ""
+        // A click on an item takes its size; anywhere else, or the right
+        // button, cancels
+        onClicked: (mouse) => view.finishSizePick(mouse.button === Qt.LeftButton ? sourceAt(mouse) : "")
+        onWheel: (wheel) => wheel.accepted = false
+    }
+    // The item the pointer is over, outlined
+    Rectangle {
+        readonly property var it: view.sizePickHover !== "" ? (Board.count, Board.getById(view.sizePickHover)) : null
+        visible: it !== null && view.sizePick !== null
+        z: 3001
+        x: it ? view.panX + it.x * view.zoom - 3 : 0
+        y: it ? view.panY + it.y * view.zoom - 3 : 0
+        width: it ? it.w * view.zoom + 6 : 0
+        height: it ? it.h * view.zoom + 6 : 0
+        radius: Theme.radius
+        color: "transparent"
+        border.color: Theme.accent
+        border.width: 2
+    }
+    // What the pipette does now
+    Rectangle {
+        visible: view.sizePick !== null
+        z: 3002
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: Styles.Primitives.spacing.sp150
+        width: pickRow.implicitWidth + 2 * Styles.Primitives.spacing.sp100
+        height: pickRow.implicitHeight + 2 * Styles.Primitives.spacing.sp075
+        radius: Theme.radius * 2
+        color: Theme.s.background_elevated
+        border.color: Theme.accent
+        Styles.Shadow {
+            z: -1
+            anchors.fill: parent
+            radius: parent.radius
+            depth: 2
+        }
+        Row {
+            id: pickRow
+            anchors.centerIn: parent
+            spacing: Styles.Primitives.spacing.sp075
+            Icon {
+                anchors.verticalCenter: parent.verticalCenter
+                name: "pipette"
+                color: Theme.accent
+            }
+            Label {
+                anchors.verticalCenter: parent.verticalCenter
+                text: !view.sizePick ? ""
+                      : view.sizePick.what === "width" ? qsTr("Click the item whose width to take")
+                      : view.sizePick.what === "height" ? qsTr("Click the item whose height to take")
+                      : qsTr("Click the item whose size to take")
+            }
+            Label {
+                anchors.verticalCenter: parent.verticalCenter
+                text: qsTr("Esc cancels")
+                color: Theme.textMuted
+                font.pixelSize: Styles.Primitives.fontSize.small
+            }
+        }
     }
 
     Minimap {

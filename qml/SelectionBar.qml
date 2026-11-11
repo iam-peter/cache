@@ -80,6 +80,10 @@ Rectangle {
             tip: qsTr("Space evenly one above the other")
             onClicked: Board.distribute(bar.ids, false)
         }
+        SizePipette {
+            canvas: bar.canvas
+            ids: bar.ids
+        }
         ToolSeparator { height: 24 }
         Repeater {
             model: Theme.noteKeys

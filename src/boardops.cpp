@@ -654,6 +654,36 @@ void BoardModel::align(const QStringList &ids, const QString &edge)
 }
 
 // Equal gaps between the items, the outermost ones staying where they are
+bool BoardModel::matchSize(const QStringList &ids, const QString &sourceId, const QString &what)
+{
+    const int source = indexOf(sourceId);
+    if (!valid(source))
+        return false;
+    const double w = m_items.at(source).w, h = m_items.at(source).h;
+    const bool width = what != QLatin1String("height"), height = what != QLatin1String("width");
+    bool pushed = false;
+    for (const QString &id : ids) {
+        const int row = indexOf(id);
+        if (!valid(row) || row == source || isStroke(m_items.at(row)))
+            continue;
+        const BoardItem &it = m_items.at(row);
+        const double newW = width ? w : it.w;
+        const double newH = height && it.type != QLatin1String("text") ? h : it.h;
+        if (qFuzzyCompare(newW, it.w) && qFuzzyCompare(newH, it.h))
+            continue;
+        if (!pushed) {
+            pushUndo();
+            pushed = true;
+        }
+        m_items[row].w = newW;
+        m_items[row].h = newH;
+        emitRow(row);
+    }
+    if (pushed)
+        markDirty();
+    return pushed;
+}
+
 void BoardModel::distribute(const QStringList &ids, bool horizontally)
 {
     QList<int> rows;
