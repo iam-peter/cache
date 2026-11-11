@@ -11,10 +11,14 @@
 #include <QTimer>
 #include <QUrl>
 #include <QVariantMap>
+
+#include <functional>
 #include <QtQml/qqmlregistration.h>
 
 class QImage;
 class QJsonObject;
+class QMimeData;
+class QNetworkAccessManager;
 
 // One thing on the canvas.
 struct BoardItem
@@ -42,13 +46,18 @@ struct BoardItem
     bool collapsed = false; // a mindmap branch folded into its root
 };
 
-// A connector from one item to another. Connectors also make the mindmap:
-// an item's children are what its connectors point to.
+// A connector from one item to another, or from an item back to itself.
+// Connectors also make the mindmap: an item's children are what its
+// connectors point to (loops don't count).
 struct BoardLink
 {
     QString id;
     QString from;
     QString to;
+    // The sides it leaves and enters by: top, right, bottom or left; empty
+    // lets the routing choose
+    QString fromSide;
+    QString toSide;
     QString label;
     QString style = QStringLiteral("curve"); // curve, straight or elbow
     QString arrow = QStringLiteral("end");   // end, both or none
@@ -84,8 +93,8 @@ class BoardModel : public QAbstractListModel
     Q_PROPERTY(double viewX READ viewX NOTIFY viewRestored)
     Q_PROPERTY(double viewY READ viewY NOTIFY viewRestored)
     Q_PROPERTY(double viewZoom READ viewZoom NOTIFY viewRestored)
-    // Every connector: id, from, to, label, style, arrow, color, dashed,
-    // hidden (an end is in a folded branch)
+    // Every connector: id, from, to, fromSide, toSide, label, style, arrow,
+    // color, dashed, hidden (an end is in a folded branch)
     Q_PROPERTY(QVariantList links READ linksVariant NOTIFY linksChanged)
     // [[Wiki links]] between notes of this project: from, to
     Q_PROPERTY(QVariantList wikiEdges READ wikiEdges NOTIFY wikiEdgesChanged)
@@ -156,9 +165,17 @@ public:
     Q_INVOKABLE int addMedia(const QVariantList &paths, double cx, double cy, int targetRow = -1);
     Q_INVOKABLE int importUrls(const QVariantList &urls, double cx, double cy, int targetRow = -1);
     Q_INVOKABLE int addImageData(const QByteArray &data, double cx, double cy, int targetRow = -1);
-    // Pastes items copied from a canvas, media, or text. Returns the ids
-    // of what it added.
+    // Pastes or drops whatever another application offers (see insertMime)
+    // onto the canvas. Returns the ids of what it added or changed.
     Q_INVOKABLE QStringList pasteFromClipboard(double cx, double cy, int targetRow = -1);
+    // A drop: formats maps each MIME type to its data, as QML's DropArea
+    // gives them
+    Q_INVOKABLE QStringList dropData(const QVariantMap &formats, double cx, double cy, int targetRow = -1);
+    // The same as Markdown to put into a note being edited; empty when the
+    // clipboard holds nothing but plain text (the editor pastes that itself)
+    Q_INVOKABLE QString clipboardMarkdown();
+    Q_INVOKABLE QString dropMarkdown(const QVariantMap &formats);
+    Q_INVOKABLE QString filesMarkdown(const QVariantList &urls);
 
     // Editing one item
     Q_INVOKABLE void setGeometry(int row, double x, double y, double w, double h);
@@ -184,17 +201,20 @@ public:
     Q_INVOKABLE void align(const QStringList &ids, const QString &edge);
     Q_INVOKABLE void distribute(const QStringList &ids, bool horizontally);
 
-    // Connectors
-    Q_INVOKABLE QString addLink(const QString &from, const QString &to);
+    // Connectors. The sides are top, right, bottom, left or empty (any).
+    // Connecting what is already connected the other way round, along the
+    // same route, gives that connector a second arrowhead instead.
+    Q_INVOKABLE QString addLink(const QString &from, const QString &to, const QString &fromSide = {},
+                                const QString &toSide = {});
     Q_INVOKABLE void removeLink(const QString &id);
-    // Any of label, style, arrow, color, dashed
+    // Any of from, to, fromSide, toSide, label, style, arrow, color, dashed
     Q_INVOKABLE void setLink(const QString &id, const QVariantMap &values);
 
     // Mindmaps: each returns the new note's id
     Q_INVOKABLE QString addChild(const QString &parentId);
     Q_INVOKABLE QString addSibling(const QString &id);
     // Connected note at (x, y), as when a connector is dropped on empty space
-    Q_INVOKABLE QString addConnectedNote(const QString &from, double x, double y);
+    Q_INVOKABLE QString addConnectedNote(const QString &from, double x, double y, const QString &fromSide = {});
     Q_INVOKABLE QString parentOf(const QString &id) const;
     Q_INVOKABLE QStringList childrenOf(const QString &id) const; // top to bottom
     Q_INVOKABLE void toggleCollapsed(const QString &id);
@@ -265,6 +285,9 @@ signals:
     void linksChanged();
     void wikiEdgesChanged();
     void saved();
+    // A background download finished: what was put in as `before` (a web
+    // image or link) is now `after`, in the notes and in an open editor
+    void textReplaced(const QString &before, const QString &after);
 
 public:
     // For the search, which reads the open project from memory: what is
@@ -287,6 +310,20 @@ private:
     QStringList importMedia(const QStringList &paths);
     int placeMediaNote(const QStringList &rels, double cx, double cy);
     void appendMediaToNote(int row, const QStringList &rels);
+    // Importing (importer.cpp)
+    QStringList insertMime(const QMimeData *mime, double cx, double cy, int targetRow, bool appendText);
+    QString markdownFromMime(const QMimeData *mime, bool forEditor, bool *media);
+    QString markdownForFile(const QString &abs, bool forEditor);
+    QString markdownFromHtml(const QString &html);
+    QString webMarkdown(const QUrl &url, const QMimeData *mime, bool *media);
+    int placeMarkdownNote(const QString &markdown, double cx, double cy);
+    void appendToNote(int row, const QString &markdown);
+    double estimateHeight(const QString &markdown, double width) const;
+    void fetch(const QUrl &url, qint64 limit, const std::function<void(const QByteArray &, const QString &)> &done);
+    void fetchImage(const QString &before, const QUrl &url, const QString &name);
+    void fetchTitle(const QString &before, const QUrl &url);
+    void replaceInNotes(const QString &before, const QString &after);
+    QString saveBytesAsset(const QByteArray &data, const QString &base, const QString &extension);
     double mediaHeight(const QString &rel, double width) const;
     static QString mediaMarkdown(const QString &rel);
     QString resolveLocal(const QString &target) const;
@@ -326,6 +363,7 @@ private:
     double m_viewZoom = 1;
     QTimer m_saveTimer;
     mutable QHash<QString, QSizeF> m_imageSizes;
+    QNetworkAccessManager *m_network = nullptr;
 
     // Derived from items and links, rebuilt by updateDerived()
     QSet<QString> m_hidden;

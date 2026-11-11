@@ -106,13 +106,13 @@ ApplicationWindow {
             IconButton {
                 styles: [Styles.ButtonStyle.medium]
                 iconName: "image"
-                text: qsTr("Image / video…")
+                text: qsTr("Add files…")
                 onClicked: canvasView.pickMedia(canvasView.selectedRow())
                 ToolTip.visible: hovered
                 ToolTip.delay: 500
-                ToolTip.text: canvasView.isEditing ? qsTr("Insert images or videos at the cursor (Ctrl+Shift+I)")
-                            : canvasView.selectedId !== "" ? qsTr("Add images or videos to the selected note (Ctrl+Shift+I)")
-                            : qsTr("Add images or videos in a new note (Ctrl+Shift+I)")
+                ToolTip.text: canvasView.isEditing ? qsTr("Insert images, videos or files at the cursor (Ctrl+Shift+I)")
+                            : canvasView.selectedId !== "" ? qsTr("Add images, videos or files to the selected note (Ctrl+Shift+I)")
+                            : qsTr("Add images, videos or files in a new note (Ctrl+Shift+I)")
             }
             IconButton {
                 styles: [Styles.ButtonStyle.medium]

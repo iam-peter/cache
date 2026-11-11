@@ -76,6 +76,30 @@ private slots:
         QCOMPARE(fences.at(1).code, QStringLiteral("plain"));
     }
 
+    void tableFromCells()
+    {
+        QCOMPARE(Markdown::tableFromCells(QStringLiteral("Name\tCount\r\nApples\t3\r\nPipes | ok\t4\r\n")),
+                 QStringLiteral("| Name | Count |\n|---|---|\n| Apples | 3 |\n| Pipes \\| ok | 4 |"));
+        // Not a grid: one row, one column, ragged rows
+        QVERIFY(Markdown::tableFromCells(QStringLiteral("a\tb")).isEmpty());
+        QVERIFY(Markdown::tableFromCells(QStringLiteral("a\nb")).isEmpty());
+        QVERIFY(Markdown::tableFromCells(QStringLiteral("a\tb\nc")).isEmpty());
+        // CSV, with quoted cells
+        QCOMPARE(Markdown::tableFromCells(QStringLiteral("x,y\n\"1,5\",\"say \"\"hi\"\"\"\n"), QLatin1Char(',')),
+                 QStringLiteral("| x | y |\n|---|---|\n| 1,5 | say \"hi\" |"));
+    }
+
+    void webUrls()
+    {
+        QVERIFY(Markdown::isWebUrl(QStringLiteral("https://doc.qt.io/qt-6/ ")));
+        QVERIFY(Markdown::isWebUrl(QStringLiteral("http://example.com/a?b=c")));
+        QVERIFY(!Markdown::isWebUrl(QStringLiteral("see https://doc.qt.io")));
+        QVERIFY(!Markdown::isWebUrl(QStringLiteral("file:///tmp/x")));
+        QVERIFY(!Markdown::isWebUrl(QStringLiteral("doc.qt.io")));
+        QCOMPARE(Markdown::link(QStringLiteral("A [b]"), QStringLiteral("https://x.org/a b")),
+                 QStringLiteral("[A (b)](https://x.org/a%20b)"));
+    }
+
     void language_data()
     {
         QTest::addColumn<QString>("fence");

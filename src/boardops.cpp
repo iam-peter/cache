@@ -126,6 +126,10 @@ QJsonObject BoardModel::toJson(const BoardLink &link)
         o.insert(QStringLiteral("color"), link.color);
     if (link.dashed)
         o.insert(QStringLiteral("dashed"), true);
+    if (!link.fromSide.isEmpty())
+        o.insert(QStringLiteral("fromSide"), link.fromSide);
+    if (!link.toSide.isEmpty())
+        o.insert(QStringLiteral("toSide"), link.toSide);
     return o;
 }
 
@@ -142,6 +146,8 @@ BoardLink BoardModel::linkFromJson(const QJsonObject &o)
     link.arrow = o.value(QStringLiteral("arrow")).toString(QStringLiteral("end"));
     link.color = o.value(QStringLiteral("color")).toString();
     link.dashed = o.value(QStringLiteral("dashed")).toBool();
+    link.fromSide = o.value(QStringLiteral("fromSide")).toString();
+    link.toSide = o.value(QStringLiteral("toSide")).toString();
     return link;
 }
 
@@ -154,6 +160,8 @@ QVariantList BoardModel::linksVariant() const
             {QStringLiteral("id"), link.id},
             {QStringLiteral("from"), link.from},
             {QStringLiteral("to"), link.to},
+            {QStringLiteral("fromSide"), link.fromSide},
+            {QStringLiteral("toSide"), link.toSide},
             {QStringLiteral("label"), link.label},
             {QStringLiteral("style"), link.style},
             {QStringLiteral("arrow"), link.arrow},
@@ -180,8 +188,10 @@ void BoardModel::updateDerived()
     // Folded mindmap branches: everything a collapsed item's connectors lead
     // to, and on from there
     QHash<QString, QStringList> children;
-    for (const BoardLink &link : std::as_const(m_links))
-        children[link.from].append(link.to);
+    for (const BoardLink &link : std::as_const(m_links)) {
+        if (link.from != link.to && !children.value(link.from).contains(link.to))
+            children[link.from].append(link.to);
+    }
     QSet<QString> hidden;
     QHash<QString, int> descendants;
     QHash<QString, int> childCount;
@@ -582,19 +592,44 @@ void BoardModel::distribute(const QStringList &ids, bool horizontally)
 // ---------------------------------------------------------------------------
 // Connectors
 
-QString BoardModel::addLink(const QString &from, const QString &to)
+namespace {
+
+bool isSide(const QString &side)
 {
-    if (from == to || indexOf(from) < 0 || indexOf(to) < 0)
+    return side.isEmpty() || side == QLatin1String("top") || side == QLatin1String("right")
+           || side == QLatin1String("bottom") || side == QLatin1String("left");
+}
+
+} // namespace
+
+QString BoardModel::addLink(const QString &from, const QString &to, const QString &fromSide, const QString &toSide)
+{
+    if (indexOf(from) < 0 || indexOf(to) < 0 || !isSide(fromSide) || !isSide(toSide))
         return {};
-    for (const BoardLink &l : std::as_const(m_links)) {
-        if (l.from == from && l.to == to)
+    for (qsizetype i = 0; i < m_links.size(); ++i) {
+        const BoardLink &l = m_links.at(i);
+        // Already there
+        if (l.from == from && l.to == to && l.fromSide == fromSide && l.toSide == toSide)
             return l.id;
+        // The same connection the other way round: one connector, pointing
+        // both ways
+        if (from != to && l.from == to && l.to == from && l.fromSide == toSide && l.toSide == fromSide) {
+            if (l.arrow == QLatin1String("end")) {
+                pushUndo();
+                m_links[i].arrow = QStringLiteral("both");
+                emit linksChanged();
+                markDirty();
+            }
+            return l.id;
+        }
     }
     pushUndo();
     BoardLink link;
     link.id = newId();
     link.from = from;
     link.to = to;
+    link.fromSide = fromSide;
+    link.toSide = toSide;
     m_links.append(link);
     structureChanged();
     return link.id;
@@ -618,6 +653,15 @@ void BoardModel::setLink(const QString &id, const QVariantMap &values)
         if (m_links.at(i).id != id)
             continue;
         BoardLink link = m_links.at(i);
+        // Its ends: onto another item, or onto another side
+        for (const char *end : {"from", "to"}) {
+            const QString key = QLatin1String(end);
+            if (values.contains(key) && indexOf(values.value(key).toString()) >= 0)
+                (key == QLatin1String("from") ? link.from : link.to) = values.value(key).toString();
+            const QString sideKey = key + QStringLiteral("Side");
+            if (values.contains(sideKey) && isSide(values.value(sideKey).toString()))
+                (key == QLatin1String("from") ? link.fromSide : link.toSide) = values.value(sideKey).toString();
+        }
         if (values.contains(QStringLiteral("label")))
             link.label = values.value(QStringLiteral("label")).toString();
         if (values.contains(QStringLiteral("style")))
@@ -630,14 +674,20 @@ void BoardModel::setLink(const QString &id, const QVariantMap &values)
             link.dashed = values.value(QStringLiteral("dashed")).toBool();
         const BoardLink &old = m_links.at(i);
         if (link.label == old.label && link.style == old.style && link.arrow == old.arrow && link.color == old.color
-            && link.dashed == old.dashed)
+            && link.dashed == old.dashed && link.from == old.from && link.to == old.to
+            && link.fromSide == old.fromSide && link.toSide == old.toSide)
             return;
+        const bool ends = link.from != old.from || link.to != old.to;
         // Typing a label is one undo step
         pushUndo(values.size() == 1 && values.contains(QStringLiteral("label")) ? QStringLiteral("label:") + id
                                                                                   : QString());
         m_links[i] = link;
-        emit linksChanged();
-        markDirty();
+        if (ends)
+            structureChanged(); // the mindmap's shape changed
+        else {
+            emit linksChanged();
+            markDirty();
+        }
         return;
     }
 }
@@ -648,7 +698,7 @@ void BoardModel::setLink(const QString &id, const QVariantMap &values)
 QString BoardModel::parentOf(const QString &id) const
 {
     for (const BoardLink &link : m_links) {
-        if (link.to == id)
+        if (link.to == id && link.from != id)
             return link.from;
     }
     return {};
@@ -658,7 +708,7 @@ QStringList BoardModel::childrenOf(const QString &id) const
 {
     QList<int> rows;
     for (const BoardLink &link : m_links) {
-        const int row = link.from == id ? indexOf(link.to) : -1;
+        const int row = link.from == id && link.to != id ? indexOf(link.to) : -1;
         if (row >= 0 && !rows.contains(row))
             rows << row;
     }
@@ -669,7 +719,7 @@ QStringList BoardModel::childrenOf(const QString &id) const
     return ids;
 }
 
-QString BoardModel::addConnectedNote(const QString &from, double x, double y)
+QString BoardModel::addConnectedNote(const QString &from, double x, double y, const QString &fromSide)
 {
     const int source = indexOf(from);
     if (source < 0)
@@ -684,6 +734,7 @@ QString BoardModel::addConnectedNote(const QString &from, double x, double y)
     link.id = newId();
     link.from = from;
     link.to = note.id;
+    link.fromSide = isSide(fromSide) ? fromSide : QString();
     m_links.append(link);
     structureChanged();
     return note.id;
@@ -921,6 +972,7 @@ void BoardModel::copyItems(const QStringList &ids) const
                       .toJson(QJsonDocument::Compact));
     mime->setHtml(QStringLiteral("<html><body>") + html + QStringLiteral("</body></html>"));
     mime->setText(text.join(QStringLiteral("\n\n")));
+    mime->setData(QStringLiteral("application/x-notecanvas-markdown"), QByteArray());
     QGuiApplication::clipboard()->setMimeData(mime);
 }
 

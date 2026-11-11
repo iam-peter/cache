@@ -273,11 +273,30 @@ Item {
                 onPressed: (mouse) => {
                     root.linking = true
                     root.lastPoint = mapToItem(root.parent, mouse.x, mouse.y)
-                    root.canvas.beginLink(root.itemId, root.lastPoint)
+                    // Out of this side; where it goes in is up to where it is dropped
+                    root.canvas.beginLink(root.itemId, root.lastPoint, ["top", "right", "bottom", "left"][parent.index])
                 }
                 onPositionChanged: (mouse) => root.dragTo(mapToItem(root.parent, mouse.x, mouse.y), mouse.modifiers)
                 onReleased: root.release()
             }
+        }
+    }
+
+    // --- While a connector is dragged onto this item: its sides --------------
+    Repeater {
+        model: root.linkTarget && root.connectable ? ["top", "right", "bottom", "left"] : []
+        delegate: Rectangle {
+            required property string modelData
+            readonly property bool chosen: root.canvas.linkTargetSide === modelData
+            width: (chosen ? 14 : 10) * root.inv
+            height: width
+            radius: width / 2
+            z: 11
+            x: modelData === "left" ? -width / 2 : modelData === "right" ? root.width - width / 2 : root.width / 2 - width / 2
+            y: modelData === "top" ? -height / 2 : modelData === "bottom" ? root.height - height / 2 : root.height / 2 - height / 2
+            color: chosen ? Theme.accent : Theme.s.background_elevated
+            border.color: Theme.accent
+            border.width: 2 * root.inv
         }
     }
 
@@ -396,7 +415,7 @@ Item {
             Tip {
                 visible: root.isNote
                 iconName: "image"
-                tip: qsTr("Add images or videos to this note")
+                tip: qsTr("Add images, videos or files to this note")
                 onClicked: root.canvas.pickMedia(root.index)
             }
             Tip {

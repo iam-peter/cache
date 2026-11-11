@@ -38,9 +38,17 @@ Item {
     property bool moving: false
     property var guides: []
     property bool spaceHeld: false
+    // A connector being dragged out (or one end of one being moved): from
+    // which item and side, and what is under the pointer
     property string linkFromId: ""
+    property string linkFromSide: ""
     property point linkPoint
+    property point linkStart
     property string linkTargetId: ""
+    property string linkTargetSide: ""
+    property bool linkLeftSource: false
+    property string relinkId: ""   // the connector whose end is being moved
+    property string relinkEnd: ""  // "from" or "to"
     property bool exporting: false
     property var exportSet: ({})
 
@@ -50,7 +58,8 @@ Item {
     property bool pendingFit: false
     property string pendingFocusId: ""
 
-    signal insertMediaRequested(string id, string path)
+    // Asks the note being edited to put Markdown in at its cursor
+    signal insertMarkdownRequested(string id, string markdown)
     signal insertCodeRequested(string id)
 
     clip: true
@@ -276,19 +285,16 @@ Item {
         return id
     }
 
-    // Images and videos always end up inside a note: at the cursor of the
-    // one being edited, at the end of `targetRow`, or in a new note at pt.
+    // Files always end up inside a note: at the cursor of the one being
+    // edited, at the end of `targetRow`, or in a new note at pt. Images and
+    // videos show, other files are attached.
     function addMedia(urls, pt, targetRow) {
         if (editingId !== "") {
-            let inserted = 0
-            for (const url of urls) {
-                if (Board.isMediaFile(url.toString())) {
-                    insertMediaRequested(editingId, url.toString())
-                    inserted++
-                }
-            }
-            if (inserted === 0)
-                toast.show(qsTr("Only images and videos can go into a note"))
+            const md = Board.filesMarkdown(urls)
+            if (md)
+                insertMarkdownRequested(editingId, md)
+            else
+                toast.show(qsTr("Nothing to add"))
             return
         }
         const row = Board.importUrls(urls, pt.x, pt.y, targetRow === undefined ? -1 : targetRow)
@@ -542,32 +548,79 @@ Item {
 
     // --- Connecting ------------------------------------------------------------
 
-    function beginLink(id, p) {
+    function insideCard(id, p) {
+        const c = cards[id]
+        return c !== undefined && p.x >= c.x && p.x <= c.x + c.width && p.y >= c.y && p.y <= c.y + c.height
+    }
+    // The side of an item nearest to a point
+    function nearestSide(id, p) {
+        const c = cards[id]
+        if (!c)
+            return ""
+        const d = [["top", Math.abs(p.y - c.y)], ["right", Math.abs(c.x + c.width - p.x)],
+                   ["bottom", Math.abs(c.y + c.height - p.y)], ["left", Math.abs(p.x - c.x)]]
+        d.sort((a, b) => a[1] - b[1])
+        return d[0][0]
+    }
+    // From an item, out of a side (or any, if none)
+    function beginLink(id, p, side) {
         linkFromId = id
+        linkFromSide = side || ""
         linkPoint = p
+        linkStart = p
         linkTargetId = ""
+        linkTargetSide = ""
+        linkLeftSource = !insideCard(id, p)
+    }
+    // One end of an existing connector onto another side or item
+    function beginRelink(linkId, end, p) {
+        const l = Board.links.find(x => x.id === linkId)
+        if (!l)
+            return
+        relinkId = linkId
+        relinkEnd = end
+        beginLink(end === "to" ? l.from : l.to, p, end === "to" ? l.fromSide : l.toSide)
+        linkLeftSource = true
     }
     function updateLink(p) {
         linkPoint = p
-        linkTargetId = Board.targetAt(p.x, p.y, linkFromId)
+        if (!insideCard(linkFromId, p))
+            linkLeftSource = true
+        // What is under the pointer: the item it started from too, once the
+        // pointer has been outside it, for a loop
+        let target = Board.targetAt(p.x, p.y)
+        if (target === linkFromId && !linkLeftSource)
+            target = ""
+        linkTargetId = target
+        linkTargetSide = target ? nearestSide(target, p) : ""
     }
-    // Onto an item: connects them. Onto empty canvas: a new connected note
-    // there, as in FigJam.
+    // Onto an item: connects into the side nearest the pointer. Onto empty
+    // canvas: a new connected note there, as in FigJam.
     function endLink(p) {
-        const from = linkFromId
+        if (!linkFromId)
+            return
+        updateLink(p)
+        const from = linkFromId, fromSide = linkFromSide
+        const target = linkTargetId, toSide = linkTargetSide
+        const moved = Math.hypot(p.x - linkStart.x, p.y - linkStart.y) * zoom > 6
+        const relink = relinkId, end = relinkEnd
         linkFromId = ""
         linkTargetId = ""
-        if (!from)
+        linkTargetSide = ""
+        relinkId = ""
+        relinkEnd = ""
+        if (!moved)
+            return // a click
+        if (relink) {
+            if (target)
+                Board.setLink(relink, end === "to" ? { to: target, toSide: toSide } : { from: target, fromSide: toSide })
+            selectLink(relink)
             return
-        const c = cards[from]
-        if (c && p.x >= c.x && p.x <= c.x + c.width && p.y >= c.y && p.y <= c.y + c.height)
-            return // a click on the item itself
-        const target = Board.targetAt(p.x, p.y, from)
+        }
         if (target) {
-            Board.addLink(from, target)
-            select(target)
-        } else {
-            startEditing(Board.addConnectedNote(from, p.x - 110, p.y - 50))
+            selectLink(Board.addLink(from, target, fromSide, toSide))
+        } else if (!insideCard(from, p)) {
+            startEditing(Board.addConnectedNote(from, p.x - 110, p.y - 50, fromSide))
         }
     }
     function linkAt(p) {
@@ -1054,17 +1107,24 @@ Item {
                 }
             }
 
-            // A connector being dragged out
+            // A connector being dragged out, or the end of one being moved
             Connector {
                 canvas: view
                 visible: view.linkFromId !== "" && shown
                 loose: true
-                link: ({ from: view.linkFromId })
-                loosePoint: {
-                    const t = view.linkTargetId ? (view.cardsVersion, view.cards[view.linkTargetId]) : null
-                    return t ? Qt.point(t.x + t.width / 2, t.y + t.height / 2) : view.linkPoint
-                }
+                link: ({ from: view.linkFromId, fromSide: view.linkFromSide,
+                         style: view.relinkId ? (Board.links.find(l => l.id === view.relinkId) || {}).style : "curve" })
+                loosePoint: view.linkPoint
+                looseTarget: view.linkTargetId ? (view.cardsVersion, view.cards[view.linkTargetId] || null) : null
+                looseSide: view.linkTargetSide
+                looseArrow: view.relinkEnd === "from" ? "none" : "end"
                 z: 2000000
+            }
+
+            // The ends of the selected connector, to drag elsewhere
+            LinkEnds {
+                canvas: view
+                z: 2000001
             }
 
             // A pen line being drawn
@@ -1142,28 +1202,29 @@ Item {
             return id && Board.getById(id).type === "note" ? Board.indexOf(id) : -1
         }
 
+        // Everything the drop offers that the board can use: files, rich
+        // text, images, web links, cells, text (see BoardModel::insertMime)
         onDropped: (drop) => {
             const pt = view.toWorld(drop.x, drop.y)
             const hit = Board.targetAt(pt.x, pt.y)
             const target = view.isEditing || !hit || Board.getById(hit).type !== "note" ? -1 : Board.indexOf(hit)
             drop.acceptProposedAction()
-            if (drop.hasUrls) {
-                view.addMedia(drop.urls, pt, target)
+            const formats = {}
+            for (const format of drop.formats) {
+                if (/^(text\/|image\/|application\/x-(qt-image|notecanvas))/.test(format))
+                    formats[format] = drop.getDataAsArrayBuffer(format)
+            }
+            if (view.isEditing) {
+                const md = Board.dropMarkdown(formats)
+                if (md)
+                    view.insertMarkdownRequested(view.editingId, md)
                 return
             }
-            if (view.isEditing)
-                return
-            for (const format of ["image/png", "image/jpeg", "image/webp", "image/gif", "application/x-qt-image"]) {
-                if (drop.formats.indexOf(format) < 0)
-                    continue
-                const row = Board.addImageData(drop.getDataAsArrayBuffer(format), pt.x, pt.y, target)
-                if (row >= 0) {
-                    view.selectRow(row)
-                    return
-                }
-            }
-            if (drop.hasText && drop.text.trim().length > 0)
-                view.newNoteAt(pt, drop.text)
+            const ids = Board.dropData(formats, pt.x, pt.y, target)
+            if (ids.length > 0)
+                view.setSelection(ids)
+            else
+                toast.show(qsTr("Nothing here to add"))
         }
     }
 
@@ -1180,7 +1241,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.top: parent.top
             anchors.topMargin: 24
-            text: view.isEditing ? qsTr("Drop to insert into the note")
+            text: view.isEditing ? qsTr("Drop to put it into the note")
                  : dropArea.targetRow >= 0 ? qsTr("Drop to add to this note")
                  : qsTr("Drop to create a note")
             font.pixelSize: Styles.Primitives.fontSize.title
@@ -1361,13 +1422,13 @@ Item {
     FileDialog {
         id: mediaDialog
         property int targetRow: -1
-        title: view.isEditing || targetRow >= 0 ? qsTr("Add images or videos to the note")
-                                                : qsTr("Add images or videos in a new note")
+        title: view.isEditing || targetRow >= 0 ? qsTr("Add files to the note") : qsTr("Add files in a new note")
         fileMode: FileDialog.OpenFiles
-        currentFolder: StandardPaths.writableLocation(StandardPaths.PicturesLocation)
+        currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
         nameFilters: [
+            qsTr("All files (*)"),
             qsTr("Images and videos (*.png *.jpg *.jpeg *.gif *.webp *.bmp *.svg *.mp4 *.webm *.mkv *.mov *.m4v)"),
-            qsTr("Markdown (*.md *.markdown *.txt)"),
+            qsTr("Documents (*.pdf *.doc *.docx *.xls *.xlsx *.csv *.ppt *.pptx *.odt *.ods *.md *.txt)"),
         ]
         onAccepted: view.addMedia(selectedFiles, view.centerWorld(), targetRow)
     }

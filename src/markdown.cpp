@@ -191,4 +191,90 @@ QList<Fence> fences(const QString &markdown)
     return result;
 }
 
+namespace {
+
+// One line of CSV into its cells: quotes may hold separators and "" quotes
+QStringList splitCsv(const QString &line, QChar separator)
+{
+    QStringList cells;
+    QString cell;
+    bool quoted = false;
+    for (qsizetype i = 0; i < line.size(); ++i) {
+        const QChar c = line.at(i);
+        if (quoted) {
+            if (c == QLatin1Char('"') && i + 1 < line.size() && line.at(i + 1) == QLatin1Char('"')) {
+                cell += c;
+                ++i;
+            } else if (c == QLatin1Char('"')) {
+                quoted = false;
+            } else {
+                cell += c;
+            }
+        } else if (c == QLatin1Char('"') && cell.trimmed().isEmpty()) {
+            quoted = true;
+            cell.clear();
+        } else if (c == separator) {
+            cells << cell;
+            cell.clear();
+        } else {
+            cell += c;
+        }
+    }
+    cells << cell;
+    return cells;
+}
+
+} // namespace
+
+QString tableFromCells(const QString &text, QChar separator)
+{
+    QStringList lines = text.split(QLatin1Char('\n'));
+    for (QString &line : lines) {
+        if (line.endsWith(QLatin1Char('\r')))
+            line.chop(1);
+    }
+    while (!lines.isEmpty() && lines.last().trimmed().isEmpty())
+        lines.removeLast();
+    if (lines.size() < 2 || lines.size() > 500)
+        return {};
+    QList<QStringList> rows;
+    for (const QString &line : std::as_const(lines)) {
+        const QStringList cells = separator == QLatin1Char('\t') ? line.split(separator) : splitCsv(line, separator);
+        if (cells.size() < 2 || (!rows.isEmpty() && cells.size() != rows.first().size()))
+            return {};
+        rows << cells;
+    }
+    const auto row = [](const QStringList &cells) {
+        QStringList safe;
+        for (QString c : cells)
+            safe << c.trimmed().replace(QLatin1Char('|'), QStringLiteral("\\|"));
+        return QStringLiteral("| ") + safe.join(QStringLiteral(" | ")) + QStringLiteral(" |");
+    };
+    QStringList out{row(rows.first())};
+    out << QStringLiteral("|") + QStringList(rows.first().size(), QStringLiteral("---")).join(QLatin1Char('|'))
+               + QStringLiteral("|");
+    for (qsizetype i = 1; i < rows.size(); ++i)
+        out << row(rows.at(i));
+    return out.join(QLatin1Char('\n'));
+}
+
+bool isWebUrl(const QString &text)
+{
+    const QString t = text.trimmed();
+    if (t.contains(QLatin1Char(' ')) || t.contains(QLatin1Char('\n')))
+        return false;
+    const QUrl url(t, QUrl::StrictMode);
+    return url.isValid() && (url.scheme() == QLatin1String("http") || url.scheme() == QLatin1String("https"))
+           && !url.host().isEmpty();
+}
+
+QString link(const QString &text, const QString &url)
+{
+    QString shown = text.simplified();
+    shown.replace(QLatin1Char('['), QLatin1Char('(')).replace(QLatin1Char(']'), QLatin1Char(')'));
+    QString target = url;
+    target.replace(QLatin1Char(' '), QStringLiteral("%20")).replace(QLatin1Char(')'), QStringLiteral("%29"));
+    return QStringLiteral("[%1](%2)").arg(shown.isEmpty() ? url : shown, target);
+}
+
 } // namespace Markdown

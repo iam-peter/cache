@@ -18,6 +18,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QMimeData>
 #include <QSaveFile>
 #include <QSet>
@@ -580,47 +581,6 @@ int BoardModel::addMedia(const QVariantList &paths, double cx, double cy, int ta
     return placeMediaNote(rels, cx, cy);
 }
 
-int BoardModel::importUrls(const QVariantList &urls, double cx, double cy, int targetRow)
-{
-    if (m_projectPath.isEmpty())
-        return -1;
-    QStringList media;
-    QStringList texts;
-    for (const QVariant &value : urls) {
-        const QUrl url = value.toUrl();
-        const QString abs = url.isLocalFile() ? url.toLocalFile() : toLocalPath(value.toString());
-        if (!QFileInfo(abs).isFile())
-            continue;
-        if (kTextExt.contains(QFileInfo(abs).suffix().toLower()))
-            texts << abs;
-        else if (!mediaType(abs).isEmpty())
-            media << abs;
-    }
-    const QStringList rels = importMedia(media);
-    if (rels.isEmpty() && texts.isEmpty())
-        return -1;
-
-    pushUndo();
-    int last = -1;
-    double offset = 0;
-    for (const QString &abs : std::as_const(texts)) {
-        QFile f(abs);
-        if (!f.open(QIODevice::ReadOnly))
-            continue;
-        last = appendItem(makeNote(cx - 170 + offset, cy - 100 + offset, QString::fromUtf8(f.readAll())));
-        offset += 36;
-    }
-    if (!rels.isEmpty()) {
-        if (valid(targetRow)) {
-            appendMediaToNote(targetRow, rels);
-            last = targetRow;
-        } else {
-            last = placeMediaNote(rels, cx + offset, cy + offset);
-        }
-    }
-    return last;
-}
-
 int BoardModel::addImageData(const QByteArray &data, double cx, double cy, int targetRow)
 {
     if (m_projectPath.isEmpty())
@@ -637,61 +597,6 @@ int BoardModel::addImageData(const QByteArray &data, double cx, double cy, int t
         return targetRow;
     }
     return placeMediaNote({rel}, cx, cy);
-}
-
-QStringList BoardModel::pasteFromClipboard(double cx, double cy, int targetRow)
-{
-    const QMimeData *mime = QGuiApplication::clipboard()->mimeData();
-    if (!mime || m_projectPath.isEmpty())
-        return {};
-    const auto idOf = [this](int row) { return valid(row) ? QStringList{m_items.at(row).id} : QStringList(); };
-
-    // Items copied from a canvas, centred on (cx, cy)
-    if (mime->hasFormat(QStringLiteral("application/x-notecanvas"))) {
-        const QJsonObject root = QJsonDocument::fromJson(mime->data(QStringLiteral("application/x-notecanvas"))).object();
-        BoardState state;
-        for (const QJsonValue &v : root.value(QStringLiteral("items")).toArray())
-            state.items.append(itemFromJson(v.toObject()));
-        for (const QJsonValue &v : root.value(QStringLiteral("links")).toArray())
-            state.links.append(linkFromJson(v.toObject()));
-        if (!state.items.isEmpty()) {
-            QRectF bounds;
-            for (const BoardItem &it : std::as_const(state.items))
-                bounds = bounds.united(QRectF(it.x, it.y, it.w, it.h));
-            pushUndo();
-            return insertState(state, cx - bounds.center().x(), cy - bounds.center().y());
-        }
-    }
-    if (mime->hasUrls()) {
-        QVariantList local;
-        const QList<QUrl> urls = mime->urls();
-        for (const QUrl &url : urls) {
-            if (url.isLocalFile())
-                local.append(url);
-        }
-        if (!local.isEmpty()) {
-            const int row = importUrls(local, cx, cy, targetRow);
-            if (row >= 0)
-                return idOf(row);
-        }
-    }
-    if (mime->hasImage()) {
-        const QImage image = qvariant_cast<QImage>(mime->imageData());
-        const QString rel = saveImageAsset(image, QStringLiteral("paste"));
-        if (!rel.isEmpty()) {
-            pushUndo();
-            if (valid(targetRow) && m_items.at(targetRow).type == QLatin1String("note")) {
-                appendMediaToNote(targetRow, {rel});
-                return idOf(targetRow);
-            }
-            return idOf(placeMediaNote({rel}, cx, cy));
-        }
-    }
-    if (mime->hasText() && !mime->text().trimmed().isEmpty()) {
-        pushUndo();
-        return idOf(appendItem(makeNote(cx - 170, cy - 60, mime->text())));
-    }
-    return {};
 }
 
 int BoardModel::itemAt(double x, double y) const
@@ -880,6 +785,7 @@ QString BoardModel::titleForText(const QString &markdown)
 {
     const QStringList lines = markdown.split(QLatin1Char('\n'));
     QString media;
+    QString table;
     for (QString line : lines) {
         line = line.trimmed();
         while (line.startsWith(QLatin1Char('#')) || line.startsWith(QLatin1Char('>')))
@@ -901,10 +807,27 @@ QString BoardModel::titleForText(const QString &markdown)
                 media = line.mid(2, line.indexOf(QLatin1Char(']')) - 2);
             continue;
         }
+        if (line.startsWith(QLatin1Char('|'))) { // a table: its header, failing all else
+            if (table.isEmpty() && !line.contains(QStringLiteral("---"))) {
+                QStringList cells = line.split(QLatin1Char('|'));
+                for (QString &cell : cells)
+                    cell = cell.trimmed();
+                cells.removeAll(QString());
+                table = cells.join(QStringLiteral(" · "));
+            }
+            continue;
+        }
+        // Links read as their text
+        static const QRegularExpression link(QStringLiteral(R"(\[([^\]]*)\]\([^)]*\))"));
+        line.replace(link, QStringLiteral("\\1"));
+        line.remove(QStringLiteral("[["));
+        line.remove(QStringLiteral("]]"));
         if (!line.isEmpty())
             return line.left(80);
     }
-    return media.isEmpty() ? QCoreApplication::translate("BoardModel", "Untitled note") : media;
+    if (!media.isEmpty())
+        return media;
+    return table.isEmpty() ? QCoreApplication::translate("BoardModel", "Untitled note") : table.left(80);
 }
 
 // ---------------------------------------------------------------------------
@@ -952,6 +875,8 @@ void BoardModel::copyToClipboard(int row) const
     auto *mime = new QMimeData;
     mime->setHtml(clipboardHtml(it.text));
     mime->setText(it.text);
+    // Pasted back into the app, the Markdown is taken as it is
+    mime->setData(QStringLiteral("application/x-notecanvas-markdown"), QByteArray());
 
     QStringList images;
     QString rest = it.text;
@@ -1309,7 +1234,7 @@ QString BoardModel::dataUri(const QString &path) const
 namespace {
 
 struct Piece {
-    enum Kind { Text, Video, Code, Embed } kind = Text;
+    enum Kind { Text, Video, Code, Embed, File } kind = Text;
     QString markdown;
     QString target; // video file, or wiki link target
     QString name;
@@ -1353,6 +1278,21 @@ QList<Piece> piecesOf(const QString &markdown, const std::function<QString(const
                 video.target = local;
                 video.name = media.captured(1);
                 pieces.append(video);
+                continue;
+            }
+        }
+        // A link alone on its line to a file of the project: an attachment
+        static const QRegularExpression fileLine(QStringLiteral(R"(^\s*\[([^\]]+)\]\(([^)\s]+)\)\s*$)"));
+        const QRegularExpressionMatch file = fileLine.match(line);
+        if (file.hasMatch() && !file.captured(2).contains(QLatin1Char(':'))) {
+            const QString local = resolve(file.captured(2));
+            if (!local.isEmpty() && QFileInfo(local).isFile() && !isVideo(local)) {
+                flush();
+                Piece attachment{Piece::File};
+                attachment.target = local;
+                attachment.name = file.captured(1);
+                attachment.line = i;
+                pieces.append(attachment);
                 continue;
             }
         }
@@ -1407,6 +1347,17 @@ QVariantList BoardModel::renderSegments(const QString &markdown, double maxWidth
                                              + QStringLiteral("</pre>")}});
             break;
         }
+        case Piece::File: {
+            const QFileInfo fi(piece.target);
+            segments.append(QVariantMap{
+                {QStringLiteral("kind"), QStringLiteral("file")},
+                {QStringLiteral("name"), piece.name},
+                {QStringLiteral("url"), QUrl::fromLocalFile(piece.target)},
+                {QStringLiteral("folder"), QUrl::fromLocalFile(fi.absolutePath())},
+                {QStringLiteral("extension"), fi.suffix().toUpper()},
+                {QStringLiteral("size"), QLocale().formattedDataSize(fi.size(), 1, QLocale::DataSizeTraditionalFormat)}});
+            break;
+        }
         case Piece::Embed:
             segments.append(QVariantMap{{QStringLiteral("kind"), QStringLiteral("embed")},
                                         {QStringLiteral("target"), piece.target},
@@ -1452,6 +1403,10 @@ static QString clipboardHtmlOf(const BoardModel *board, const QString &markdown,
                     + Highlight::toHtml(piece.markdown, language, pasteCodeColors()) + QStringLiteral("</pre>");
             break;
         }
+        case Piece::File:
+            html += QStringLiteral("<p><a href=\"%1\">📎 %2</a></p>")
+                        .arg(QUrl::fromLocalFile(piece.target).toString(), piece.name.toHtmlEscaped());
+            break;
         case Piece::Embed:
             html += QStringLiteral("<p><b>↪ %1</b></p>")
                         .arg((piece.name.isEmpty() ? piece.target : piece.name).toHtmlEscaped());

@@ -48,4 +48,17 @@ struct Fence {
 };
 QList<Fence> fences(const QString &markdown);
 
+// Cells copied from a spreadsheet (tab-separated, one row per line), or a
+// CSV file's text, as a Markdown table with the first row as its header.
+// Empty when the text isn't such a grid: at least two rows of at least two
+// cells, every row the same width.
+QString tableFromCells(const QString &text, QChar separator = QLatin1Char('\t'));
+
+// A single http(s) URL and nothing else, as one is when copied or dragged
+// from a browser's address bar
+bool isWebUrl(const QString &text);
+
+// [text](url), the brackets in the text made safe
+QString link(const QString &text, const QString &url);
+
 } // namespace Markdown

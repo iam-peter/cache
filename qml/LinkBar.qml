@@ -26,11 +26,23 @@ Rectangle {
         labelField.selectAll()
     }
 
-    visible: link !== null && connector !== null && !canvas.exporting
+    // Below the middle of the line, or above it when that is where its item
+    // is (as for a loop over its item's top)
+    readonly property Item source: connector ? connector.fromCard : null
+    readonly property bool above: source !== null && mid.y < source.y + source.height / 2
+                                  && mid.x > source.x - 40 && mid.x < source.x + source.width + 40
+
+    visible: link !== null && connector !== null && !canvas.exporting && canvas.relinkId === ""
+    // A loop: above all of it
+    readonly property bool loop: link !== null && link.from === link.to
+    readonly property real lineTop: connector && connector.geometry
+                                ? Math.min(...connector.geometry.samples.map(p => p.y)) : 0
+
     scale: 1 / canvas.zoom
-    transformOrigin: Item.Top
+    transformOrigin: above || loop ? Item.Bottom : Item.Top
     x: mid.x - width / 2
-    y: mid.y + 14 / canvas.zoom
+    y: loop ? Math.min(lineTop, source ? source.y : lineTop) - height - 14 / canvas.zoom
+       : above ? mid.y - height - 14 / canvas.zoom : mid.y + 14 / canvas.zoom
     width: column.implicitWidth + 2 * Styles.Primitives.spacing.sp050
     height: column.implicitHeight + 2 * Styles.Primitives.spacing.sp050
     radius: Theme.radius
@@ -101,6 +113,13 @@ Rectangle {
                         onClicked: Board.setLink(bar.link.id, { color: parent.modelData })
                     }
                 }
+            }
+            IconButton {
+                iconName: "route"
+                enabled: bar.link && (bar.link.fromSide !== "" || bar.link.toSide !== "")
+                onClicked: Board.setLink(bar.link.id, { fromSide: "", toSide: "" })
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Let the routing choose the sides again (drag an end to choose one)")
             }
             ToolSeparator { height: 24 }
             IconButton {

@@ -5,7 +5,7 @@ project(NoteCanvas VERSION 0.2.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 6.9 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Multimedia)
+find_package(Qt6 6.9 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Multimedia Network)
 qt_standard_project_setup(REQUIRES 6.8)
 
 # Lay QML modules out by URI so qmllint and qmlls find them (as igitt does)
@@ -37,6 +37,7 @@ qt_add_qml_module(notecanvas
         qml/VideoBlock.qml
         qml/CodeBlock.qml
         qml/EmbedBlock.qml
+        qml/FileBlock.qml
         qml/ShapeBody.qml
         qml/TextBody.qml
         qml/SectionBody.qml
@@ -46,6 +47,7 @@ qt_add_qml_module(notecanvas
         qml/Minimap.qml
         qml/SelectionBar.qml
         qml/LinkBar.qml
+        qml/LinkEnds.qml
         qml/TemplateDialog.qml
         qml/HistoryDialog.qml
         qml/SettingsDialog.qml
@@ -55,7 +57,7 @@ qt_add_qml_module(notecanvas
         qml/IconButton.qml
         qml/SplitterHandle.qml
     SOURCES
-        src/boardmodel.h src/boardmodel.cpp src/boardops.cpp
+        src/boardmodel.h src/boardmodel.cpp src/boardops.cpp src/importer.cpp
         src/markdown.h src/markdown.cpp
         src/highlight.h src/highlight.cpp
         src/documentfilter.h src/documentfilter.cpp
@@ -87,6 +89,7 @@ target_link_libraries(notecanvas PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Multimedia
+    Qt6::Network
 )
 
 include(CTest)
@@ -105,10 +108,10 @@ if(BUILD_TESTING)
 
     # The board model as the app uses it, on an offscreen platform
     qt_add_executable(tst_board tests/tst_board.cpp
-        src/boardmodel.h src/boardmodel.cpp src/boardops.cpp
+        src/boardmodel.h src/boardmodel.cpp src/boardops.cpp src/importer.cpp
         src/markdown.h src/markdown.cpp src/highlight.h src/highlight.cpp)
     target_include_directories(tst_board PRIVATE src)
-    target_link_libraries(tst_board PRIVATE Qt6::Gui Qt6::Qml Qt6::Test)
+    target_link_libraries(tst_board PRIVATE Qt6::Gui Qt6::Qml Qt6::Network Qt6::Test)
     qt_add_resources(tst_board "templates" PREFIX /qt/qml/NoteApp FILES ${template_files})
     add_test(NAME tst_board COMMAND tst_board -platform offscreen)
 

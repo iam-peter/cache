@@ -26,23 +26,16 @@ Item {
         if (editor.text !== card.itemText)
             Board.setText(card.index, editor.text)
     }
-    // ![name](assets/file) on a line of its own, at the cursor. Images show
-    // inline; videos get a player.
-    function insertMedia(path) {
-        const info = Board.mediaInfo(path)
-        if (!info.rel)
-            return false
-        const snippet = "![" + info.name.replace(/[\[\]]/g, "") + "](" + encodeURI(info.rel) + ")"
-        insertBlock(snippet)
+    // Markdown from a drop, a paste or the file picker, at the cursor: on
+    // lines of its own when it is a block (media, files, tables, several
+    // lines), else inline
+    function insertMarkdown(md) {
+        if (/\n/.test(md) || /^(!?\[|\|)/.test(md))
+            insertBlock(md)
+        else
+            editor.insert(editor.cursorPosition, md)
+        editor.forceActiveFocus()
         commit()
-
-        // Grow the card by what was added
-        const inner = card.width - 32
-        const added = info.type === "video" ? inner * 9 / 16
-                                            : Math.min(info.width, inner) * info.height / Math.max(1, info.width)
-        Board.setGeometry(card.index, card.x, card.y, card.width,
-                          Math.min(card.height + added + 12, Math.max(card.height, 1200)))
-        return true
     }
     // A paragraph of its own, so every Markdown renderer shows it as a block.
     // Returns where `text` starts.
@@ -109,13 +102,27 @@ Item {
     Connections {
         target: body.card.canvas
         ignoreUnknownSignals: true
-        function onInsertMediaRequested(id, path) {
+        function onInsertMarkdownRequested(id, markdown) {
             if (id === body.card.itemId)
-                body.insertMedia(path)
+                body.insertMarkdown(markdown)
         }
         function onInsertCodeRequested(id) {
             if (id === body.card.itemId)
                 body.insertCode()
+        }
+    }
+
+    // A web image or link fetched in the background: into the editor too
+    Connections {
+        target: Board
+        enabled: body.editing
+        function onTextReplaced(before, after) {
+            const at = editor.text.indexOf(before)
+            if (at < 0)
+                return
+            const cursor = editor.cursorPosition
+            editor.text = editor.text.split(before).join(after)
+            editor.cursorPosition = cursor > at ? Math.min(editor.length, cursor + after.length - before.length) : cursor
         }
     }
 
@@ -148,6 +155,7 @@ Item {
                     sourceComponent: modelData.kind === "video" ? videoSegment
                                    : modelData.kind === "code" ? codeSegment
                                    : modelData.kind === "embed" ? embedSegment
+                                   : modelData.kind === "file" ? fileSegment
                                    : textSegment
 
                     Component {
@@ -185,6 +193,10 @@ Item {
                     Component {
                         id: codeSegment
                         CodeBlock { segment: piece.modelData }
+                    }
+                    Component {
+                        id: fileSegment
+                        FileBlock { segment: piece.modelData }
                     }
                     Component {
                         id: embedSegment
@@ -300,17 +312,11 @@ Item {
                     body.card.canvas.finishEditing()
                     event.accepted = true
                 } else if (event.matches(StandardKey.Paste)) {
-                    // Copied image/video files or image data go into the
-                    // note; plain text falls through to the normal paste
-                    const files = Board.clipboardMediaFiles()
-                    if (files.length > 0) {
-                        for (const f of files)
-                            body.insertMedia(f)
-                        event.accepted = true
-                    } else if (Board.clipboardHasImage()) {
-                        const path = Board.saveClipboardImage()
-                        if (path)
-                            body.insertMedia(path)
+                    // Files, images, rich text, links and cells become
+                    // Markdown; plain text falls through to the normal paste
+                    const md = Board.clipboardMarkdown()
+                    if (md) {
+                        body.insertMarkdown(md)
                         event.accepted = true
                     }
                 } else if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)

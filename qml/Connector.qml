@@ -15,6 +15,8 @@ Item {
     // While dragging out a new connector: from an item to a point
     property point loosePoint
     property bool loose: false
+    property Item looseTarget: null  // the item under the pointer, if any
+    property string looseArrow: "end"
 
     readonly property Item fromCard: (canvas.cardsVersion, canvas.cards[link.from] || null)
     readonly property Item toCard: loose ? null : (canvas.cardsVersion, canvas.cards[link.to] || null)
@@ -26,73 +28,127 @@ Item {
                                        : Theme.lineColor(link.color || "")
     readonly property real lineWidth: decorative ? 1.5 : 2
     readonly property string style: decorative ? "curve" : (link.style || "curve")
-    readonly property string arrow: decorative || loose ? (loose ? "end" : "none") : (link.arrow || "end")
+    readonly property string arrow: loose ? looseArrow : decorative ? "none" : (link.arrow || "end")
 
     // Everything below is derived from the two rectangles
     readonly property var fromRect: fromCard ? Qt.rect(fromCard.x, fromCard.y, fromCard.width, fromCard.height)
                                              : Qt.rect(0, 0, 0, 0)
-    readonly property var toRect: loose ? Qt.rect(loosePoint.x, loosePoint.y, 0, 0)
+    readonly property var toRect: loose ? (looseTarget ? Qt.rect(looseTarget.x, looseTarget.y, looseTarget.width, looseTarget.height)
+                                                       : Qt.rect(loosePoint.x, loosePoint.y, 0, 0))
                                         : toCard ? Qt.rect(toCard.x, toCard.y, toCard.width, toCard.height)
                                                  : Qt.rect(0, 0, 0, 0)
-    readonly property var geometry: shown ? compute(fromRect, toRect, style) : null
+    // While dragging out a new connector: the side it would enter by
+    property string looseSide: ""
+    readonly property var geometry: shown ? compute(fromRect, toRect, style, link.fromSide || "",
+                                                    loose ? looseSide : (link.toSide || "")) : null
 
-    visible: shown
+    // While one of its ends is being moved, the preview stands in for it
+    visible: shown && (decorative || loose || canvas.relinkId !== link.id)
     z: decorative ? -2000 : -1000
 
-    // Ends on the facing sides of the two rectangles; a curve leaves and
-    // enters them at right angles, an elbow turns halfway
-    function compute(a, b, kind) {
+    // The point of a side, shifted along it (-1 to 1) when two ends share one
+    function anchor(r, side, shift) {
+        const t = 0.5 + shift * 0.25
+        switch (side) {
+        case "top":    return { p: Qt.point(r.x + r.width * t, r.y), n: Qt.point(0, -1) }
+        case "bottom": return { p: Qt.point(r.x + r.width * t, r.y + r.height), n: Qt.point(0, 1) }
+        case "left":   return { p: Qt.point(r.x, r.y + r.height * t), n: Qt.point(-1, 0) }
+        default:       return { p: Qt.point(r.x + r.width, r.y + r.height * t), n: Qt.point(1, 0) }
+        }
+    }
+    // Sides for ends left to the routing. Side by side, rectangles connect
+    // sideways (as a mindmap's branches do) unless they are much further
+    // apart up and down; one above the other, top to bottom.
+    function autoSides(a, b) {
         const ac = Qt.point(a.x + a.width / 2, a.y + a.height / 2)
         const bc = Qt.point(b.x + b.width / 2, b.y + b.height / 2)
-        const dx = bc.x - ac.x
-        const dy = bc.y - ac.y
-        // Side by side, they connect sideways (as a mindmap's branches do)
-        // unless they are much further apart up and down; one above the
-        // other, they connect top to bottom
         const gapX = Math.max(b.x - (a.x + a.width), a.x - (b.x + b.width))
         const gapY = Math.max(b.y - (a.y + a.height), a.y - (b.y + b.height))
         const horizontal = gapX >= 0 ? gapX * 2 >= gapY : gapX >= gapY
-        let p1, p2, n1, n2
-        if (horizontal) {
-            const right = dx >= 0
-            p1 = Qt.point(right ? a.x + a.width : a.x, ac.y)
-            p2 = Qt.point(right ? b.x : b.x + b.width, bc.y)
-            n1 = Qt.point(right ? 1 : -1, 0)
-            n2 = Qt.point(right ? -1 : 1, 0)
+        if (horizontal)
+            return bc.x >= ac.x ? ["right", "left"] : ["left", "right"]
+        return bc.y >= ac.y ? ["bottom", "top"] : ["top", "bottom"]
+    }
+
+    // The route between the two ends, the sides chosen where given
+    function compute(a, b, kind, fromSide, toSide) {
+        const self = loose ? looseTarget !== null && looseTarget === fromCard : fromCard === toCard
+        // A loop with a side left open takes the one next to the other
+        const order = ["top", "right", "bottom", "left"]
+        let s1, s2
+        if (self) {
+            s1 = fromSide || (toSide ? order[(order.indexOf(toSide) + 1) % 4] : "right")
+            s2 = toSide || order[(order.indexOf(s1) + 3) % 4]
         } else {
-            const down = dy >= 0
-            p1 = Qt.point(ac.x, down ? a.y + a.height : a.y)
-            p2 = Qt.point(bc.x, down ? b.y : b.y + b.height)
-            n1 = Qt.point(0, down ? 1 : -1)
-            n2 = Qt.point(0, down ? -1 : 1)
+            const auto = autoSides(a, b)
+            s1 = fromSide || auto[0]
+            s2 = toSide || auto[1]
         }
+        // Both ends on one side of one item: apart along it
+        const shared = self && s1 === s2
+        const e1 = anchor(a, s1, shared ? -1 : 0)
+        // Dragged to empty space: the end is the pointer, entered head-on
+        const e2 = loose && !looseTarget ? { p: Qt.point(b.x, b.y), n: Qt.point(-e1.n.x, -e1.n.y) }
+                                         : anchor(b, s2, shared ? 1 : 0)
+        const p1 = e1.p, p2 = e2.p, n1 = e1.n, n2 = e2.n
         const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y)
         let path = ""
         let samples = []
         let endDir, startDir
-        if (kind === "straight") {
+        if (kind === "straight" && !self) {
             path = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`
             samples = [p1, p2]
             const len = Math.max(dist, 0.001)
             endDir = Qt.point((p2.x - p1.x) / len, (p2.y - p1.y) / len)
             startDir = Qt.point(-endDir.x, -endDir.y)
-        } else if (kind === "elbow") {
-            let m1, m2
-            if (horizontal) {
-                const mx = (p1.x + p2.x) / 2
-                m1 = Qt.point(mx, p1.y)
-                m2 = Qt.point(mx, p2.y)
+        } else if (kind === "elbow" && !self) {
+            // Out of each side a little, then at right angles
+            const m = 24
+            const s = Qt.point(p1.x + n1.x * m, p1.y + n1.y * m)
+            const e = Qt.point(p2.x + n2.x * m, p2.y + n2.y * m)
+            const h1 = n1.x !== 0, h2 = n2.x !== 0
+            const pts = [p1, s]
+            if (h1 && h2) {
+                const mx = n1.x === n2.x ? (n1.x > 0 ? Math.max(s.x, e.x) : Math.min(s.x, e.x)) : (s.x + e.x) / 2
+                pts.push(Qt.point(mx, s.y), Qt.point(mx, e.y))
+            } else if (!h1 && !h2) {
+                const my = n1.y === n2.y ? (n1.y > 0 ? Math.max(s.y, e.y) : Math.min(s.y, e.y)) : (s.y + e.y) / 2
+                pts.push(Qt.point(s.x, my), Qt.point(e.x, my))
+            } else if (h1) {
+                pts.push(Qt.point(e.x, s.y))
             } else {
-                const my = (p1.y + p2.y) / 2
-                m1 = Qt.point(p1.x, my)
-                m2 = Qt.point(p2.x, my)
+                pts.push(Qt.point(s.x, e.y))
             }
-            path = `M ${p1.x} ${p1.y} L ${m1.x} ${m1.y} L ${m2.x} ${m2.y} L ${p2.x} ${p2.y}`
-            samples = [p1, m1, m2, p2]
+            pts.push(e, p2)
+            path = "M " + pts.map(q => `${q.x} ${q.y}`).join(" L ")
+            samples = pts
+            endDir = Qt.point(-n2.x, -n2.y)
+            startDir = Qt.point(-n1.x, -n1.y)
+        } else if (self && n1.x === -n2.x && n1.y === -n2.y) {
+            // A loop between opposite sides: out of one, over the top (or
+            // round the right) and into the other
+            const d = Math.max(50, Math.min(a.width, a.height) * 0.5)
+            const sideways = n1.x !== 0
+            const apex = sideways ? Qt.point(a.x + a.width / 2, a.y - d) : Qt.point(a.x + a.width + d, a.y + a.height / 2)
+            const t = sideways ? Qt.point(Math.sign(p2.x - p1.x), 0) : Qt.point(0, Math.sign(p2.y - p1.y))
+            const k = (sideways ? a.width : a.height) / 2
+            const segments = [[p1, Qt.point(p1.x + n1.x * d, p1.y + n1.y * d), Qt.point(apex.x - t.x * k, apex.y - t.y * k), apex],
+                              [apex, Qt.point(apex.x + t.x * k, apex.y + t.y * k), Qt.point(p2.x + n2.x * d, p2.y + n2.y * d), p2]]
+            path = `M ${p1.x} ${p1.y}`
+            for (const [q0, q1, q2, q3] of segments) {
+                path += ` C ${q1.x} ${q1.y} ${q2.x} ${q2.y} ${q3.x} ${q3.y}`
+                for (let i = 0; i <= 16; ++i) {
+                    const u = i / 16, v = 1 - u
+                    samples.push(Qt.point(v*v*v*q0.x + 3*v*v*u*q1.x + 3*v*u*u*q2.x + u*u*u*q3.x,
+                                          v*v*v*q0.y + 3*v*v*u*q1.y + 3*v*u*u*q2.y + u*u*u*q3.y))
+                }
+            }
             endDir = Qt.point(-n2.x, -n2.y)
             startDir = Qt.point(-n1.x, -n1.y)
         } else {
-            const d = Math.max(30, dist * 0.4)
+            // A curve leaves and enters at right angles; a loop swings out
+            // further, so it shows around its item
+            const d = self ? Math.max(60, Math.min(a.width, a.height) * 0.7) : Math.max(30, dist * 0.4)
             const c1 = Qt.point(p1.x + n1.x * d, p1.y + n1.y * d)
             const c2 = Qt.point(p2.x + n2.x * d, p2.y + n2.y * d)
             path = `M ${p1.x} ${p1.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${p2.x} ${p2.y}`
@@ -104,13 +160,25 @@ Item {
             endDir = Qt.point(-n2.x, -n2.y)
             startDir = Qt.point(-n1.x, -n1.y)
         }
-        // The middle, for the label
-        let mid = samples[Math.floor(samples.length / 2)]
-        if (samples.length === 2)
-            mid = Qt.point((p1.x + p2.x) / 2, (p1.y + p2.y) / 2)
-        else if (samples.length === 4)
-            mid = Qt.point((samples[1].x + samples[2].x) / 2, (samples[1].y + samples[2].y) / 2)
-        return { path: path, samples: samples, start: p1, end: p2, startDir: startDir, endDir: endDir, mid: mid }
+        return { path: path, samples: samples, start: p1, end: p2, startDir: startDir, endDir: endDir,
+                 mid: halfway(samples), fromSide: s1, toSide: s2 }
+    }
+
+    // The point halfway along a polyline, for the label
+    function halfway(pts) {
+        let total = 0
+        for (let i = 1; i < pts.length; ++i)
+            total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+        let left = total / 2
+        for (let i = 1; i < pts.length; ++i) {
+            const len = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+            if (len >= left && len > 0) {
+                const t = left / len
+                return Qt.point(pts[i - 1].x + (pts[i].x - pts[i - 1].x) * t, pts[i - 1].y + (pts[i].y - pts[i - 1].y) * t)
+            }
+            left -= len
+        }
+        return pts[0]
     }
 
     function arrowHead(tip, dir) {

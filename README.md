@@ -30,9 +30,16 @@ your projects and the notes on the current canvas. The look comes from
   fence (```` ```python ````) or is guessed.
 - **Connectors**: drag from one of a selected item's side handles (or with
   the connector tool) onto another item to connect them, or onto empty
-  space for a new connected note. Connectors follow their items and can
-  be curved, straight or elbowed, have arrows at either end or none, be
-  dashed, coloured and labelled (double-click one).
+  space for a new connected note. A connector leaves by the side you drag
+  it from and enters by the side of the target nearest the pointer (dots
+  show which), so left to bottom is as easy as left to right; dragging
+  back onto the item you started from connects it to itself. Select a
+  connector and drag either end onto another side or another item to
+  move it; the route button hands the sides back to the routing.
+  Connecting B to A when A already connects to B along the same sides
+  turns that connector into one with arrows both ways. Connectors follow
+  their items and can be curved, straight or elbowed, have arrows at
+  either end or none, be dashed, coloured and labelled (double-click one).
 - **Mindmaps**: with a note selected, `Tab` adds a child and `Enter` a
   sibling, ready to type; `Alt`+arrows walk the branches. Fold a branch
   into its root with the badge on its edge, and **Tidy** lays a branch out
@@ -51,14 +58,24 @@ your projects and the notes on the current canvas. The look comes from
 - **Templates**: Kanban board, retrospective, meeting notes, pros and
   cons, mindmap, flowchart and brainstorm; save any selection as a template
   of your own (kept in the workspace's `.templates` folder).
-- **Images and videos live inside notes**, written as `![name](assets/…)`:
-  - drop or paste (`Ctrl+V`) on empty canvas to make a new note from them,
-    onto a note (or with a note selected) to add them to it, or while
-    editing to insert them at the cursor
-  - **Image / video…** in the toolbar, or the image button on a note,
-    picks files
-  - images are scaled to the note's width, and videos play inside the note
-    (expand for a large player)
+- **Images, videos and files live inside notes**: paste (`Ctrl+V`) or drop
+  them on empty canvas for a new note, onto a note (or with a note
+  selected) to add them to it, or into a note being edited to put them at
+  the cursor. **Add files…** in the toolbar, or the image button on a note,
+  picks them. What arrives from other applications becomes Markdown:
+  - **rich text** from Teams, Outlook, Word or web pages keeps its
+    headings, bold and italics, links, lists and tables; images in it are
+    saved with the note
+  - **images and videos** are copied into `assets/` and shown, scaled to
+    the note; videos play inside it (expand for a large player)
+  - **any other file** (PDF, Office documents, archives…) is copied into
+    `assets/` and attached as a card with its type and size that opens it
+  - **cells copied from a spreadsheet**, and CSV files, become a table
+  - **web links** get the page's title; **web images** are downloaded,
+    in the background (one that can't be had, say behind a sign-in, stays
+    a link)
+  - Markdown and text files become notes of their own, and notes copied
+    from Note Canvas paste back exactly
 - **For Teams, mail and documents**:
   - **Copy note** (`Ctrl+C`, or `Ctrl+Shift+C` while editing) puts a note on
     the clipboard as rich text with its images embedded, code as coloured
@@ -123,7 +140,7 @@ notes holding that media.
 ## Building
 
 Needs Qt 6.9 or newer (developed against 6.12) with Qt Quick, Quick
-Controls 2 and Qt Multimedia, plus CMake 3.21+ and a C++20 compiler.
+Controls 2, Qt Multimedia and Qt Network, plus CMake 3.21+ and a C++20 compiler.
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=$HOME/Qt/6.12.0/gcc_64
@@ -151,6 +168,7 @@ ctest --test-dir build --output-on-failure
 | `style/` | igitt's style module (`IgittStyle`), unchanged from igitt `0238e3b` |
 | `fonts/`, `icons/` | Inter and JetBrains Mono (OFL) and Lucide icons (ISC), as in igitt |
 | `src/boardmodel.*` | Items and connectors: load/save, undo, media, rendering, rich copy |
+| `src/importer.cpp` | What is dropped or pasted, as Markdown: rich text, files, links, cells |
 | `src/boardops.cpp` | Several items at once, connectors, mindmaps, sections, templates, export |
 | `src/markdown.*` | Tasks, `[[wiki links]]` and code fences in a note's Markdown |
 | `src/highlight.*` | Syntax highlighting of code blocks |
@@ -169,7 +187,7 @@ ctest --test-dir build --output-on-failure
 | `qml/CanvasCard.qml` | Any item: frame, move, resize, handles, folding, floating toolbar |
 | `qml/NoteBody.qml` | A rendered note and its editor, with `[[` completion |
 | `qml/*Body.qml` | Shapes, text, sections and pen lines |
-| `qml/CodeBlock.qml`, `EmbedBlock.qml`, `VideoBlock.qml` | Code, link previews and videos in notes |
+| `qml/CodeBlock.qml`, `EmbedBlock.qml`, `VideoBlock.qml`, `FileBlock.qml` | Code, link previews, videos and attached files in notes |
 | `qml/Connector.qml` | A connector, its route and arrows |
 | `qml/ToolPalette.qml`, `Minimap.qml`, `SelectionBar.qml`, `LinkBar.qml` | Tools, map, toolbars for selections and connectors |
 | `qml/TemplateDialog.qml`, `HistoryDialog.qml` | Templates and versions |

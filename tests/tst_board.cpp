@@ -5,8 +5,44 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMimeData>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTemporaryDir>
+#include <QBuffer>
+#include <QImage>
 #include <QTest>
+
+// Serves /page (an HTML page with a title) and /pic.png on localhost
+class TinyServer : public QTcpServer
+{
+public:
+    TinyServer()
+    {
+        listen(QHostAddress::LocalHost);
+        connect(this, &QTcpServer::newConnection, this, [this] {
+            while (QTcpSocket *socket = nextPendingConnection()) {
+                connect(socket, &QTcpSocket::readyRead, socket, [socket] {
+                    const QByteArray request = socket->readAll();
+                    QByteArray body, type = "text/html";
+                    if (request.startsWith("GET /pic.png")) {
+                        QImage image(8, 6, QImage::Format_RGB32);
+                        image.fill(Qt::red);
+                        QBuffer buffer(&body);
+                        buffer.open(QIODevice::WriteOnly);
+                        image.save(&buffer, "PNG");
+                        type = "image/png";
+                    } else {
+                        body = "<html><head><title>Hello &amp; welcome</title></head><body>x</body></html>";
+                    }
+                    socket->write("HTTP/1.1 200 OK\r\nContent-Type: " + type + "\r\nContent-Length: "
+                                  + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
+                    socket->disconnectFromHost();
+                });
+            }
+        });
+    }
+    QString url(const char *path) const { return QStringLiteral("http://127.0.0.1:%1%2").arg(serverPort()).arg(QLatin1String(path)); }
+};
 
 class TestBoard : public QObject
 {
@@ -50,6 +86,186 @@ private slots:
         const int shape = board.indexOf(board.itemsIn(-10, 290, 200, 100).value(0));
         QCOMPARE(board.get(shape).value("shape").toString(), QStringLiteral("diamond"));
         QCOMPARE(board.get(shape).value("text").toString(), QStringLiteral("Why?"));
+    }
+
+    void richTextFromOtherApps()
+    {
+        BoardModel board;
+        board.load(project("html"));
+        QImage image(4, 4, QImage::Format_RGB32);
+        image.fill(Qt::blue);
+        QByteArray png;
+        QBuffer buffer(&png);
+        buffer.open(QIODevice::WriteOnly);
+        image.save(&buffer, "PNG");
+        const QString html = QStringLiteral("<p>Hello <b>bold</b> and <a href=\"https://qt.io\">a link</a></p>"
+                                            "<ul><li>one</li><li>two</li></ul>"
+                                            "<table><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>"
+                                            "<p><img src=\"data:image/png;base64,%1\"></p>").arg(QString::fromLatin1(png.toBase64()));
+        const QStringList ids = board.dropData({{"text/html", html.toUtf8()}, {"text/plain", "Hello bold"}}, 0, 0);
+        QCOMPARE(ids.size(), 1);
+        const QString md = board.getById(ids.first()).value("text").toString();
+        QVERIFY2(md.contains(QStringLiteral("**bold**")), qPrintable(md));
+        QVERIFY2(md.contains(QStringLiteral("[a link](https://qt.io)")), qPrintable(md));
+        QVERIFY2(md.contains(QStringLiteral("- one")), qPrintable(md));
+        QVERIFY2(md.contains(QStringLiteral("|A|B|")) || md.contains(QStringLiteral("| A | B |")), qPrintable(md));
+        QVERIFY2(md.contains(QStringLiteral("](assets/paste-")), qPrintable(md)); // the image, saved
+    }
+
+    void spreadsheetCells()
+    {
+        BoardModel board;
+        board.load(project("cells"));
+        // Spreadsheets also offer a picture of the cells: the table wins
+        QImage image(4, 4, QImage::Format_RGB32);
+        QByteArray png;
+        QBuffer buffer(&png);
+        buffer.open(QIODevice::WriteOnly);
+        image.save(&buffer, "PNG");
+        const QStringList ids = board.dropData({{"text/plain", "Item\tCost\nTea\t3\n"}, {"image/png", png}}, 0, 0);
+        QCOMPARE(board.getById(ids.first()).value("text").toString().trimmed(),
+                 QStringLiteral("| Item | Cost |\n|---|---|\n| Tea | 3 |"));
+    }
+
+    void filesOfAnyKind()
+    {
+        const QString path = project("files");
+        BoardModel board;
+        board.load(path);
+        const QString pdf = m_dir.filePath("report.pdf");
+        QFile f(pdf);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("%PDF-1.4 fake");
+        f.close();
+        const QString csv = m_dir.filePath("sales.csv");
+        QFile c(csv);
+        QVERIFY(c.open(QIODevice::WriteOnly));
+        c.write("Month,Total\nJan,10\nFeb,12\n");
+        c.close();
+        const int row = board.importUrls({QUrl::fromLocalFile(pdf), QUrl::fromLocalFile(csv)}, 0, 0);
+        QVERIFY(row >= 0);
+        QCOMPARE(board.count(), 2); // the table a note of its own, the PDF in another
+        QString attachment, table;
+        for (int i = 0; i < board.count(); ++i) {
+            const QString text = board.get(i).value("text").toString();
+            (text.contains(QStringLiteral("report.pdf")) ? attachment : table) = text;
+        }
+        QCOMPARE(attachment.trimmed(), QStringLiteral("[report.pdf](assets/report.pdf)"));
+        QCOMPARE(BoardModel::titleForText(attachment), QStringLiteral("report.pdf"));
+        QCOMPARE(BoardModel::titleForText(table), QStringLiteral("sales"));
+        QCOMPARE(BoardModel::titleForText(QStringLiteral("| Region | Q1 |\n|---|---|\n| N | 1 |")),
+                 QStringLiteral("Region · Q1"));
+        QCOMPARE(BoardModel::titleForText(QStringLiteral("See [[Plan]] and [the docs](https://x.org)")),
+                 QStringLiteral("See Plan and the docs"));
+        QVERIFY(QFile::exists(path + QStringLiteral("/assets/report.pdf")));
+        QVERIFY(table.contains(QStringLiteral("| Jan | 10 |")));
+        const QVariantMap file = board.renderSegments(attachment, 300, 14, {}).first().toMap();
+        QCOMPARE(file.value("kind").toString(), QStringLiteral("file"));
+        QCOMPARE(file.value("extension").toString(), QStringLiteral("PDF"));
+        QVERIFY(file.value("size").toString().contains(QStringLiteral("bytes")));
+        // Into a note being edited: the same Markdown
+        QCOMPARE(board.filesMarkdown({QUrl::fromLocalFile(pdf)}), QStringLiteral("[report.pdf](assets/report.pdf)"));
+    }
+
+    void webLinksAndImages()
+    {
+        TinyServer server;
+        BoardModel board;
+        board.load(project("web"));
+        // A link: titled once the page is fetched
+        const QString page = server.url("/page");
+        QStringList ids = board.dropData({{"text/uri-list", (page + "\r\n").toUtf8()}}, 0, 0);
+        QCOMPARE(board.getById(ids.first()).value("text").toString().trimmed(), QStringLiteral("[%1](%1)").arg(page));
+        QTRY_COMPARE(board.getById(ids.first()).value("text").toString().trimmed(),
+                     QStringLiteral("[Hello & welcome](%1)").arg(page));
+        // A link with a name in the drag keeps it
+        ids = board.dropData({{"text/uri-list", page.toUtf8()},
+                              {"text/html", QStringLiteral("<a href=\"%1\">Named</a>").arg(page).toUtf8()}}, 0, 0);
+        QCOMPARE(board.getById(ids.first()).value("text").toString().trimmed(), QStringLiteral("[Named](%1)").arg(page));
+        // An image: fetched into assets
+        ids = board.dropData({{"text/uri-list", server.url("/pic.png").toUtf8()}}, 0, 0);
+        QTRY_VERIFY(board.getById(ids.first()).value("text").toString().contains(QStringLiteral("](assets/pic.png)")));
+        // One that can't be had: a link to it
+        ids = board.dropData({{"text/plain", "http://127.0.0.1:1/gone.png"}}, 0, 0);
+        QTRY_COMPARE(board.getById(ids.first()).value("text").toString().trimmed(),
+                     QStringLiteral("[gone.png](http://127.0.0.1:1/gone.png)"));
+    }
+
+    void ownNotesPasteBackAsTheyAre()
+    {
+        BoardModel board;
+        board.load(project("own"));
+        const int row = board.addNote(0, 0, QStringLiteral("# Own\n\n- [ ] task with **bold**"));
+        board.copyToClipboard(row);
+        QCOMPARE(board.clipboardMarkdown(), QString()); // the editor pastes the text itself
+        const QStringList ids = board.pasteFromClipboard(500, 0);
+        QCOMPARE(board.getById(ids.first()).value("text").toString().trimmed(),
+                 QStringLiteral("# Own\n\n- [ ] task with **bold**"));
+    }
+
+    void reverseConnection()
+    {
+        BoardModel board;
+        board.load(project("reverse"));
+        const QString a = board.get(board.addNote(0, 0, QStringLiteral("A"))).value("id").toString();
+        const QString b = board.get(board.addNote(400, 0, QStringLiteral("B"))).value("id").toString();
+        const QString ab = board.addLink(a, b);
+        // B to A along the same route: the same connector, arrows both ways
+        QCOMPARE(board.addLink(b, a), ab);
+        QCOMPARE(board.linksVariant().size(), 1);
+        QCOMPARE(board.linksVariant().first().toMap().value("arrow").toString(), QStringLiteral("both"));
+        // Along other sides: a connector of its own
+        const QString other = board.addLink(b, a, QStringLiteral("bottom"), QStringLiteral("left"));
+        QVERIFY(!other.isEmpty() && other != ab);
+        QCOMPARE(board.linksVariant().size(), 2);
+        // Twice the same: still two
+        QCOMPARE(board.addLink(b, a, QStringLiteral("bottom"), QStringLiteral("left")), other);
+        QCOMPARE(board.linksVariant().size(), 2);
+    }
+
+    void loopsAndSides()
+    {
+        const QString path = project("loops");
+        QString a, loop;
+        {
+            BoardModel board;
+            board.load(path);
+            a = board.get(board.addNote(0, 0, QStringLiteral("A"))).value("id").toString();
+            loop = board.addLink(a, a, QStringLiteral("right"), QStringLiteral("top"));
+            QVERIFY(!loop.isEmpty());
+            QVERIFY(board.addLink(a, a, QStringLiteral("middle"), {}).isEmpty()); // no such side
+            // A loop is no mindmap branch
+            QCOMPARE(board.childrenOf(a), QStringList());
+            QCOMPARE(board.parentOf(a), QString());
+            QCOMPARE(board.data(board.index(0), BoardModel::ChildCountRole).toInt(), 0);
+            board.save();
+        }
+        BoardModel board;
+        board.load(path);
+        const QVariantMap link = board.linksVariant().first().toMap();
+        QCOMPARE(link.value("from").toString(), a);
+        QCOMPARE(link.value("to").toString(), a);
+        QCOMPARE(link.value("fromSide").toString(), QStringLiteral("right"));
+        QCOMPARE(link.value("toSide").toString(), QStringLiteral("top"));
+    }
+
+    void moveAnEnd()
+    {
+        BoardModel board;
+        board.load(project("relink"));
+        const QString a = board.get(board.addNote(0, 0, QStringLiteral("A"))).value("id").toString();
+        const QString b = board.get(board.addNote(400, 0, QStringLiteral("B"))).value("id").toString();
+        const QString c = board.get(board.addNote(0, 400, QStringLiteral("C"))).value("id").toString();
+        const QString link = board.addLink(a, b);
+        board.setLink(link, {{"to", c}, {"toSide", "left"}, {"fromSide", "bottom"}});
+        QVariantMap l = board.linksVariant().first().toMap();
+        QCOMPARE(l.value("to").toString(), c);
+        QCOMPARE(l.value("toSide").toString(), QStringLiteral("left"));
+        QCOMPARE(board.childrenOf(a), QStringList{c});
+        board.setLink(link, {{"to", "no such item"}});
+        QCOMPARE(board.linksVariant().first().toMap().value("to").toString(), c);
+        board.undo(); // the move of both ends was one step
+        QCOMPARE(board.linksVariant().first().toMap().value("to").toString(), b);
     }
 
     void removingAnItemRemovesItsLinks()
