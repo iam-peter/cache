@@ -18,6 +18,7 @@
 #include <QJsonObject>
 #include <QMimeData>
 #include <QPainter>
+#include <QPainterPathStroker>
 #include <QPdfWriter>
 #include <QSaveFile>
 #include <QStandardPaths>
@@ -334,17 +335,113 @@ int BoardModel::addItem(const QString &type, double x, double y, double w, doubl
     return appendItem(it);
 }
 
+namespace {
+
+// Ramer-Douglas-Peucker: the points that matter for the line's shape
+void simplify(const QList<QPointF> &pts, qsizetype first, qsizetype last, double tolerance, QList<bool> &keep)
+{
+    if (last <= first + 1)
+        return;
+    const QPointF a = pts.at(first), b = pts.at(last);
+    const QPointF ab = b - a;
+    const double len = std::hypot(ab.x(), ab.y());
+    double worst = -1;
+    qsizetype index = -1;
+    for (qsizetype i = first + 1; i < last; ++i) {
+        const QPointF ap = pts.at(i) - a;
+        const double d = len > 0 ? std::abs(ab.x() * ap.y() - ab.y() * ap.x()) / len : std::hypot(ap.x(), ap.y());
+        if (d > worst) {
+            worst = d;
+            index = i;
+        }
+    }
+    if (worst > tolerance) {
+        keep[index] = true;
+        simplify(pts, first, index, tolerance, keep);
+        simplify(pts, index, last, tolerance, keep);
+    }
+}
+
+} // namespace
+
+QList<QPointF> BoardModel::smoothStroke(const QList<QPointF> &points, double tolerance)
+{
+    if (points.size() < 3)
+        return points;
+    QList<bool> keep(points.size(), false);
+    keep.first() = keep.last() = true;
+    simplify(points, 0, points.size() - 1, tolerance, keep);
+    QList<QPointF> kept;
+    for (qsizetype i = 0; i < points.size(); ++i) {
+        if (keep.at(i))
+            kept.append(points.at(i));
+    }
+    // Chaikin, twice: corners cut into curves, the ends stay where they are
+    for (int pass = 0; pass < 2 && kept.size() > 2; ++pass) {
+        QList<QPointF> next{kept.first()};
+        for (qsizetype i = 0; i + 1 < kept.size(); ++i) {
+            const QPointF p = kept.at(i), q = kept.at(i + 1);
+            next.append(p * 0.75 + q * 0.25);
+            next.append(p * 0.25 + q * 0.75);
+        }
+        next.append(kept.last());
+        kept = next;
+    }
+    return kept;
+}
+
+QString BoardModel::strokeOutline(const QVariantList &points, double width) const
+{
+    if (points.isEmpty())
+        return {};
+    QPainterPath line(points.first().toPointF());
+    for (qsizetype i = 1; i < points.size(); ++i)
+        line.lineTo(points.at(i).toPointF());
+    if (points.size() == 1) // a dot
+        line.lineTo(points.first().toPointF() + QPointF(0.01, 0));
+    QPainterPathStroker stroker;
+    stroker.setWidth(width);
+    stroker.setCapStyle(Qt::RoundCap);
+    stroker.setJoinStyle(Qt::RoundJoin);
+    const QPainterPath outline = stroker.createStroke(line);
+    QString d;
+    d.reserve(outline.elementCount() * 16);
+    const auto num = [](double v) { return QString::number(v, 'f', 2); };
+    for (int i = 0; i < outline.elementCount(); ++i) {
+        const QPainterPath::Element e = outline.elementAt(i);
+        switch (e.type) {
+        case QPainterPath::MoveToElement:
+            d += QLatin1Char('M') + num(e.x) + QLatin1Char(' ') + num(e.y);
+            break;
+        case QPainterPath::LineToElement:
+            d += QLatin1Char('L') + num(e.x) + QLatin1Char(' ') + num(e.y);
+            break;
+        case QPainterPath::CurveToElement:
+            if (i + 2 < outline.elementCount()) {
+                const QPainterPath::Element c2 = outline.elementAt(i + 1), end = outline.elementAt(i + 2);
+                d += QLatin1Char('C') + num(e.x) + QLatin1Char(' ') + num(e.y) + QLatin1Char(' ') + num(c2.x)
+                     + QLatin1Char(' ') + num(c2.y) + QLatin1Char(' ') + num(end.x) + QLatin1Char(' ') + num(end.y);
+                i += 2;
+            }
+            break;
+        case QPainterPath::CurveToDataElement:
+            break;
+        }
+    }
+    return d;
+}
+
 int BoardModel::addStroke(const QVariantList &points, const QString &kind, const QString &color, double width)
 {
     if (m_projectPath.isEmpty() || points.size() < 2)
         return -1;
-    QList<QPointF> list;
+    QList<QPointF> raw;
+    for (const QVariant &v : points)
+        raw.append(v.toPointF());
+    const QList<QPointF> list = smoothStroke(raw, 0.8);
     QRectF bounds;
-    for (const QVariant &v : points) {
-        const QPointF p = v.toPointF();
-        list.append(p);
+    for (const QPointF &p : list)
         bounds = bounds.isNull() ? QRectF(p, QSizeF(0.01, 0.01)) : bounds.united(QRectF(p, QSizeF(0.01, 0.01)));
-    }
     const double pad = width / 2 + 2;
     bounds.adjust(-pad, -pad, pad, pad);
     BoardItem it;

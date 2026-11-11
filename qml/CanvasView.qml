@@ -1132,10 +1132,10 @@ Item {
                 id: strokePreviewShape
                 z: 2000000
                 ShapePath {
-                    strokeColor: view.tool === "highlighter" ? Theme.swatch(view.penColor || "yellow") : Theme.penColor(view.penColor)
-                    strokeWidth: view.tool === "highlighter" ? 18 : 3
+                    strokeColor: view.tool === "highlighter" ? "transparent" : Theme.penColor(view.penColor)
+                    strokeWidth: 3
                     fillColor: "transparent"
-                    capStyle: view.tool === "highlighter" ? ShapePath.FlatCap : ShapePath.RoundCap
+                    capStyle: ShapePath.RoundCap
                     joinStyle: ShapePath.RoundJoin
                     PathPolyline { id: strokePreview; path: [] }
                 }
@@ -1162,6 +1162,16 @@ Item {
                 delegate: Rectangle {
                     required property var modelData
                     z: 2000000
+                // The highlighter as it will be: its outline, filled
+                ShapePath {
+                    strokeColor: "transparent"
+                    fillColor: view.tool === "highlighter" ? Theme.swatch(view.penColor || "yellow") : "transparent"
+                    fillRule: ShapePath.WindingFill
+                    PathSvg {
+                        path: view.tool === "highlighter" && strokePreview.path.length > 0
+                              ? Board.strokeOutline(strokePreview.path, 18) : ""
+                    }
+                }
                     color: Theme.s.danger_default
                     x: Math.min(modelData.x1, modelData.x2) - (modelData.x1 === modelData.x2 ? 0.5 / view.zoom : 0)
                     y: Math.min(modelData.y1, modelData.y2) - (modelData.y1 === modelData.y2 ? 0.5 / view.zoom : 0)

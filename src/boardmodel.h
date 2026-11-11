@@ -159,6 +159,14 @@ public:
                             const QString &kind = {}, const QString &text = {});
     // A pen or highlighter line through points (canvas coordinates)
     Q_INVOKABLE int addStroke(const QVariantList &points, const QString &kind, const QString &color, double width);
+    // The outline of a line through `points`, `width` wide with round ends,
+    // as SVG path data to fill (non-zero): a translucent highlighter filled
+    // this way covers each spot once, where a stroke darkens wherever it
+    // overlaps itself
+    Q_INVOKABLE QString strokeOutline(const QVariantList &points, double width) const;
+    // A hand-drawn line with the jitter taken out: points closer than
+    // `tolerance` to the line dropped, the corners rounded
+    static QList<QPointF> smoothStroke(const QList<QPointF> &points, double tolerance);
     // Media always goes into a note: into targetRow if that is a note,
     // otherwise into a new one centred on (cx, cy). Each returns the note's
     // row, or -1 if there was nothing to add.

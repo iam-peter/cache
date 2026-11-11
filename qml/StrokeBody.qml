@@ -27,15 +27,26 @@ Item {
     Shape {
         anchors.fill: parent
         opacity: body.highlighter ? 0.38 : 1
+        // The pen: a line
         ShapePath {
-            strokeColor: body.card.selected ? Theme.accent
-                         : body.highlighter ? Theme.swatch(body.card.itemColor || "yellow")
-                         : Theme.penColor(body.card.itemColor)
+            strokeColor: body.highlighter ? "transparent" : body.card.selected ? Theme.accent : Theme.penColor(body.card.itemColor)
             strokeWidth: body.card.itemSize > 0 ? body.card.itemSize : 3
             fillColor: "transparent"
-            capStyle: body.highlighter ? ShapePath.FlatCap : ShapePath.RoundCap
+            capStyle: ShapePath.RoundCap
             joinStyle: ShapePath.RoundJoin
-            PathPolyline { path: body.card.itemPoints }
+            PathPolyline { path: body.highlighter ? [] : body.card.itemPoints }
+        }
+        // The highlighter: its outline, filled, so the translucent colour
+        // covers each spot once instead of darkening where the line
+        // overlaps itself
+        ShapePath {
+            strokeColor: "transparent"
+            fillColor: !body.highlighter ? "transparent"
+                       : body.card.selected ? Theme.accent : Theme.swatch(body.card.itemColor || "yellow")
+            fillRule: ShapePath.WindingFill
+            PathSvg {
+                path: body.highlighter ? Board.strokeOutline(body.card.itemPoints, body.card.itemSize > 0 ? body.card.itemSize : 18) : ""
+            }
         }
     }
 }
