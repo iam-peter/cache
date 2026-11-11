@@ -45,12 +45,51 @@ Pane {
         anchors.fill: parent
         spacing: 0
 
+        // --- Search, over every note of every project ----------------------
+        TextField {
+            id: search
+            Layout.fillWidth: true
+            Layout.margins: Styles.Primitives.spacing.sp100
+            Layout.bottomMargin: Styles.Primitives.spacing.sp050
+            placeholderText: qsTr("Search all projects  (Ctrl+F)")
+            leftPadding: 30
+            onTextChanged: Search.query = text
+            Keys.onEscapePressed: {
+                text = ""
+                sidebar.canvas.forceActiveFocus()
+            }
+            Keys.onDownPressed: if (resultList.count > 0) resultList.currentIndex = Math.min(resultList.currentIndex + 1, resultList.count - 1)
+            Keys.onUpPressed: if (resultList.count > 0) resultList.currentIndex = Math.max(resultList.currentIndex - 1, 0)
+            Keys.onReturnPressed: sidebar.openResult(resultList.currentIndex)
+            Keys.onEnterPressed: sidebar.openResult(resultList.currentIndex)
+
+            Icon {
+                anchors.left: parent.left
+                anchors.leftMargin: 9
+                anchors.verticalCenter: parent.verticalCenter
+                name: "search"
+                size: 14
+                color: Theme.textMuted
+            }
+            IconButton {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.rightMargin: 2
+                visible: search.text.length > 0
+                iconName: "x"
+                focusPolicy: Qt.NoFocus
+                onClicked: search.text = ""
+            }
+        }
+
+        MenuSeparator { Layout.fillWidth: true; visible: !Search.active }
+
         // --- Projects ---------------------------------------------------
         RowLayout {
             Layout.fillWidth: true
             Layout.leftMargin: Styles.Primitives.spacing.sp150
             Layout.rightMargin: Styles.Primitives.spacing.sp075
-            Layout.topMargin: Styles.Primitives.spacing.sp100
+            visible: !Search.active
             SectionLabel { text: qsTr("Projects"); Layout.fillWidth: true }
             IconButton {
                 iconName: "plus"
@@ -62,6 +101,7 @@ Pane {
 
         ListView {
             id: projectList
+            visible: !Search.active
             Layout.fillWidth: true
             Layout.preferredHeight: Math.min(contentHeight, sidebar.height * 0.38)
             Layout.topMargin: Styles.Primitives.spacing.sp050
@@ -98,54 +138,26 @@ Pane {
             }
         }
 
-        MenuSeparator { Layout.fillWidth: true }
+        MenuSeparator { Layout.fillWidth: true; visible: !Search.active }
 
-        // --- Notes on this canvas, or search results from all projects ---
+        // --- The open project's notes, in reading order --------------------
         RowLayout {
             Layout.fillWidth: true
             Layout.leftMargin: Styles.Primitives.spacing.sp150
             Layout.rightMargin: Styles.Primitives.spacing.sp150
+            visible: !Search.active
             SectionLabel {
-                text: Search.active ? qsTr("Search all projects") : qsTr("Notes")
+                text: qsTr("Notes in %1").arg(Workspace.currentName)
+                elide: Text.ElideRight
                 Layout.fillWidth: true
             }
             Label {
-                text: !Search.active ? Board.count
-                      : Search.count === 0 ? qsTr("no matches")
-                      : Search.projectCount > 1 ? qsTr("%1 in %2 projects").arg(Search.count).arg(Search.projectCount)
-                      : Search.count
+                text: Board.count
                 color: Theme.textMuted
                 font.pixelSize: Styles.Primitives.fontSize.small
             }
         }
 
-        TextField {
-            id: search
-            Layout.fillWidth: true
-            Layout.margins: Styles.Primitives.spacing.sp100
-            placeholderText: qsTr("Search all notes  (Ctrl+F)")
-            onTextChanged: Search.query = text
-            Keys.onEscapePressed: {
-                text = ""
-                sidebar.canvas.forceActiveFocus()
-            }
-            Keys.onDownPressed: if (resultList.count > 0) resultList.currentIndex = Math.min(resultList.currentIndex + 1, resultList.count - 1)
-            Keys.onUpPressed: if (resultList.count > 0) resultList.currentIndex = Math.max(resultList.currentIndex - 1, 0)
-            Keys.onReturnPressed: sidebar.openResult(resultList.currentIndex)
-            Keys.onEnterPressed: sidebar.openResult(resultList.currentIndex)
-
-            IconButton {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.rightMargin: 2
-                visible: search.text.length > 0
-                iconName: "x"
-                focusPolicy: Qt.NoFocus
-                onClicked: search.text = ""
-            }
-        }
-
-        // The current canvas' notes in reading order
         ListView {
             id: documentList
             Layout.fillWidth: true
@@ -177,7 +189,27 @@ Pane {
             }
         }
 
-        // Matches from every project, this one first
+        // --- Matches from every project, the open one first ---------------
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: Styles.Primitives.spacing.sp150
+            Layout.rightMargin: Styles.Primitives.spacing.sp150
+            visible: Search.active
+            SectionLabel {
+                text: qsTr("Results")
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+            }
+            Label {
+                text: Search.count === 0 ? qsTr("none")
+                      : (Search.count === 1 ? qsTr("1 note") : qsTr("%1 notes").arg(Search.count))
+                        + (Search.projectCount > 1 ? qsTr(" in %1 projects").arg(Search.projectCount) : "")
+                color: Theme.textMuted
+                font.pixelSize: Styles.Primitives.fontSize.small
+            }
+        }
+
         ListView {
             id: resultList
             Layout.fillWidth: true

@@ -27,10 +27,12 @@ your projects and the notes on the current canvas. The look comes from
   a link to the file, as chat apps can't take an embedded local video.
 - **Project sidebar**: create, rename and trash projects, and see every
   note on the canvas in reading order.
-- **Full-text search** (`Ctrl+F`) over every note in every project. Type
-  words or `"quoted phrases"`; a note matches when it has all of them,
-  ignoring case. Results are grouped by project, the open one first, and
-  each shows a snippet with the matches in bold. `↑`/`↓` and `Enter`, or
+- **Full-text search** across all projects: the box at the top of the
+  sidebar (`Ctrl+F`) searches every note in every project of the
+  workspace, not just the open one. Type words or `"quoted phrases"`; a
+  note matches when it has all of them, ignoring case. While searching,
+  the sidebar shows the results, grouped by project with the open one
+  first, each with a snippet and the matches in bold. `↑`/`↓` and `Enter`, or
   a click, open the note, switching project if needed. While a search is
   on, matches are highlighted inside the notes, and results update as
   you edit.
