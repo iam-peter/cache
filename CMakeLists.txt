@@ -114,16 +114,20 @@ target_link_libraries(cache PRIVATE
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
+    # Every test run also writes its results to build/test-results, which
+    # the nightly uploads when a run fails
+    file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/test-results)
+    set(test_output_dir ${CMAKE_BINARY_DIR}/test-results)
     qt_add_executable(tst_fuzzy tests/tst_fuzzy.cpp src/fuzzy.h src/fuzzy.cpp)
     target_include_directories(tst_fuzzy PRIVATE src)
     target_link_libraries(tst_fuzzy PRIVATE Qt6::Core Qt6::Test)
-    add_test(NAME tst_fuzzy COMMAND tst_fuzzy)
+    add_test(NAME tst_fuzzy COMMAND tst_fuzzy -o ${test_output_dir}/tst_fuzzy.txt,txt -o -,txt)
 
     qt_add_executable(tst_markdown tests/tst_markdown.cpp
         src/markdown.h src/markdown.cpp src/highlight.h src/highlight.cpp)
     target_include_directories(tst_markdown PRIVATE src)
     target_link_libraries(tst_markdown PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
-    add_test(NAME tst_markdown COMMAND tst_markdown)
+    add_test(NAME tst_markdown COMMAND tst_markdown -o ${test_output_dir}/tst_markdown.txt,txt -o -,txt)
 
     # The board model as the app uses it, on an offscreen platform
     qt_add_executable(tst_board tests/tst_board.cpp
@@ -132,12 +136,13 @@ if(BUILD_TESTING)
     target_include_directories(tst_board PRIVATE src)
     target_link_libraries(tst_board PRIVATE Qt6::Gui Qt6::Qml Qt6::Network Qt6::Test)
     qt_add_resources(tst_board "templates" PREFIX /qt/qml/Cache FILES ${template_files})
-    add_test(NAME tst_board COMMAND tst_board -platform offscreen)
+    add_test(NAME tst_board COMMAND tst_board -platform offscreen
+        -o ${test_output_dir}/tst_board.txt,txt -o -,txt)
 
     qt_add_executable(tst_history tests/tst_history.cpp src/history.h src/history.cpp)
     target_include_directories(tst_history PRIVATE src)
     target_link_libraries(tst_history PRIVATE Qt6::Core Qt6::Qml Qt6::Test)
-    add_test(NAME tst_history COMMAND tst_history)
+    add_test(NAME tst_history COMMAND tst_history -o ${test_output_dir}/tst_history.txt,txt -o -,txt)
 
     # Console programs: qt_standard_project_setup makes GUI programs on
     # Windows, which print nothing, so a failing test would leave an empty log
