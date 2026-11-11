@@ -109,5 +109,41 @@ Dialog {
             checked: Theme.prefs.wheelZooms
             onToggled: Theme.prefs.wheelZooms = checked
         }
+        Switch {
+            text: qsTr("Snap to other items while moving (hold Alt to move freely)")
+            checked: Theme.prefs.snap
+            onToggled: Theme.prefs.snap = checked
+        }
+        Switch {
+            text: qsTr("Show [[links]] between notes as dotted lines")
+            checked: Theme.prefs.showWikiLinks
+            onToggled: Theme.prefs.showWikiLinks = checked
+        }
+        Switch {
+            text: qsTr("Show the minimap")
+            checked: Theme.prefs.showMinimap
+            onToggled: Theme.prefs.showMinimap = checked
+        }
+
+        MenuSeparator { Layout.fillWidth: true }
+
+        Label {
+            text: qsTr("History")
+            font.bold: true
+        }
+        Switch {
+            enabled: History.available
+            text: History.available ? qsTr("Keep versions of every project with git")
+                                    : qsTr("Keep versions of every project (needs git, which isn't installed)")
+            checked: History.enabled && History.available
+            onToggled: History.enabled = checked
+        }
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            color: Theme.textMuted
+            font.pixelSize: Styles.Primitives.fontSize.small
+            text: qsTr("The workspace folder becomes a git repository of its own; a version is committed a little while after each change.")
+        }
     }
 }

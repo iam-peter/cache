@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import QtCore
 import IgittStyle as Styles
 import NoteApp
@@ -35,6 +36,12 @@ ApplicationWindow {
     }
     onClosing: Board.save()
 
+    // A version of the project for its history, a while after each save
+    Connections {
+        target: Board
+        function onSaved() { History.schedule(Workspace.rootPath, Workspace.currentName) }
+    }
+
     Connections {
         target: Workspace
         function onCurrentChanged() {
@@ -56,6 +63,8 @@ ApplicationWindow {
     Shortcut { sequences: ["Ctrl+1"]; onActivated: canvasView.fitAll() }
     Shortcut { sequences: [StandardKey.Preferences, "Ctrl+,"]; onActivated: settingsDialog.open() }
     Shortcut { sequences: ["F1"]; onActivated: helpDialog.open() }
+    Shortcut { sequences: ["Ctrl+Shift+T"]; enabled: !win.popupOpen; onActivated: templates.open() }
+    Shortcut { sequences: ["Ctrl+Shift+H"]; enabled: !win.popupOpen; onActivated: historyDialog.open() }
 
     // --- Layout -------------------------------------------------------------
 
@@ -187,6 +196,23 @@ ApplicationWindow {
                             }
                         }
                     }
+                    MenuItem { text: qsTr("Copy canvas as picture"); onTriggered: canvasView.exportImage([], "copy") }
+                    MenuItem {
+                        text: qsTr("Export canvas as PNG…")
+                        onTriggered: { exportDialog.mode = "png"; exportDialog.open() }
+                    }
+                    MenuItem {
+                        text: qsTr("Export canvas as PDF…")
+                        onTriggered: { exportDialog.mode = "pdf"; exportDialog.open() }
+                    }
+                    MenuSeparator {}
+                    MenuItem { text: qsTr("Templates…  (Ctrl+Shift+T)"); onTriggered: templates.open() }
+                    MenuItem {
+                        text: qsTr("History…  (Ctrl+Shift+H)")
+                        enabled: History.available
+                        onTriggered: historyDialog.open()
+                    }
+                    MenuSeparator {}
                     MenuItem { text: qsTr("Open project folder"); onTriggered: Qt.openUrlExternally(Board.projectUrl) }
                     MenuItem { text: qsTr("Change workspace folder…"); onTriggered: sidebar.changeWorkspace() }
                     MenuSeparator {}
@@ -224,6 +250,20 @@ ApplicationWindow {
     }
 
     SettingsDialog { id: settingsDialog }
+    HistoryDialog { id: historyDialog; canvas: canvasView }
+    TemplateDialog { id: templates; canvas: canvasView }
+
+    FileDialog {
+        id: exportDialog
+        property string mode: "png"
+        title: mode === "pdf" ? qsTr("Export the canvas as PDF") : qsTr("Export the canvas as PNG")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: mode
+        currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+        selectedFile: currentFolder + "/" + Workspace.currentName + "." + mode
+        nameFilters: mode === "pdf" ? [qsTr("PDF (*.pdf)")] : [qsTr("PNG image (*.png)")]
+        onAccepted: canvasView.exportImage(canvasView.selection.length > 1 ? canvasView.selection : [], mode, selectedFile)
+    }
 
     Dialog {
         id: helpDialog
@@ -241,21 +281,29 @@ ApplicationWindow {
             Repeater {
                 model: [
                     ["Double-click canvas", qsTr("New note")],
-                    ["Ctrl+N", qsTr("New note")],
-                    ["Double-click note / Enter", qsTr("Edit note")],
-                    ["Esc", qsTr("Finish editing / deselect")],
-                    ["Ctrl+V", qsTr("Paste images, videos or text (into the selected note)")],
-                    ["Ctrl+C", qsTr("Copy the note with its images, for Teams or mail")],
-                    ["Ctrl+Shift+C", qsTr("The same while editing")],
-                    ["Ctrl+Shift+I", qsTr("Add images or videos")],
+                    ["V  H", qsTr("Select / pan tool (or hold Space to pan)")],
+                    ["N  T  K", qsTr("Note, text and code snippet tools")],
+                    ["R  O  D  S", qsTr("Rectangle, ellipse, diamond, section")],
+                    ["L  P  M", qsTr("Connector, pen, highlighter")],
+                    ["Drag on empty space", qsTr("Select several (Shift adds)")],
+                    ["Ctrl+A", qsTr("Select all")],
+                    ["Tab / Enter", qsTr("Mindmap: add a child / a sibling")],
+                    ["Alt+arrows", qsTr("Mindmap: go to parent, child, siblings")],
+                    ["Enter / F2", qsTr("Edit the selected item")],
+                    ["Esc", qsTr("Finish editing / back to select / deselect")],
+                    ["[[", qsTr("While editing: link another note")],
+                    ["Ctrl+Shift+K", qsTr("While editing: code block")],
+                    ["Ctrl+C", qsTr("Copy (a note: with its images, for Teams)")],
+                    ["Ctrl+Shift+C", qsTr("Copy the selection as a picture")],
+                    ["Ctrl+V", qsTr("Paste items, images, videos or text")],
                     ["Ctrl+D", qsTr("Duplicate")],
-                    ["Del", qsTr("Delete")],
+                    ["Del", qsTr("Delete items or a connector")],
                     ["Arrows (+Shift)", qsTr("Nudge 10 px (1 px)")],
+                    ["Alt while dragging", qsTr("Move without snapping")],
                     ["Ctrl+Z / Ctrl+Shift+Z", qsTr("Undo / redo")],
-                    ["Wheel / Ctrl+Wheel", qsTr("Zoom (or scroll, see Settings)")],
-                    ["Drag empty space", qsTr("Pan (the middle button pans anywhere)")],
                     ["Ctrl+0 / Ctrl+1", qsTr("Zoom 100% / fit everything")],
-                    ["Ctrl+F", qsTr("Search all notes")],
+                    ["Ctrl+F", qsTr("Search all projects")],
+                    ["Ctrl+Shift+T / H", qsTr("Templates / history")],
                     ["Ctrl+B", qsTr("Show or hide the sidebar")],
                     ["Ctrl+,", qsTr("Settings")],
                 ]

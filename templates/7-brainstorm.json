@@ -1,0 +1,84 @@
+{
+  "name": "Brainstorm",
+  "description": "A section of sticky notes to fill",
+  "items": [
+    {
+      "id": "t600",
+      "type": "section",
+      "x": 0,
+      "y": 0,
+      "w": 800,
+      "h": 420,
+      "text": "Ideas",
+      "color": "yellow",
+      "z": -100
+    },
+    {
+      "id": "t601",
+      "type": "note",
+      "x": 20,
+      "y": 50,
+      "w": 240,
+      "h": 150,
+      "text": "Idea",
+      "color": "yellow",
+      "z": 2
+    },
+    {
+      "id": "t602",
+      "type": "note",
+      "x": 280,
+      "y": 50,
+      "w": 240,
+      "h": 150,
+      "text": "Idea",
+      "color": "green",
+      "z": 3
+    },
+    {
+      "id": "t603",
+      "type": "note",
+      "x": 540,
+      "y": 50,
+      "w": 240,
+      "h": 150,
+      "text": "Idea",
+      "color": "blue",
+      "z": 4
+    },
+    {
+      "id": "t604",
+      "type": "note",
+      "x": 20,
+      "y": 230,
+      "w": 240,
+      "h": 150,
+      "text": "Idea",
+      "color": "pink",
+      "z": 5
+    },
+    {
+      "id": "t605",
+      "type": "note",
+      "x": 280,
+      "y": 230,
+      "w": 240,
+      "h": 150,
+      "text": "Idea",
+      "color": "purple",
+      "z": 6
+    },
+    {
+      "id": "t606",
+      "type": "note",
+      "x": 540,
+      "y": 230,
+      "w": 240,
+      "h": 150,
+      "text": "Idea",
+      "color": "yellow",
+      "z": 7
+    }
+  ],
+  "links": []
+}

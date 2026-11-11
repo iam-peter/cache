@@ -1,6 +1,7 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
+#include <QSurfaceFormat>
 #include <QtQml/qqmlextensionplugin.h>
 
 #include "Fonts.h"
@@ -16,6 +17,11 @@ int main(int argc, char *argv[])
     QGuiApplication::setDesktopFileName(QStringLiteral("notecanvas"));
 
     // igitt's style and themes; what it leaves out comes from Basic.
+    // Smooth connectors, shapes and pen lines
+    QSurfaceFormat format = QSurfaceFormat::defaultFormat();
+    format.setSamples(4);
+    QSurfaceFormat::setDefaultFormat(format);
+
     QQuickStyle::setStyle(QStringLiteral("IgittStyle"));
     QQuickStyle::setFallbackStyle(QStringLiteral("Basic"));
     Fonts::registerBundled();

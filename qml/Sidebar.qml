@@ -30,7 +30,9 @@ Pane {
     }
     function noteIcon(text) {
         return /!\[[^\]]*\]\([^)]*\.(mp4|webm|mkv|mov|m4v)\)/i.test(text) ? "film"
-             : text.indexOf("![") >= 0 ? "image" : "sticky-note"
+             : /!\[[^\]]*\]\(/.test(text) ? "image"
+             : /^\s*```/m.test(text) ? "code"
+             : /^\s*[-*+] \[[ xX]\]/m.test(text) ? "list-checks" : "sticky-note"
     }
 
     padding: 0
@@ -140,21 +142,17 @@ Pane {
 
         MenuSeparator { Layout.fillWidth: true; visible: !Search.active }
 
-        // --- The open project's notes, in reading order --------------------
-        RowLayout {
+        // --- The open project's notes by section, or every open task -------
+        TabBar {
+            id: tabs
             Layout.fillWidth: true
-            Layout.leftMargin: Styles.Primitives.spacing.sp150
-            Layout.rightMargin: Styles.Primitives.spacing.sp150
+            Layout.leftMargin: Styles.Primitives.spacing.sp100
+            Layout.rightMargin: Styles.Primitives.spacing.sp100
             visible: !Search.active
-            SectionLabel {
-                text: qsTr("Notes in %1").arg(Workspace.currentName)
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-            }
-            Label {
-                text: Board.count
-                color: Theme.textMuted
-                font.pixelSize: Styles.Primitives.fontSize.small
+            TabButton { text: qsTr("Notes (%1)").arg(documentList.count) }
+            TabButton {
+                readonly property int open: (Search.revision, Board.count, Search.openTasks().length)
+                text: open > 0 ? qsTr("Open tasks (%1)").arg(open) : qsTr("Open tasks")
             }
         }
 
@@ -162,7 +160,8 @@ Pane {
             id: documentList
             Layout.fillWidth: true
             Layout.fillHeight: true
-            visible: !Search.active
+            Layout.topMargin: Styles.Primitives.spacing.sp050
+            visible: !Search.active && tabs.currentIndex === 0
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             ScrollIndicator.vertical: ScrollIndicator { }
@@ -171,13 +170,20 @@ Pane {
             }
 
             delegate: ItemDelegate {
+                id: row
                 required property string itemId
+                required property string itemType
                 required property string title
                 required property string itemText
+                required property string sectionId
+                readonly property bool isSection: itemType === "section"
                 width: ListView.view.width
+                // Notes in a section sit under its title
+                leftPadding: (isSection || sectionId === "" ? 0 : 18) + Styles.Primitives.spacing.sp100
                 text: title
-                icon.source: Icons.source(sidebar.noteIcon(itemText))
-                highlighted: sidebar.canvas.selectedId === itemId
+                font.weight: isSection ? Styles.Primitives.fontWeight.semiBold : Styles.Primitives.fontWeight.regular
+                icon.source: Icons.source(isSection ? "square-dashed" : sidebar.noteIcon(itemText))
+                highlighted: sidebar.canvas.selection.indexOf(itemId) >= 0
                 onClicked: sidebar.canvas.focusItem(itemId)
             }
 
@@ -185,6 +191,96 @@ Pane {
                 anchors.centerIn: parent
                 visible: documentList.count === 0
                 text: qsTr("Nothing here yet")
+                color: Theme.textMuted
+            }
+        }
+
+        // Unticked "- [ ]" tasks of every project, the open one first
+        ListView {
+            id: taskList
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.topMargin: Styles.Primitives.spacing.sp050
+            visible: !Search.active && tabs.currentIndex === 1
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollIndicator.vertical: ScrollIndicator { }
+            model: {
+                if (!visible)
+                    return []
+                Search.revision
+                Board.count
+                const rows = []
+                let project = ""
+                for (const task of Search.openTasks()) {
+                    if (task.projectPath !== project) {
+                        project = task.projectPath
+                        rows.push({ header: true, projectName: task.projectName })
+                    }
+                    rows.push(task)
+                }
+                return rows
+            }
+            delegate: Loader {
+                id: entry
+                required property var modelData
+                width: ListView.view.width
+                sourceComponent: modelData.header ? taskHeader : taskRow
+                Component {
+                    id: taskHeader
+                    Label {
+                        leftPadding: Styles.Primitives.spacing.sp150
+                        topPadding: Styles.Primitives.spacing.sp100
+                        bottomPadding: Styles.Primitives.spacing.sp025
+                        text: entry.modelData.projectName
+                        font.pixelSize: Styles.Primitives.fontSize.small
+                        font.weight: Styles.Primitives.fontWeight.semiBold
+                        color: Theme.textMuted
+                    }
+                }
+                Component {
+                    id: taskRow
+                    ItemDelegate {
+                        leftPadding: Styles.Primitives.spacing.sp100
+                        onClicked: sidebar.canvas.openNote(entry.modelData.projectPath, entry.modelData.noteId)
+                        contentItem: Row {
+                            spacing: Styles.Primitives.spacing.sp075
+                            CheckBox {
+                                anchors.verticalCenter: parent.verticalCenter
+                                checked: false
+                                onClicked: Search.toggleTask(entry.modelData.projectPath, entry.modelData.noteId,
+                                                             entry.modelData.task)
+                            }
+                            Column {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: taskList.width - 64
+                                Label {
+                                    width: parent.width
+                                    text: entry.modelData.text
+                                    wrapMode: Text.Wrap
+                                    maximumLineCount: 2
+                                    elide: Text.ElideRight
+                                }
+                                Label {
+                                    width: parent.width
+                                    text: entry.modelData.noteTitle
+                                    elide: Text.ElideRight
+                                    font.pixelSize: Styles.Primitives.fontSize.small
+                                    color: Theme.textMuted
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Label {
+                anchors.centerIn: parent
+                width: parent.width - 32
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                visible: taskList.count === 0
+                text: qsTr("No open tasks. Write “- [ ] something” in a note to add one.")
                 color: Theme.textMuted
             }
         }
@@ -279,7 +375,7 @@ Pane {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 visible: resultList.count === 0
-                text: qsTr("No note contains all of “%1”").arg(Search.terms.join("”, “"))
+                text: qsTr("No note matches “%1”, not even with typos").arg(Search.terms.join("”, “"))
                 color: Theme.textMuted
             }
         }

@@ -14,38 +14,46 @@ namespace {
 
 const char kWelcome[] = R"(# Welcome to Note Canvas
 
-This is an **infinite canvas**. Every card is a Markdown document stored as a plain `.md` file in this project's `notes/` folder.
+An **infinite canvas** of Markdown notes. Each note is a plain `.md` file in this project's `notes/` folder.
 
-- **Double-click** empty space to create a note
-- **Double-click** a note to edit it, `Esc` to finish
-- **Drag** empty space to pan, **scroll** to zoom
-- Drag a card to move it, use the corner handle to resize
+- **Double-click** empty space for a note, double-click a note to edit it, `Esc` to finish
+- **Drag** empty space to select several; hold `Space` (or use the hand) to pan; **scroll** to zoom
+- The tools at the bottom add text, code, shapes, sections, connectors and pen lines
 )";
 
 const char kMedia[] = R"(## Images, videos and sharing
 
-Images and videos live inside notes:
+Images and videos live inside notes: **paste** or **drop** them on the canvas, or onto a note, or into one you are editing.
 
-- **Paste** (`Ctrl+V`) or **drop** them on empty canvas for a new note, or onto a note to add them to it
-- While editing, they go in at the cursor
-- **Image / video…** in the toolbar picks files
+**Copy note** (`Ctrl+C`) puts a note on the clipboard *with its images*, ready for Teams or mail. `Ctrl+Shift+C` copies the selection as a picture.
 
-Videos play right in the note.
+```python
+def hello():
+    return "code blocks are highlighted"
+```
+)";
 
-**Copy note** (`Ctrl+C`) puts a note on the clipboard *with its images*, ready to paste into Teams, mail or a document.
+const char kLinks[] = R"(## Links and mindmaps
+
+- Type `[[` in a note to link another one, in any project: [[Welcome to Note Canvas]]
+- `![[Title]]` shows a preview of the linked note
+- Drag a note's side handle onto another note to connect them, or onto empty space for a new one
+- `Tab` adds a child, `Enter` a sibling: a mindmap in seconds
+
+- [ ] Try ticking this task; open tasks of all projects are in the sidebar
 )";
 
 const char kShortcuts[] = R"(## Shortcuts
 
 | Key | Action |
 |---|---|
-| Ctrl+N | New note |
-| Ctrl+C | Copy note with images |
-| Ctrl+Shift+I | Add images / videos |
-| Ctrl+D | Duplicate |
-| Del | Delete selection |
-| Ctrl+Z / Ctrl+Shift+Z | Undo / redo |
-| Ctrl+0 / Ctrl+1 | 100% / fit all |
+| V H | Select, pan |
+| N T K | Note, text, code |
+| R O D S | Shapes, section |
+| L P M | Connector, pen, highlighter |
+| Tab / Enter | Child / sibling |
+| Ctrl+C | Copy for Teams |
+| Ctrl+Shift+T | Templates |
 | F1 | All shortcuts |
 )";
 
@@ -270,9 +278,10 @@ void Workspace::writeWelcome(const QString &projectPath) const
         const char *color;
     };
     const Seed seeds[] = {
-        {"welcome", kWelcome, -400, -240, 400, 270, ""},
-        {"media", kMedia, 40, -240, 400, 330, "blue"},
-        {"shortcuts", kShortcuts, -400, 70, 400, 330, "yellow"},
+        {"welcome", kWelcome, -400, -260, 400, 280, ""},
+        {"media", kMedia, 40, -260, 400, 360, "blue"},
+        {"links", kLinks, -400, 60, 400, 300, "green"},
+        {"shortcuts", kShortcuts, 40, 140, 400, 380, "yellow"},
     };
     QJsonArray items;
     int z = 1;

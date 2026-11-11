@@ -20,6 +20,9 @@ QtObject {
         property real uiSize: 10
         property string codeFamily: "JetBrains Mono"
         property real codeSize: 10
+        property bool showMinimap: true
+        property bool snap: true             // smart guides while moving
+        property bool showWikiLinks: true    // [[links]] as dotted lines
     }
     readonly property font uiFont: Qt.font({ family: prefs.uiFamily, pointSize: prefs.uiSize })
     readonly property font monoFont: Qt.font({ family: prefs.codeFamily, pointSize: prefs.codeSize })
@@ -52,4 +55,34 @@ QtObject {
     function noteColor(key) {
         return key === "" ? card : Qt.tint(card, Styles.Primitives.alpha(swatch(key), dark ? 0.16 : 0.20))
     }
+    // Shapes are a little stronger than notes, sections much lighter
+    function shapeColor(key) {
+        return key === "" ? card : Qt.tint(card, Styles.Primitives.alpha(swatch(key), dark ? 0.28 : 0.32))
+    }
+    function sectionColor(key) {
+        return Styles.Primitives.alpha(key === "" ? s.text_muted : swatch(key), dark ? 0.08 : 0.07)
+    }
+    function lineColor(key) {
+        return key === "" ? s.text_muted : swatch(key)
+    }
+    readonly property var penColors: ["", "pink", "blue", "green", "yellow", "purple"]
+    function penColor(key) {
+        return key === "" ? s.text_default : swatch(key)
+    }
+
+    // What notes are rendered with (BoardModel::renderSegments)
+    readonly property var renderColors: ({
+        link: s.text_link,
+        text: s.text_default,
+        muted: s.text_muted,
+        highlight: searchHighlight,
+        keyword: s.syntax_keyword,
+        type: s.syntax_type,
+        string: s.syntax_string,
+        number: s.syntax_number,
+        comment: s.syntax_comment,
+        preprocessor: s.syntax_preprocessor,
+        function: s.syntax_function,
+    })
+    readonly property color codeBackground: s.background_secondary
 }

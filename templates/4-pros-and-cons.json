@@ -1,0 +1,61 @@
+{
+  "name": "Pros and cons",
+  "description": "Weigh a decision, then write it down",
+  "items": [
+    {
+      "id": "t300",
+      "type": "section",
+      "x": 0,
+      "y": 0,
+      "w": 370,
+      "h": 460,
+      "text": "Pros",
+      "color": "green",
+      "z": -100
+    },
+    {
+      "id": "t301",
+      "type": "section",
+      "x": 400,
+      "y": 0,
+      "w": 370,
+      "h": 460,
+      "text": "Cons",
+      "color": "pink",
+      "z": -99
+    },
+    {
+      "id": "t302",
+      "type": "note",
+      "x": 20,
+      "y": 50,
+      "w": 330,
+      "h": 90,
+      "text": "A reason for",
+      "color": "green",
+      "z": 3
+    },
+    {
+      "id": "t303",
+      "type": "note",
+      "x": 420,
+      "y": 50,
+      "w": 330,
+      "h": 90,
+      "text": "A reason against",
+      "color": "pink",
+      "z": 4
+    },
+    {
+      "id": "t304",
+      "type": "note",
+      "x": 0,
+      "y": 500,
+      "w": 770,
+      "h": 140,
+      "text": "# Decision\n\nWhat we chose, and why",
+      "z": 5
+    }
+  ],
+  "links": []
+}

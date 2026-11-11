@@ -1,5 +1,8 @@
 #include "boardmodel.h"
 
+#include "highlight.h"
+#include "markdown.h"
+
 #include <QBuffer>
 #include <QClipboard>
 #include <QRegularExpression>
@@ -23,7 +26,10 @@
 #include <QTextDocument>
 #include <QTextFragment>
 #include <QTextImageFormat>
+#include <QTextList>
 #include <QUuid>
+
+#include <functional>
 
 #include <algorithm>
 #include <cmath>
@@ -113,6 +119,28 @@ QVariant BoardModel::data(const QModelIndex &index, int role) const
         return it.source.isEmpty() ? QUrl() : QUrl::fromLocalFile(absPath(it.source));
     case TitleRole: return titleFor(it);
     case SearchRole: return titleFor(it) + QLatin1Char('\n') + it.text;
+    case ShapeRole: return it.shape;
+    case PointsRole: {
+        QVariantList points;
+        points.reserve(it.points.size());
+        for (const QPointF &p : it.points)
+            points.append(p);
+        return points;
+    }
+    case SizeRole: return it.size;
+    case CollapsedRole: return it.collapsed;
+    case HiddenRole: return m_hidden.contains(it.id);
+    case DescendantsRole: return m_descendants.value(it.id);
+    case ChildCountRole: return m_childCount.value(it.id);
+    case SectionIdRole: return m_sectionOf.value(it.id);
+    case SectionTitleRole: {
+        const int section = indexOf(m_sectionOf.value(it.id));
+        return section >= 0 ? m_items.at(section).text : QString();
+    }
+    case SectionOrderRole: // a section's own place; for the rest, that of their section
+        return it.type == QLatin1String("section") ? m_sectionOrder.value(it.id, -1)
+                                                   : m_sectionOrder.value(m_sectionOf.value(it.id), -1);
+    case ReadingOrderRole: return m_readingOrder.value(it.id);
     default: return {};
     }
 }
@@ -132,6 +160,17 @@ QHash<int, QByteArray> BoardModel::roleNames() const
         {SourceRole, "itemSource"},
         {TitleRole, "title"},
         {SearchRole, "searchText"},
+        {ShapeRole, "itemShape"},
+        {PointsRole, "itemPoints"},
+        {SizeRole, "itemSize"},
+        {CollapsedRole, "itemCollapsed"},
+        {HiddenRole, "itemHidden"},
+        {DescendantsRole, "descendants"},
+        {ChildCountRole, "childCount"},
+        {SectionIdRole, "sectionId"},
+        {SectionTitleRole, "sectionTitle"},
+        {SectionOrderRole, "sectionOrder"},
+        {ReadingOrderRole, "readingOrder"},
     };
 }
 
@@ -158,6 +197,7 @@ void BoardModel::load(const QString &projectDir)
 
     beginResetModel();
     m_items.clear();
+    m_links.clear();
     m_undo.clear();
     m_redo.clear();
     m_lastUndoKey.clear();
@@ -183,18 +223,7 @@ void BoardModel::load(const QString &projectDir)
             const QJsonArray items = root.value(QStringLiteral("items")).toArray();
             for (const QJsonValue &value : items) {
                 const QJsonObject o = value.toObject();
-                BoardItem it;
-                it.id = o.value(QStringLiteral("id")).toString();
-                if (it.id.isEmpty())
-                    it.id = newId();
-                it.type = o.value(QStringLiteral("type")).toString(QStringLiteral("note"));
-                it.x = o.value(QStringLiteral("x")).toDouble();
-                it.y = o.value(QStringLiteral("y")).toDouble();
-                it.w = o.value(QStringLiteral("w")).toDouble(320);
-                it.h = o.value(QStringLiteral("h")).toDouble(220);
-                it.z = o.value(QStringLiteral("z")).toInt();
-                it.color = o.value(QStringLiteral("color")).toString();
-                it.source = o.value(QStringLiteral("source")).toString();
+                BoardItem it = itemFromJson(o);
                 if (it.type == QLatin1String("note")) {
                     const QString rel = o.value(QStringLiteral("file"))
                                             .toString(QStringLiteral("notes/%1.md").arg(it.id));
@@ -202,7 +231,7 @@ void BoardModel::load(const QString &projectDir)
                     if (md.open(QIODevice::ReadOnly))
                         it.text = QString::fromUtf8(md.readAll());
                     m_savedTexts.insert(it.id, it.text);
-                } else {
+                } else if (it.type == QLatin1String("image") || it.type == QLatin1String("video")) {
                     // Earlier versions put media on the canvas as cards of
                     // their own; now media lives inside notes
                     it.text = mediaMarkdown(it.source) + QLatin1Char('\n');
@@ -214,14 +243,26 @@ void BoardModel::load(const QString &projectDir)
                 }
                 m_items.append(it);
             }
+            const QJsonArray links = root.value(QStringLiteral("links")).toArray();
+            QSet<QString> ids;
+            for (const BoardItem &it : std::as_const(m_items))
+                ids.insert(it.id);
+            for (const QJsonValue &value : links) {
+                const BoardLink link = linkFromJson(value.toObject());
+                if (ids.contains(link.from) && ids.contains(link.to))
+                    m_links.append(link);
+            }
         }
         adoptLooseNotes();
     }
+    updateDerived();
     endResetModel();
 
     emit projectChanged();
     emit countChanged();
     emit undoStateChanged();
+    emit linksChanged();
+    textsChanged();
     emit viewRestored();
 }
 
@@ -262,15 +303,19 @@ void BoardModel::close()
     save();
     beginResetModel();
     m_items.clear();
+    m_links.clear();
     m_undo.clear();
     m_redo.clear();
     m_savedTexts.clear();
     m_projectPath.clear();
     m_hasView = false;
+    updateDerived();
     endResetModel();
     emit projectChanged();
     emit countChanged();
     emit undoStateChanged();
+    emit linksChanged();
+    textsChanged();
 }
 
 void BoardModel::save()
@@ -288,20 +333,9 @@ void BoardModel::save()
     QSet<QString> liveNotes;
     QJsonArray items;
     for (const BoardItem &it : std::as_const(m_items)) {
-        QJsonObject o{
-            {QStringLiteral("id"), it.id},
-            {QStringLiteral("type"), it.type},
-            {QStringLiteral("x"), std::round(it.x * 10) / 10},
-            {QStringLiteral("y"), std::round(it.y * 10) / 10},
-            {QStringLiteral("w"), std::round(it.w * 10) / 10},
-            {QStringLiteral("h"), std::round(it.h * 10) / 10},
-            {QStringLiteral("z"), it.z},
-        };
+        const QJsonObject o = toJson(it, false);
         if (it.type == QLatin1String("note")) {
             const QString rel = QStringLiteral("notes/%1.md").arg(it.id);
-            o.insert(QStringLiteral("file"), rel);
-            if (!it.color.isEmpty())
-                o.insert(QStringLiteral("color"), it.color);
             liveNotes.insert(it.id);
             const auto saved = m_savedTexts.constFind(it.id);
             if (saved == m_savedTexts.cend() || *saved != it.text || !QFile::exists(dir.filePath(rel))) {
@@ -312,8 +346,6 @@ void BoardModel::save()
                         m_savedTexts.insert(it.id, it.text);
                 }
             }
-        } else {
-            o.insert(QStringLiteral("source"), it.source);
         }
         items.append(o);
     }
@@ -329,9 +361,13 @@ void BoardModel::save()
         }
     }
 
+    QJsonArray links;
+    for (const BoardLink &link : std::as_const(m_links))
+        links.append(toJson(link));
     QJsonObject root{
-        {QStringLiteral("version"), 1},
+        {QStringLiteral("version"), 2},
         {QStringLiteral("items"), items},
+        {QStringLiteral("links"), links},
     };
     if (m_hasView) {
         root.insert(QStringLiteral("view"), QJsonObject{
@@ -343,8 +379,10 @@ void BoardModel::save()
     QSaveFile file(dir.filePath(QStringLiteral("canvas.json")));
     if (file.open(QIODevice::WriteOnly)) {
         file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
-        if (file.commit())
+        if (file.commit()) {
             m_dirty = false;
+            emit saved();
+        }
     }
 }
 
@@ -367,7 +405,7 @@ void BoardModel::pushUndo(const QString &coalesceKey)
 {
     if (!coalesceKey.isEmpty() && coalesceKey == m_lastUndoKey)
         return;
-    m_undo.append(m_items);
+    m_undo.append(m_state);
     if (m_undo.size() > kUndoLimit)
         m_undo.removeFirst();
     m_redo.clear();
@@ -375,14 +413,17 @@ void BoardModel::pushUndo(const QString &coalesceKey)
     emit undoStateChanged();
 }
 
-void BoardModel::restore(QList<BoardItem> items)
+void BoardModel::restore(BoardState state)
 {
     beginResetModel();
-    m_items = std::move(items);
+    m_state = std::move(state);
+    updateDerived();
     endResetModel();
     m_lastUndoKey.clear();
     emit countChanged();
     emit undoStateChanged();
+    emit linksChanged();
+    textsChanged();
     markDirty();
 }
 
@@ -390,7 +431,7 @@ void BoardModel::undo()
 {
     if (m_undo.isEmpty())
         return;
-    m_redo.append(m_items);
+    m_redo.append(m_state);
     restore(m_undo.takeLast());
 }
 
@@ -398,7 +439,7 @@ void BoardModel::redo()
 {
     if (m_redo.isEmpty())
         return;
-    m_undo.append(m_items);
+    m_undo.append(m_state);
     restore(m_redo.takeLast());
 }
 
@@ -434,6 +475,9 @@ int BoardModel::appendItem(const BoardItem &item)
     m_items.append(item);
     endInsertRows();
     emit countChanged();
+    updateDerived();
+    if (item.type == QLatin1String("note"))
+        textsChanged();
     markDirty();
     return row;
 }
@@ -514,6 +558,7 @@ void BoardModel::appendMediaToNote(int row, const QStringList &rels)
               + QLatin1Char('\n');
     it.h = std::min(it.h + grow, std::max(it.h, 1200.0));
     emitRow(row);
+    updateDerived();
     markDirty();
 }
 
@@ -594,12 +639,29 @@ int BoardModel::addImageData(const QByteArray &data, double cx, double cy, int t
     return placeMediaNote({rel}, cx, cy);
 }
 
-int BoardModel::pasteFromClipboard(double cx, double cy, int targetRow)
+QStringList BoardModel::pasteFromClipboard(double cx, double cy, int targetRow)
 {
     const QMimeData *mime = QGuiApplication::clipboard()->mimeData();
     if (!mime || m_projectPath.isEmpty())
-        return -1;
+        return {};
+    const auto idOf = [this](int row) { return valid(row) ? QStringList{m_items.at(row).id} : QStringList(); };
 
+    // Items copied from a canvas, centred on (cx, cy)
+    if (mime->hasFormat(QStringLiteral("application/x-notecanvas"))) {
+        const QJsonObject root = QJsonDocument::fromJson(mime->data(QStringLiteral("application/x-notecanvas"))).object();
+        BoardState state;
+        for (const QJsonValue &v : root.value(QStringLiteral("items")).toArray())
+            state.items.append(itemFromJson(v.toObject()));
+        for (const QJsonValue &v : root.value(QStringLiteral("links")).toArray())
+            state.links.append(linkFromJson(v.toObject()));
+        if (!state.items.isEmpty()) {
+            QRectF bounds;
+            for (const BoardItem &it : std::as_const(state.items))
+                bounds = bounds.united(QRectF(it.x, it.y, it.w, it.h));
+            pushUndo();
+            return insertState(state, cx - bounds.center().x(), cy - bounds.center().y());
+        }
+    }
     if (mime->hasUrls()) {
         QVariantList local;
         const QList<QUrl> urls = mime->urls();
@@ -610,7 +672,7 @@ int BoardModel::pasteFromClipboard(double cx, double cy, int targetRow)
         if (!local.isEmpty()) {
             const int row = importUrls(local, cx, cy, targetRow);
             if (row >= 0)
-                return row;
+                return idOf(row);
         }
     }
     if (mime->hasImage()) {
@@ -618,18 +680,18 @@ int BoardModel::pasteFromClipboard(double cx, double cy, int targetRow)
         const QString rel = saveImageAsset(image, QStringLiteral("paste"));
         if (!rel.isEmpty()) {
             pushUndo();
-            if (valid(targetRow)) {
+            if (valid(targetRow) && m_items.at(targetRow).type == QLatin1String("note")) {
                 appendMediaToNote(targetRow, {rel});
-                return targetRow;
+                return idOf(targetRow);
             }
-            return placeMediaNote({rel}, cx, cy);
+            return idOf(placeMediaNote({rel}, cx, cy));
         }
     }
     if (mime->hasText() && !mime->text().trimmed().isEmpty()) {
         pushUndo();
-        return appendItem(makeNote(cx - 170, cy - 60, mime->text()));
+        return idOf(appendItem(makeNote(cx - 170, cy - 60, mime->text())));
     }
-    return -1;
+    return {};
 }
 
 int BoardModel::itemAt(double x, double y) const
@@ -637,7 +699,13 @@ int BoardModel::itemAt(double x, double y) const
     int found = -1;
     for (int i = 0; i < m_items.size(); ++i) {
         const BoardItem &it = m_items.at(i);
-        if (QRectF(it.x, it.y, it.w, it.h).contains(x, y) && (found < 0 || it.z >= m_items.at(found).z))
+        if (m_hidden.contains(it.id) || !QRectF(it.x, it.y, it.w, it.h).contains(x, y))
+            continue;
+        // Sections lie under everything else
+        const auto depth = [](const BoardItem &b) {
+            return b.type == QLatin1String("section") ? qint64(b.z) - (qint64(1) << 40) : qint64(b.z);
+        };
+        if (found < 0 || depth(it) >= depth(m_items.at(found)))
             found = i;
     }
     return found;
@@ -660,6 +728,7 @@ void BoardModel::setGeometry(int row, double x, double y, double w, double h)
     it.w = w;
     it.h = h;
     emitRow(row);
+    updateDerived();
     markDirty();
 }
 
@@ -671,6 +740,9 @@ void BoardModel::setText(int row, const QString &text)
     pushUndo(QStringLiteral("text:") + m_items.at(row).id);
     m_items[row].text = text;
     emitRow(row);
+    if (m_items.at(row).type == QLatin1String("section"))
+        emitAll({SectionTitleRole});
+    textsChanged();
     markDirty();
 }
 
@@ -712,12 +784,7 @@ void BoardModel::remove(int row)
 {
     if (!valid(row))
         return;
-    pushUndo();
-    beginRemoveRows({}, row, row);
-    m_items.removeAt(row);
-    endRemoveRows();
-    emit countChanged();
-    markDirty();
+    removeItems({m_items.at(row).id});
 }
 
 int BoardModel::duplicate(int row)
@@ -777,8 +844,11 @@ QVariantMap BoardModel::get(int row) const
         {QStringLiteral("color"), it.color},
         {QStringLiteral("text"), it.text},
         {QStringLiteral("title"), titleFor(it)},
-        {QStringLiteral("rel"), it.source},
-        {QStringLiteral("source"), it.source.isEmpty() ? QUrl() : QUrl::fromLocalFile(absPath(it.source))},
+        {QStringLiteral("shape"), it.shape},
+        {QStringLiteral("size"), it.size},
+        {QStringLiteral("collapsed"), it.collapsed},
+        {QStringLiteral("hidden"), m_hidden.contains(it.id)},
+        {QStringLiteral("childCount"), m_childCount.value(it.id)},
     };
 }
 
@@ -792,9 +862,18 @@ QRectF BoardModel::itemsBounds() const
 
 QString BoardModel::titleFor(const BoardItem &item)
 {
-    if (item.type != QLatin1String("note"))
-        return QFileInfo(item.source).fileName();
-    return titleForText(item.text);
+    if (item.type == QLatin1String("note"))
+        return titleForText(item.text);
+    if (item.type == QLatin1String("stroke"))
+        return QCoreApplication::translate("BoardModel", "Drawing");
+    const QString first = item.text.trimmed().section(QLatin1Char('\n'), 0, 0).left(80);
+    if (!first.isEmpty())
+        return first;
+    if (item.type == QLatin1String("section"))
+        return QCoreApplication::translate("BoardModel", "Section");
+    if (item.type == QLatin1String("shape"))
+        return QCoreApplication::translate("BoardModel", "Shape");
+    return QCoreApplication::translate("BoardModel", "Text");
 }
 
 QString BoardModel::titleForText(const QString &markdown)
@@ -808,6 +887,11 @@ QString BoardModel::titleForText(const QString &markdown)
         line = line.trimmed();
         if (line.startsWith(QLatin1String("- ")) || line.startsWith(QLatin1String("* ")))
             line = line.mid(2).trimmed();
+        if (line.startsWith(QLatin1String("[ ] ")) || line.startsWith(QLatin1String("[x] "))
+            || line.startsWith(QLatin1String("[X] ")))
+            line = line.mid(4).trimmed(); // a task
+        if (line.startsWith(QLatin1String("```")))
+            continue; // a code fence
         line.remove(QStringLiteral("**"));
         line.remove(QLatin1Char('`'));
         if (line.startsWith(QLatin1Char('<'))) // raw HTML such as an <img> tag
@@ -866,7 +950,7 @@ void BoardModel::copyToClipboard(int row) const
         return;
     const BoardItem &it = m_items.at(row);
     auto *mime = new QMimeData;
-    mime->setHtml(renderHtml(it.text, 720, 14, QColor(), true));
+    mime->setHtml(clipboardHtml(it.text));
     mime->setText(it.text);
 
     QStringList images;
@@ -1013,15 +1097,49 @@ QString BoardModel::resolveLocal(const QString &target) const
     return absPath(QUrl::fromPercentEncoding(target.toUtf8()));
 }
 
-// Markdown -> HTML through QTextDocument. On screen images are file URLs
-// scaled to maxWidth; for the clipboard they are embedded as data: URIs,
-// as other applications (Teams, mail) cannot read the project's files.
-QString BoardModel::renderHtml(const QString &markdown, double maxWidth, int pixelSize, const QColor &linkColor,
-                               bool forClipboard, const QStringList &highlight,
-                               const QColor &highlightColor) const
+namespace {
+
+QString bodyOf(const QString &html)
 {
+    const qsizetype open = html.indexOf(QLatin1String("<body"));
+    const qsizetype start = html.indexOf(QLatin1Char('>'), open) + 1;
+    const qsizetype end = html.lastIndexOf(QLatin1String("</body>"));
+    return open >= 0 && start > 0 && end > start ? html.mid(start, end - start) : html;
+}
+
+// Colours for code pasted elsewhere, which is usually light: GitHub's
+const QVariantMap &pasteCodeColors()
+{
+    static const QVariantMap colors{
+        {QStringLiteral("keyword"), QColor(0xcf, 0x22, 0x2e)},
+        {QStringLiteral("type"), QColor(0x95, 0x38, 0x00)},
+        {QStringLiteral("string"), QColor(0x0a, 0x30, 0x69)},
+        {QStringLiteral("number"), QColor(0x05, 0x50, 0xae)},
+        {QStringLiteral("comment"), QColor(0x6e, 0x77, 0x81)},
+        {QStringLiteral("preprocessor"), QColor(0xcf, 0x22, 0x2e)},
+        {QStringLiteral("function"), QColor(0x82, 0x50, 0xdf)},
+    };
+    return colors;
+}
+
+const QRegularExpression kWikiLine(QStringLiteral(R"(^\s*(!?)\[\[([^\[\]|]+)(?:\|([^\[\]]*))?\]\]\s*$)"));
+
+} // namespace
+
+// Markdown -> HTML through QTextDocument. On screen images are file URLs
+// scaled to maxWidth, tasks are task:<n> links (n counted from firstTask)
+// and [[wiki links]] note: links. For the clipboard images are embedded as
+// data: URIs, as other applications (Teams, mail) cannot read the
+// project's files, and tasks and links are plain text.
+QString BoardModel::renderHtml(const QString &markdown, double maxWidth, int pixelSize, const QVariantMap &colors,
+                               bool forClipboard, const QStringList &highlight, int firstTask) const
+{
+    const QColor linkColor = colors.value(QStringLiteral("link")).value<QColor>();
+    const QColor mutedColor = colors.value(QStringLiteral("muted")).value<QColor>();
+    const QColor highlightColor = colors.value(QStringLiteral("highlight")).value<QColor>();
+
     // A video can't show inside text: there it is a link that plays it
-    QString source = markdown;
+    QString source = forClipboard ? Markdown::unlinkify(markdown) : Markdown::linkify(markdown);
     source.replace(kVideoImage, QStringLiteral("[▶ \\1](\\2)"));
 
     QTextDocument doc;
@@ -1029,6 +1147,49 @@ QString BoardModel::renderHtml(const QString &markdown, double maxWidth, int pix
     font.setPixelSize(pixelSize);
     doc.setDefaultFont(font);
     doc.setMarkdown(source);
+
+    // Task list items: out of their list, a box to tick in front
+    int task = firstTask;
+    for (QTextBlock block = doc.begin(); block.isValid(); block = block.next()) {
+        const QTextBlockFormat::MarkerType marker = block.blockFormat().marker();
+        if (marker == QTextBlockFormat::MarkerType::NoMarker)
+            continue;
+        const bool done = marker == QTextBlockFormat::MarkerType::Checked;
+        int indent = block.blockFormat().indent();
+        if (QTextList *list = block.textList()) {
+            indent = list->format().indent();
+            list->remove(block);
+        }
+        // The format as it is now, out of the list (the old one would put
+        // the block back into it)
+        QTextBlockFormat format = block.blockFormat();
+        format.clearProperty(QTextFormat::ObjectIndex);
+        format.setIndent(indent);
+        format.setMarker(QTextBlockFormat::MarkerType::NoMarker);
+        QTextCursor cursor(block);
+        cursor.setBlockFormat(format);
+        if (done) { // the text of a done task fades and is struck out
+            cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
+            QTextCharFormat struck;
+            struck.setFontStrikeOut(true);
+            if (mutedColor.isValid())
+                struck.setForeground(mutedColor);
+            cursor.mergeCharFormat(struck);
+            cursor.clearSelection();
+            cursor.movePosition(QTextCursor::StartOfBlock);
+        }
+        QTextCharFormat box;
+        if (!forClipboard) {
+            box.setAnchor(true);
+            box.setAnchorHref(QStringLiteral("task:%1").arg(task));
+            if (linkColor.isValid())
+                box.setForeground(done ? linkColor : QColor(colors.value(QStringLiteral("text")).value<QColor>()));
+        }
+        box.setFontWeight(QFont::Bold);
+        cursor.insertText(done ? QStringLiteral("☑") : QStringLiteral("☐"), box);
+        cursor.insertText(QStringLiteral(" "), QTextCharFormat());
+        ++task;
+    }
 
     struct Run {
         int position;
@@ -1044,10 +1205,14 @@ QString BoardModel::renderHtml(const QString &markdown, double maxWidth, int pix
                 continue;
             QTextCharFormat format = fragment.charFormat();
             if (format.isAnchor() && !format.isImageFormat()) {
+                if (format.anchorHref().startsWith(QLatin1String("task:")))
+                    continue;
                 if (linkColor.isValid())
                     format.setForeground(linkColor);
                 else
                     format.clearForeground(); // the pasting app's link colour
+                if (format.anchorHref().startsWith(QLatin1String("note:")))
+                    format.setFontUnderline(false);
                 if (forClipboard) {
                     const QString local = resolveLocal(format.anchorHref());
                     if (!local.isEmpty())
@@ -1087,7 +1252,9 @@ QString BoardModel::renderHtml(const QString &markdown, double maxWidth, int pix
         const QTextBlock next = block.next();
         const bool inList = block.textList() != nullptr;
         const bool listEnds = inList && (!next.isValid() || next.textList() != block.textList());
-        if ((inList && !listEnds) || QTextCursor(block).currentTable())
+        const bool taskRun = next.isValid() && !inList && block.blockFormat().indent() > 0
+                             && next.blockFormat().indent() > 0;
+        if ((inList && !listEnds) || taskRun || QTextCursor(block).currentTable())
             continue;
         QTextBlockFormat format = block.blockFormat();
         if (format.bottomMargin() < gap) {
@@ -1113,17 +1280,10 @@ QString BoardModel::renderHtml(const QString &markdown, double maxWidth, int pix
         }
     }
 
-    QString html = doc.toHtml();
-    if (forClipboard) {
-        // Only the body, without Qt's fonts, so the text takes on the look
-        // of wherever it is pasted
-        const qsizetype open = html.indexOf(QLatin1String("<body"));
-        const qsizetype start = html.indexOf(QLatin1Char('>'), open) + 1;
-        const qsizetype end = html.lastIndexOf(QLatin1String("</body>"));
-        if (open >= 0 && start > 0 && end > start)
-            html = QStringLiteral("<html><body>") + html.mid(start, end - start) + QStringLiteral("</body></html>");
-    }
-    return html;
+    const QString html = doc.toHtml();
+    // For the clipboard only the body, without Qt's fonts, so the text takes
+    // on the look of wherever it is pasted
+    return forClipboard ? bodyOf(html) : html;
 }
 
 QString BoardModel::dataUri(const QString &path) const
@@ -1144,45 +1304,170 @@ QString BoardModel::dataUri(const QString &path) const
            + QString::fromLatin1(bytes.toBase64());
 }
 
-// The note as pieces for display: runs of rich text, and the videos that
-// stand on a line of their own, which get a player.
-QVariantList BoardModel::renderSegments(const QString &markdown, double maxWidth, int pixelSize,
-                                        const QColor &linkColor, const QStringList &highlight,
-                                        const QColor &highlightColor) const
+// The note as pieces for display, see the header. `emit` gets each
+// piece: text runs as Markdown, the rest as they are.
+namespace {
+
+struct Piece {
+    enum Kind { Text, Video, Code, Embed } kind = Text;
+    QString markdown;
+    QString target; // video file, or wiki link target
+    QString name;
+    QString language;
+    int line = 0;
+    bool expanded = false;
+};
+
+QList<Piece> piecesOf(const QString &markdown, const std::function<QString(const QString &)> &resolve,
+                      const std::function<bool(const QString &)> &isVideo)
 {
-    QVariantList segments;
+    QList<Piece> pieces;
     QStringList chunk;
-    bool fenced = false;
     const auto flush = [&] {
         const QString md = chunk.join(QLatin1Char('\n'));
         chunk.clear();
-        if (md.trimmed().isEmpty())
-            return;
-        segments.append(QVariantMap{{QStringLiteral("kind"), QStringLiteral("text")},
-                                    {QStringLiteral("html"), renderHtml(md, maxWidth, pixelSize, linkColor, false, highlight, highlightColor)}});
+        if (!md.trimmed().isEmpty())
+            pieces.append({Piece::Text, md});
     };
     const QStringList lines = markdown.split(QLatin1Char('\n'));
-    for (const QString &line : lines) {
-        const QString trimmed = line.trimmed();
-        if (trimmed.startsWith(QLatin1String("```")) || trimmed.startsWith(QLatin1String("~~~")))
-            fenced = !fenced;
-        if (!fenced) {
-            const QRegularExpressionMatch match = kMediaLine.match(line);
-            if (match.hasMatch()) {
-                const QString local = resolveLocal(match.captured(2));
-                if (!local.isEmpty() && mediaType(local) == QLatin1String("video")) {
-                    flush();
-                    segments.append(QVariantMap{{QStringLiteral("kind"), QStringLiteral("video")},
-                                                {QStringLiteral("url"), QUrl::fromLocalFile(local)},
-                                                {QStringLiteral("name"), match.captured(1)}});
-                    continue;
-                }
+    const QList<Markdown::Fence> fences = Markdown::fences(markdown);
+    qsizetype fence = 0;
+    for (int i = 0; i < lines.size(); ++i) {
+        if (fence < fences.size() && fences.at(fence).startLine == i) {
+            const Markdown::Fence &f = fences.at(fence++);
+            flush();
+            Piece code{Piece::Code, f.code};
+            code.language = f.language;
+            code.line = f.startLine;
+            pieces.append(code);
+            i = f.endLine;
+            continue;
+        }
+        const QString &line = lines.at(i);
+        const QRegularExpressionMatch media = kMediaLine.match(line);
+        if (media.hasMatch()) {
+            const QString local = resolve(media.captured(2));
+            if (!local.isEmpty() && isVideo(local)) {
+                flush();
+                Piece video{Piece::Video};
+                video.target = local;
+                video.name = media.captured(1);
+                pieces.append(video);
+                continue;
             }
+        }
+        const QRegularExpressionMatch wiki = kWikiLine.match(line);
+        if (wiki.hasMatch()) {
+            flush();
+            Piece embed{Piece::Embed};
+            embed.target = wiki.captured(2).trimmed();
+            embed.name = wiki.captured(3).trimmed();
+            embed.line = i;
+            embed.expanded = !wiki.captured(1).isEmpty();
+            pieces.append(embed);
+            continue;
         }
         chunk << line;
     }
     flush();
+    return pieces;
+}
+
+} // namespace
+
+QVariantList BoardModel::renderSegments(const QString &markdown, double maxWidth, int pixelSize,
+                                        const QVariantMap &colors, const QStringList &highlight) const
+{
+    QVariantList segments;
+    int task = 0;
+    const QList<Piece> pieces = piecesOf(
+        markdown, [this](const QString &t) { return resolveLocal(t); },
+        [](const QString &path) { return mediaType(path) == QLatin1String("video"); });
+    for (const Piece &piece : pieces) {
+        switch (piece.kind) {
+        case Piece::Text:
+            segments.append(QVariantMap{
+                {QStringLiteral("kind"), QStringLiteral("text")},
+                {QStringLiteral("html"), renderHtml(piece.markdown, maxWidth, pixelSize, colors, false, highlight, task)}});
+            task += int(Markdown::tasks(piece.markdown).size());
+            break;
+        case Piece::Video:
+            segments.append(QVariantMap{{QStringLiteral("kind"), QStringLiteral("video")},
+                                        {QStringLiteral("url"), QUrl::fromLocalFile(piece.target)},
+                                        {QStringLiteral("name"), piece.name}});
+            break;
+        case Piece::Code: {
+            const QString language = Highlight::language(piece.language, piece.markdown);
+            segments.append(QVariantMap{
+                {QStringLiteral("kind"), QStringLiteral("code")},
+                {QStringLiteral("code"), piece.markdown},
+                {QStringLiteral("language"), piece.language.isEmpty() ? QString() : language},
+                {QStringLiteral("html"), QStringLiteral("<pre style=\"margin:0; white-space:pre-wrap;\">")
+                                             + Highlight::toHtml(piece.markdown, language, colors)
+                                             + QStringLiteral("</pre>")}});
+            break;
+        }
+        case Piece::Embed:
+            segments.append(QVariantMap{{QStringLiteral("kind"), QStringLiteral("embed")},
+                                        {QStringLiteral("target"), piece.target},
+                                        {QStringLiteral("alias"), piece.name},
+                                        {QStringLiteral("line"), piece.line},
+                                        {QStringLiteral("expanded"), piece.expanded}});
+            break;
+        }
+    }
     return segments;
+}
+
+void BoardModel::setEmbed(int row, int line, bool embedded)
+{
+    if (!valid(row))
+        return;
+    setText(row, Markdown::setEmbed(m_items.at(row).text, line, embedded));
+}
+
+// A note as HTML for other applications: rich text with the images
+// inside, code in coloured blocks, tasks as ☐ and ☑
+static QString clipboardHtmlOf(const BoardModel *board, const QString &markdown,
+                               const std::function<QString(const QString &, bool)> &render,
+                               const std::function<QString(const QString &)> &resolve,
+                               const std::function<bool(const QString &)> &isVideo)
+{
+    Q_UNUSED(board)
+    QString html;
+    for (const Piece &piece : piecesOf(markdown, resolve, isVideo)) {
+        switch (piece.kind) {
+        case Piece::Text:
+            html += render(piece.markdown, false);
+            break;
+        case Piece::Video:
+            html += QStringLiteral("<p><a href=\"%1\">▶ %2</a></p>")
+                        .arg(QUrl::fromLocalFile(piece.target).toString(), piece.name.toHtmlEscaped());
+            break;
+        case Piece::Code: {
+            const QString language = Highlight::language(piece.language, piece.markdown);
+            html += QStringLiteral("<pre style=\"background:#f6f8fa; border:1px solid #d0d7de; border-radius:6px; "
+                                   "padding:8px 12px; font-family:Consolas,'JetBrains Mono',monospace; "
+                                   "font-size:13px; color:#1f2328; white-space:pre-wrap;\">")
+                    + Highlight::toHtml(piece.markdown, language, pasteCodeColors()) + QStringLiteral("</pre>");
+            break;
+        }
+        case Piece::Embed:
+            html += QStringLiteral("<p><b>↪ %1</b></p>")
+                        .arg((piece.name.isEmpty() ? piece.target : piece.name).toHtmlEscaped());
+            break;
+        }
+    }
+    return QStringLiteral("<html><body>") + html + QStringLiteral("</body></html>");
+}
+
+QString BoardModel::clipboardHtml(const QString &markdown) const
+{
+    return clipboardHtmlOf(
+        this, markdown,
+        [this](const QString &md, bool) { return renderHtml(md, 720, 14, {}, true); },
+        [this](const QString &t) { return resolveLocal(t); },
+        [](const QString &path) { return mediaType(path) == QLatin1String("video"); });
 }
 
 // Writes every card into one Markdown file, in reading order (top to bottom,
@@ -1192,26 +1477,37 @@ QString BoardModel::exportMarkdown()
     if (m_projectPath.isEmpty())
         return {};
     save();
-    QList<BoardItem> ordered = m_items;
-    std::sort(ordered.begin(), ordered.end(), [](const BoardItem &a, const BoardItem &b) {
-        const int rowA = int(std::floor(a.y / 120.0));
-        const int rowB = int(std::floor(b.y / 120.0));
-        return rowA != rowB ? rowA < rowB : a.x < b.x;
+    QList<BoardItem> ordered;
+    for (const BoardItem &it : std::as_const(m_items)) {
+        if (it.type != QLatin1String("stroke") && it.type != QLatin1String("section"))
+            ordered.append(it);
+    }
+    // Section by section, then reading order inside each
+    std::stable_sort(ordered.begin(), ordered.end(), [this](const BoardItem &a, const BoardItem &b) {
+        const int sa = m_sectionOrder.value(m_sectionOf.value(a.id), -1);
+        const int sb = m_sectionOrder.value(m_sectionOf.value(b.id), -1);
+        if (sa != sb)
+            return sa < sb;
+        return m_readingOrder.value(a.id) < m_readingOrder.value(b.id);
     });
     QStringList parts;
+    QString section = QStringLiteral("\x01");
     for (const BoardItem &it : std::as_const(ordered)) {
-        if (it.type == QLatin1String("note"))
+        const QString in = m_sectionOf.value(it.id);
+        if (in != section) {
+            section = in;
+            const int row = indexOf(in);
+            if (row >= 0)
+                parts << QStringLiteral("## ") + titleFor(m_items.at(row));
+        }
+        if (!it.text.trimmed().isEmpty())
             parts << it.text.trimmed();
-        else if (it.type == QLatin1String("image"))
-            parts << QStringLiteral("![%1](%2)").arg(QFileInfo(it.source).fileName(), it.source);
-        else
-            parts << QStringLiteral("[Video: %1](%2)").arg(QFileInfo(it.source).fileName(), it.source);
     }
     const QString path = QDir(m_projectPath).filePath(QStringLiteral("export.md"));
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly))
         return {};
-    file.write(parts.join(QStringLiteral("\n\n---\n\n")).toUtf8() + '\n');
+    file.write(parts.join(QStringLiteral("\n\n")).toUtf8() + '\n');
     return file.commit() ? path : QString();
 }
 

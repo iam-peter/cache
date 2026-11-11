@@ -1,10 +1,12 @@
 #pragma once
 
 #include <QSortFilterProxyModel>
+#include <QTimer>
 #include <QtQml/qqmlregistration.h>
 
-// Board items for the sidebar: filtered by a search string that matches
-// titles and note contents, sorted in reading order.
+// The open canvas for the sidebar: its notes chapter by chapter (each
+// section's title, then the notes inside it), in reading order, without
+// those in folded branches. Optionally filtered by a search string.
 class DocumentFilterModel : public QSortFilterProxyModel
 {
     Q_OBJECT
@@ -27,4 +29,5 @@ protected:
 
 private:
     QString m_filterText;
+    QTimer m_resort; // the order depends on roles Qt doesn't re-sort for
 };

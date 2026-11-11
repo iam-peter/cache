@@ -1,0 +1,72 @@
+{
+  "name": "Kanban board",
+  "description": "To do, Doing and Done, with cards to move along",
+  "items": [
+    {
+      "id": "t1",
+      "type": "section",
+      "x": 0,
+      "y": 0,
+      "w": 370,
+      "h": 620,
+      "text": "To do",
+      "z": -100
+    },
+    {
+      "id": "t2",
+      "type": "section",
+      "x": 400,
+      "y": 0,
+      "w": 370,
+      "h": 620,
+      "text": "Doing",
+      "color": "blue",
+      "z": -99
+    },
+    {
+      "id": "t3",
+      "type": "section",
+      "x": 800,
+      "y": 0,
+      "w": 370,
+      "h": 620,
+      "text": "Done",
+      "color": "green",
+      "z": -98
+    },
+    {
+      "id": "t4",
+      "type": "note",
+      "x": 20,
+      "y": 50,
+      "w": 330,
+      "h": 110,
+      "text": "# First task\n\nWhat needs doing",
+      "color": "yellow",
+      "z": 4
+    },
+    {
+      "id": "t5",
+      "type": "note",
+      "x": 20,
+      "y": 180,
+      "w": 330,
+      "h": 110,
+      "text": "# Second task",
+      "color": "yellow",
+      "z": 5
+    },
+    {
+      "id": "t6",
+      "type": "note",
+      "x": 420,
+      "y": 50,
+      "w": 330,
+      "h": 110,
+      "text": "# In progress\n\n- [ ] step one\n- [ ] step two",
+      "color": "yellow",
+      "z": 6
+    }
+  ],
+  "links": []
+}

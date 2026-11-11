@@ -1,0 +1,87 @@
+{
+  "name": "Mindmap",
+  "description": "A central topic with branches; Tab adds more",
+  "items": [
+    {
+      "id": "t400",
+      "type": "note",
+      "x": 0,
+      "y": 180,
+      "w": 240,
+      "h": 90,
+      "text": "# Central topic",
+      "color": "purple",
+      "z": 1
+    },
+    {
+      "id": "t401",
+      "type": "note",
+      "x": 340,
+      "y": 0,
+      "w": 220,
+      "h": 70,
+      "text": "Idea 1",
+      "z": 2
+    },
+    {
+      "id": "t402",
+      "type": "note",
+      "x": 340,
+      "y": 110,
+      "w": 220,
+      "h": 70,
+      "text": "Idea 2",
+      "z": 3
+    },
+    {
+      "id": "t403",
+      "type": "note",
+      "x": 340,
+      "y": 250,
+      "w": 220,
+      "h": 70,
+      "text": "Idea 3",
+      "z": 4
+    },
+    {
+      "id": "t404",
+      "type": "note",
+      "x": 340,
+      "y": 360,
+      "w": 220,
+      "h": 70,
+      "text": "Idea 4",
+      "z": 5
+    }
+  ],
+  "links": [
+    {
+      "id": "t405",
+      "from": "t400",
+      "to": "t401",
+      "style": "curve",
+      "arrow": "end"
+    },
+    {
+      "id": "t406",
+      "from": "t400",
+      "to": "t402",
+      "style": "curve",
+      "arrow": "end"
+    },
+    {
+      "id": "t407",
+      "from": "t400",
+      "to": "t403",
+      "style": "curve",
+      "arrow": "end"
+    },
+    {
+      "id": "t408",
+      "from": "t400",
+      "to": "t404",
+      "style": "curve",
+      "arrow": "end"
+    }
+  ]
+}

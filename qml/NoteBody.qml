@@ -3,8 +3,8 @@ import QtQuick.Controls
 import IgittStyle as Styles
 import NoteApp
 
-// A Markdown document with its images and videos embedded: rendered when
-// idle, the plain Markdown in an editor while editing.
+// A Markdown document with its images, videos, code and linked notes:
+// rendered when idle, the plain Markdown in an editor while editing.
 Item {
     id: body
 
@@ -17,7 +17,9 @@ Item {
 
     function beginEdit() {
         editor.text = card.itemText
-        editor.cursorPosition = editor.length
+        const at = card.canvas.editCursor
+        editor.cursorPosition = at >= 0 ? Math.min(at, editor.length) : editor.length
+        card.canvas.editCursor = -1
         editor.forceActiveFocus()
     }
     function commit() {
@@ -31,13 +33,7 @@ Item {
         if (!info.rel)
             return false
         const snippet = "![" + info.name.replace(/[\[\]]/g, "") + "](" + encodeURI(info.rel) + ")"
-        // A paragraph of its own, so every Markdown renderer shows it as a block
-        const pos = editor.cursorPosition
-        const head = editor.getText(Math.max(0, pos - 2), pos)
-        const before = pos === 0 || head === "\n\n" ? "" : head.endsWith("\n") ? "\n" : "\n\n"
-        const tail = editor.getText(pos, Math.min(editor.length, pos + 1))
-        editor.insert(pos, before + snippet + (tail === "\n" ? "\n" : "\n\n"))
-        editor.forceActiveFocus()
+        insertBlock(snippet)
         commit()
 
         // Grow the card by what was added
@@ -48,7 +44,38 @@ Item {
                           Math.min(card.height + added + 12, Math.max(card.height, 1200)))
         return true
     }
+    // A paragraph of its own, so every Markdown renderer shows it as a block.
+    // Returns where `text` starts.
+    function insertBlock(text) {
+        const pos = editor.cursorPosition
+        const head = editor.getText(Math.max(0, pos - 2), pos)
+        const before = pos === 0 || head === "\n\n" ? "" : head.endsWith("\n") ? "\n" : "\n\n"
+        const tail = editor.getText(pos, Math.min(editor.length, pos + 1))
+        editor.insert(pos, before + text + (tail === "\n" ? "\n" : "\n\n"))
+        editor.forceActiveFocus()
+        return pos + before.length
+    }
+    // ``` around the selection, or an empty block with the cursor inside
+    function insertCode() {
+        const selected = editor.selectedText
+        if (selected.length > 0) {
+            const start = editor.selectionStart
+            editor.remove(editor.selectionStart, editor.selectionEnd)
+            editor.cursorPosition = start
+        }
+        const at = insertBlock("```\n" + selected + "\n```")
+        editor.cursorPosition = at + 3 // right after the opening ```, for the language
+    }
+
     function openLink(link) {
+        if (link.startsWith("task:")) {
+            Board.toggleTask(card.index, parseInt(link.substring(5)))
+            return
+        }
+        if (link.startsWith("note:")) {
+            card.canvas.openWikiLink(decodeURIComponent(link.substring(5)), card.itemId)
+            return
+        }
         const url = /^[a-z][a-z0-9+.-]+:/i.test(link) ? link : Board.projectUrl + "/" + link
         if (/\.(mp4|webm|mkv|mov|avi|m4v|ogv)$/i.test(link))
             card.canvas.playVideo(url)
@@ -61,7 +88,20 @@ Item {
             beginEdit()
         } else {
             commitTimer.stop()
+            suggestions.close()
             commit()
+            growTimer.start()
+        }
+    }
+    // After editing, a note grows to show what was written (up to a point)
+    Timer {
+        id: growTimer
+        interval: 60
+        onTriggered: {
+            const needed = flick.contentHeight + Styles.Primitives.spacing.sp200 + Styles.Primitives.spacing.sp150 + 8
+            if (needed > body.card.height + 2)
+                Board.setGeometry(body.card.index, body.card.x, body.card.y, body.card.width,
+                                  Math.min(needed, Math.max(body.card.height, 720)))
         }
     }
     Component.onCompleted: if (editing) beginEdit()
@@ -72,6 +112,10 @@ Item {
         function onInsertMediaRequested(id, path) {
             if (id === body.card.itemId)
                 body.insertMedia(path)
+        }
+        function onInsertCodeRequested(id) {
+            if (id === body.card.itemId)
+                body.insertCode()
         }
     }
 
@@ -94,33 +138,59 @@ Item {
             Repeater {
                 // Search matches are highlighted while a search is on
                 model: body.card.itemText.trim().length === 0 ? [] : Board.renderSegments(
-                           body.card.itemText, Math.max(40, flick.width - 2), body.textSize, Theme.link,
-                           Search.terms, Theme.searchHighlight)
+                           body.card.itemText, Math.max(40, flick.width - 2), body.textSize, Theme.renderColors,
+                           Search.highlightWords)
 
                 delegate: Loader {
-                    id: segment
+                    id: piece
                     required property var modelData
                     width: content.width
-                    sourceComponent: modelData.kind === "video" ? videoSegment : textSegment
+                    sourceComponent: modelData.kind === "video" ? videoSegment
+                                   : modelData.kind === "code" ? codeSegment
+                                   : modelData.kind === "embed" ? embedSegment
+                                   : textSegment
 
                     Component {
                         id: textSegment
                         Text {
-                            text: segment.modelData.html
+                            id: rich
+                            text: piece.modelData.html
                             textFormat: Text.RichText
                             wrapMode: Text.Wrap
                             color: Theme.text
                             font.pixelSize: body.textSize
                             onLinkActivated: (link) => body.openLink(link)
-                            HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
+                            // Over a [[link]]: a preview of the note it names
+                            onLinkHovered: (link) => {
+                                if (link.startsWith("note:"))
+                                    body.card.canvas.showLinkPreview(decodeURIComponent(link.substring(5)),
+                                                                     linkHover.point.scenePosition)
+                                else
+                                    body.card.canvas.hideLinkPreview()
+                            }
+                            HoverHandler {
+                                id: linkHover
+                                cursorShape: rich.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            }
                         }
                     }
                     Component {
                         id: videoSegment
                         VideoBlock {
-                            source: segment.modelData.url
-                            name: segment.modelData.name
-                            onExpandRequested: body.card.canvas.playVideo(segment.modelData.url)
+                            source: piece.modelData.url
+                            name: piece.modelData.name
+                            onExpandRequested: body.card.canvas.playVideo(piece.modelData.url)
+                        }
+                    }
+                    Component {
+                        id: codeSegment
+                        CodeBlock { segment: piece.modelData }
+                    }
+                    Component {
+                        id: embedSegment
+                        EmbedBlock {
+                            segment: piece.modelData
+                            card: body.card
                         }
                     }
                 }
@@ -176,12 +246,56 @@ Item {
             wrapMode: TextEdit.Wrap
             textFormat: TextEdit.PlainText
             font: Theme.monoFont
-            placeholderText: qsTr("# Title\n\nWrite Markdown here. Paste or drop images and videos to embed them.")
+            placeholderText: qsTr("# Title\n\nWrite Markdown here. Paste or drop images and videos to embed them. "
+                                  + "[[ links to another note, ``` starts code, - [ ] a task.")
             selectByMouse: true
             persistentSelection: true
             background: null
 
+            // [[ … : what is typed after the brackets, or null
+            function linkPrefix() {
+                const before = getText(Math.max(0, cursorPosition - 80), cursorPosition)
+                const m = before.match(/\[\[([^\[\]|\n]*)$/)
+                return m ? m[1] : null
+            }
+            function acceptSuggestion(title) {
+                const prefix = linkPrefix()
+                if (prefix === null)
+                    return
+                const end = cursorPosition
+                remove(end - prefix.length, end)
+                const closed = getText(cursorPosition, Math.min(length, cursorPosition + 2)) === "]]"
+                insert(cursorPosition, title + (closed ? "" : "]]"))
+                if (closed)
+                    cursorPosition += 2
+                suggestions.close()
+            }
+
             Keys.onPressed: (event) => {
+                if (suggestions.opened) {
+                    if (event.key === Qt.Key_Down) {
+                        suggestionList.incrementCurrentIndex()
+                        event.accepted = true
+                        return
+                    }
+                    if (event.key === Qt.Key_Up) {
+                        suggestionList.decrementCurrentIndex()
+                        event.accepted = true
+                        return
+                    }
+                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Tab) {
+                        const item = suggestionList.model[suggestionList.currentIndex]
+                        if (item)
+                            acceptSuggestion(item.insert)
+                        event.accepted = true
+                        return
+                    }
+                    if (event.key === Qt.Key_Escape) {
+                        suggestions.close()
+                        event.accepted = true
+                        return
+                    }
+                }
                 if (event.key === Qt.Key_Escape) {
                     body.card.canvas.finishEditing()
                     event.accepted = true
@@ -199,6 +313,10 @@ Item {
                             body.insertMedia(path)
                         event.accepted = true
                     }
+                } else if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)
+                           && (event.modifiers & Qt.ShiftModifier)) {
+                    body.insertCode()
+                    event.accepted = true
                 } else if (event.key === Qt.Key_C && (event.modifiers & Qt.ControlModifier)
                            && (event.modifiers & Qt.ShiftModifier)) {
                     body.commit()
@@ -206,7 +324,55 @@ Item {
                     event.accepted = true
                 }
             }
-            onTextChanged: if (body.editing) commitTimer.restart()
+            onTextChanged: {
+                if (!body.editing)
+                    return
+                commitTimer.restart()
+                const prefix = linkPrefix()
+                if (prefix === null) {
+                    suggestions.close()
+                    return
+                }
+                suggestionList.model = Search.suggestNotes(prefix, 8)
+                suggestionList.currentIndex = 0
+                if (suggestionList.count > 0) {
+                    const r = editor.mapToItem(Overlay.overlay, editor.cursorRectangle.x, editor.cursorRectangle.y
+                                               + editor.cursorRectangle.height)
+                    suggestions.x = r.x
+                    suggestions.y = r.y + 4
+                    suggestions.open()
+                } else {
+                    suggestions.close()
+                }
+            }
+        }
+    }
+
+    // Completion of [[links]]: notes of every project, this one first
+    Popup {
+        id: suggestions
+        parent: Overlay.overlay
+        width: 320
+        padding: Styles.Primitives.spacing.sp050
+        focus: false
+        closePolicy: Popup.CloseOnPressOutside
+
+        ListView {
+            id: suggestionList
+            implicitHeight: Math.min(contentHeight, 260)
+            width: parent.width
+            clip: true
+            highlightMoveDuration: 0
+            delegate: ItemDelegate {
+                id: suggestion
+                required property var modelData
+                required property int index
+                width: ListView.view.width
+                highlighted: ListView.isCurrentItem
+                text: modelData.current ? modelData.title : modelData.projectName + " / " + modelData.title
+                icon.source: Icons.source("link")
+                onClicked: editor.acceptSuggestion(modelData.insert)
+            }
         }
     }
 

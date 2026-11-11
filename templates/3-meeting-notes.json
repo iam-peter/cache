@@ -1,0 +1,17 @@
+{
+  "name": "Meeting notes",
+  "description": "Agenda, notes, decisions and action items",
+  "items": [
+    {
+      "id": "t200",
+      "type": "note",
+      "x": 0,
+      "y": 0,
+      "w": 420,
+      "h": 520,
+      "text": "# Meeting: topic\n\n**Date:** \n**Attendees:** \n\n## Agenda\n\n1. \n2. \n\n## Notes\n\n## Decisions\n\n## Action items\n\n- [ ] Who does what, by when\n",
+      "z": 1
+    }
+  ],
+  "links": []
+}

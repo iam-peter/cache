@@ -1,0 +1,73 @@
+{
+  "name": "Retrospective",
+  "description": "What went well, what to improve, and the actions",
+  "items": [
+    {
+      "id": "t100",
+      "type": "section",
+      "x": 0,
+      "y": 0,
+      "w": 370,
+      "h": 560,
+      "text": "Went well",
+      "color": "green",
+      "z": -100
+    },
+    {
+      "id": "t101",
+      "type": "section",
+      "x": 400,
+      "y": 0,
+      "w": 370,
+      "h": 560,
+      "text": "To improve",
+      "color": "pink",
+      "z": -99
+    },
+    {
+      "id": "t102",
+      "type": "section",
+      "x": 800,
+      "y": 0,
+      "w": 370,
+      "h": 560,
+      "text": "Actions",
+      "color": "blue",
+      "z": -98
+    },
+    {
+      "id": "t103",
+      "type": "note",
+      "x": 20,
+      "y": 50,
+      "w": 330,
+      "h": 100,
+      "text": "What worked?",
+      "color": "green",
+      "z": 4
+    },
+    {
+      "id": "t104",
+      "type": "note",
+      "x": 420,
+      "y": 50,
+      "w": 330,
+      "h": 100,
+      "text": "What got in the way?",
+      "color": "pink",
+      "z": 5
+    },
+    {
+      "id": "t105",
+      "type": "note",
+      "x": 820,
+      "y": 50,
+      "w": 330,
+      "h": 140,
+      "text": "- [ ] Action, owner, date",
+      "color": "blue",
+      "z": 6
+    }
+  ],
+  "links": []
+}

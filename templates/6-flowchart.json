@@ -1,0 +1,104 @@
+{
+  "name": "Flowchart",
+  "description": "Shapes and connectors for a process",
+  "items": [
+    {
+      "id": "t500",
+      "type": "shape",
+      "shape": "ellipse",
+      "x": 0,
+      "y": 0,
+      "w": 160,
+      "h": 70,
+      "text": "Start",
+      "color": "green",
+      "z": 1
+    },
+    {
+      "id": "t501",
+      "type": "shape",
+      "shape": "rect",
+      "x": 0,
+      "y": 130,
+      "w": 160,
+      "h": 80,
+      "text": "Do something",
+      "z": 2
+    },
+    {
+      "id": "t502",
+      "type": "shape",
+      "shape": "diamond",
+      "x": -10,
+      "y": 270,
+      "w": 180,
+      "h": 120,
+      "text": "Works?",
+      "color": "yellow",
+      "z": 3
+    },
+    {
+      "id": "t503",
+      "type": "shape",
+      "shape": "rect",
+      "x": 250,
+      "y": 295,
+      "w": 160,
+      "h": 70,
+      "text": "Ship it",
+      "color": "blue",
+      "z": 4
+    },
+    {
+      "id": "t504",
+      "type": "shape",
+      "shape": "rect",
+      "x": 0,
+      "y": 450,
+      "w": 160,
+      "h": 80,
+      "text": "Fix it",
+      "color": "pink",
+      "z": 5
+    }
+  ],
+  "links": [
+    {
+      "id": "t505",
+      "from": "t500",
+      "to": "t501",
+      "style": "straight",
+      "arrow": "end"
+    },
+    {
+      "id": "t506",
+      "from": "t501",
+      "to": "t502",
+      "style": "straight",
+      "arrow": "end"
+    },
+    {
+      "id": "t507",
+      "from": "t502",
+      "to": "t503",
+      "style": "elbow",
+      "arrow": "end",
+      "label": "yes"
+    },
+    {
+      "id": "t508",
+      "from": "t502",
+      "to": "t504",
+      "style": "straight",
+      "arrow": "end",
+      "label": "no"
+    },
+    {
+      "id": "t509",
+      "from": "t504",
+      "to": "t501",
+      "style": "elbow",
+      "arrow": "end"
+    }
+  ]
+}
