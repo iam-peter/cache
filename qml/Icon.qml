@@ -1,33 +1,26 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.impl
 import Cache
 import IgittStyle as Styles
 
-// A Lucide icon on its own, tinted to `color`. Drawn by a disabled button,
-// so it never takes clicks and works with every renderer.
-ToolButton {
+// A Lucide icon on its own, tinted to `color`. Drawn by the image the
+// controls draw their icons with: a button would take the style's colour
+// and ignore `color` (white on a video came out dark in light themes).
+Item {
     id: icon
 
     required property string name
-    // The theme's text color: this disabled button's own is grayed out.
     property color color: Styles.TokenInterface.semantics.text_default
     property int size: 16
 
-    enabled: false
-    // Not grayed out like other disabled controls
-    opacity: 1
-    focusPolicy: Qt.NoFocus
-    // Each side: the style binds them to its own padding.
-    topPadding: 0
-    bottomPadding: 0
-    leftPadding: 0
-    rightPadding: 0
-    background: null
-    display: AbstractButton.IconOnly
-    icon.source: Icons.source(name)
-    icon.color: color
-    icon.width: size
-    icon.height: size
     implicitWidth: size
     implicitHeight: size
+
+    IconImage {
+        anchors.fill: parent
+        source: Icons.source(icon.name)
+        sourceSize: Qt.size(icon.size, icon.size)
+        color: icon.color
+        fillMode: Image.PreserveAspectFit
+    }
 }

@@ -42,6 +42,8 @@ Rectangle {
         ToolTip.text: tip
     }
 
+    // As tall as a button: a taller separator made the row taller and left
+    // more room below the buttons than above
     Row {
         id: tools
         anchors.centerIn: parent
@@ -49,7 +51,7 @@ Rectangle {
 
         Tool { name: "select"; iconName: "mouse-pointer-2"; tip: qsTr("Select and move (V); drag on empty space to select several") }
         Tool { name: "hand"; iconName: "hand"; tip: qsTr("Pan (H, or hold Space)") }
-        ToolSeparator { height: 32 }
+        ToolSeparator { height: 20; anchors.verticalCenter: parent.verticalCenter }
         Tool { name: "note"; iconName: "sticky-note"; tip: qsTr("Note (N)") }
         Tool { name: "text"; iconName: "type"; tip: qsTr("Text (T)") }
         Tool { name: "code"; iconName: "code"; tip: qsTr("Code snippet (K)") }
@@ -84,7 +86,7 @@ Rectangle {
         Tool { name: "connector"; iconName: "spline"; tip: qsTr("Connector (L): drag from one item to another, or to empty space for a new note") }
         Tool { name: "pen"; iconName: "pen-line"; tip: qsTr("Pen (P)") }
         Tool { name: "highlighter"; iconName: "highlighter"; tip: qsTr("Highlighter (M)") }
-        ToolSeparator { height: 32 }
+        ToolSeparator { height: 20; anchors.verticalCenter: parent.verticalCenter }
         IconButton {
             styles: [Styles.ButtonStyle.medium]
             iconName: "layout-template"
@@ -109,8 +111,8 @@ Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.top
         anchors.bottomMargin: Styles.Primitives.spacing.sp075
-        width: colours.implicitWidth + 16
-        height: 34
+        width: colours.implicitWidth + 14
+        height: colours.implicitHeight + 14
         radius: Theme.radius * 2
         color: Theme.s.background_elevated
         border.color: Theme.s.stroke_subtle

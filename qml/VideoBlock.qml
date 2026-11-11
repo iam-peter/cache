@@ -70,7 +70,10 @@ Rectangle {
         width: 48
         height: 48
         radius: 24
-        color: "#99000000"
+        // Dark and ringed: readable on any frame, in any theme
+        color: "#b3000000"
+        border.color: "#59ffffff"
+        border.width: 1
         visible: !block.playing || hover.hovered
 
         Icon {
@@ -94,7 +97,7 @@ Rectangle {
         width: 28
         height: 28
         radius: Theme.radius
-        color: "#99000000"
+        color: "#b3000000"
         visible: hover.hovered
         Icon {
             anchors.centerIn: parent
