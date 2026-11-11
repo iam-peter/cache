@@ -38,6 +38,7 @@ public:
     Q_INVOKABLE bool renameProject(int row, const QString &name);
     Q_INVOKABLE bool removeProject(int row);
     Q_INVOKABLE QUrl projectUrl(int row) const;
+    Q_INVOKABLE int indexOfPath(const QString &path) const;
 
 signals:
     void rootPathChanged();

@@ -255,7 +255,7 @@ ApplicationWindow {
                     ["Wheel / Ctrl+Wheel", qsTr("Zoom (or scroll, see Settings)")],
                     ["Drag empty space", qsTr("Pan (the middle button pans anywhere)")],
                     ["Ctrl+0 / Ctrl+1", qsTr("Zoom 100% / fit everything")],
-                    ["Ctrl+F", qsTr("Search notes")],
+                    ["Ctrl+F", qsTr("Search all notes")],
                     ["Ctrl+B", qsTr("Show or hide the sidebar")],
                     ["Ctrl+,", qsTr("Settings")],
                 ]

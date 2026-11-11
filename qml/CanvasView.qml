@@ -120,6 +120,21 @@ Item {
     function startEditing(id) { selectedId = id; editingId = id }
     function finishEditing() { editingId = ""; view.forceActiveFocus() }
 
+    // Opens a search result: switches project if needed, then shows the note
+    property string pendingFocusId: ""
+    function openNote(projectPath, id) {
+        if (projectPath === Board.projectPath) {
+            focusItem(id)
+            return
+        }
+        const row = Workspace.indexOfPath(projectPath)
+        if (row < 0)
+            return
+        clearSelection()
+        pendingFocusId = id
+        Workspace.currentIndex = row
+    }
+
     function focusItem(id) {
         const row = Board.indexOf(id)
         if (row < 0)
@@ -221,6 +236,11 @@ Item {
             } else {
                 view.applyView(0, 0, 1)
                 Qt.callLater(view.fitAll)
+            }
+            if (view.pendingFocusId !== "") {
+                const id = view.pendingFocusId
+                view.pendingFocusId = ""
+                Qt.callLater(() => view.focusItem(id))
             }
         }
     }

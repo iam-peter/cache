@@ -21,6 +21,17 @@ Pane {
         nameDialog.open()
     }
     function changeWorkspace() { folderDialog.open() }
+    function openResult(row) {
+        if (row < 0 || row >= resultList.count)
+            return
+        const item = resultList.itemAtIndex(row)
+        if (item)
+            canvas.openNote(item.projectPath, item.noteId)
+    }
+    function noteIcon(text) {
+        return /!\[[^\]]*\]\([^)]*\.(mp4|webm|mkv|mov|m4v)\)/i.test(text) ? "film"
+             : text.indexOf("![") >= 0 ? "image" : "sticky-note"
+    }
 
     padding: 0
 
@@ -89,14 +100,20 @@ Pane {
 
         MenuSeparator { Layout.fillWidth: true }
 
-        // --- Notes on this canvas -----------------------------------------
+        // --- Notes on this canvas, or search results from all projects ---
         RowLayout {
             Layout.fillWidth: true
             Layout.leftMargin: Styles.Primitives.spacing.sp150
             Layout.rightMargin: Styles.Primitives.spacing.sp150
-            SectionLabel { text: qsTr("Notes"); Layout.fillWidth: true }
+            SectionLabel {
+                text: Search.active ? qsTr("Search all projects") : qsTr("Notes")
+                Layout.fillWidth: true
+            }
             Label {
-                text: documentList.count === Board.count ? Board.count : documentList.count + " / " + Board.count
+                text: !Search.active ? Board.count
+                      : Search.count === 0 ? qsTr("no matches")
+                      : Search.projectCount > 1 ? qsTr("%1 in %2 projects").arg(Search.count).arg(Search.projectCount)
+                      : Search.count
                 color: Theme.textMuted
                 font.pixelSize: Styles.Primitives.fontSize.small
             }
@@ -106,24 +123,39 @@ Pane {
             id: search
             Layout.fillWidth: true
             Layout.margins: Styles.Primitives.spacing.sp100
-            placeholderText: qsTr("Search notes  (Ctrl+F)")
+            placeholderText: qsTr("Search all notes  (Ctrl+F)")
+            onTextChanged: Search.query = text
             Keys.onEscapePressed: {
                 text = ""
                 sidebar.canvas.forceActiveFocus()
             }
-            Keys.onReturnPressed: if (documentList.count > 0) documentList.itemAtIndex(0).clicked()
+            Keys.onDownPressed: if (resultList.count > 0) resultList.currentIndex = Math.min(resultList.currentIndex + 1, resultList.count - 1)
+            Keys.onUpPressed: if (resultList.count > 0) resultList.currentIndex = Math.max(resultList.currentIndex - 1, 0)
+            Keys.onReturnPressed: sidebar.openResult(resultList.currentIndex)
+            Keys.onEnterPressed: sidebar.openResult(resultList.currentIndex)
+
+            IconButton {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.rightMargin: 2
+                visible: search.text.length > 0
+                iconName: "x"
+                focusPolicy: Qt.NoFocus
+                onClicked: search.text = ""
+            }
         }
 
+        // The current canvas' notes in reading order
         ListView {
             id: documentList
             Layout.fillWidth: true
             Layout.fillHeight: true
+            visible: !Search.active
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             ScrollIndicator.vertical: ScrollIndicator { }
             model: DocumentFilterModel {
                 sourceModel: Board
-                filterText: search.text
             }
 
             delegate: ItemDelegate {
@@ -132,8 +164,7 @@ Pane {
                 required property string itemText
                 width: ListView.view.width
                 text: title
-                icon.source: Icons.source(/!\[[^\]]*\]\([^)]*\.(mp4|webm|mkv|mov|m4v)\)/i.test(itemText) ? "film"
-                                          : itemText.indexOf("![") >= 0 ? "image" : "sticky-note")
+                icon.source: Icons.source(sidebar.noteIcon(itemText))
                 highlighted: sidebar.canvas.selectedId === itemId
                 onClicked: sidebar.canvas.focusItem(itemId)
             }
@@ -141,7 +172,82 @@ Pane {
             Label {
                 anchors.centerIn: parent
                 visible: documentList.count === 0
-                text: search.text.length ? qsTr("No matches") : qsTr("Nothing here yet")
+                text: qsTr("Nothing here yet")
+                color: Theme.textMuted
+            }
+        }
+
+        // Matches from every project, this one first
+        ListView {
+            id: resultList
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: Search.active
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollIndicator.vertical: ScrollIndicator { }
+            model: Search
+            currentIndex: 0
+            onCountChanged: currentIndex = count > 0 ? 0 : -1
+            highlightMoveDuration: 0
+
+            section.property: "projectName"
+            section.delegate: Label {
+                required property string section
+                width: ListView.view.width
+                leftPadding: Styles.Primitives.spacing.sp150
+                topPadding: Styles.Primitives.spacing.sp100
+                bottomPadding: Styles.Primitives.spacing.sp050
+                text: section
+                elide: Text.ElideRight
+                font.pixelSize: Styles.Primitives.fontSize.small
+                font.weight: Styles.Primitives.fontWeight.semiBold
+                color: Theme.textMuted
+            }
+
+            delegate: ItemDelegate {
+                id: result
+                required property int index
+                required property string projectPath
+                required property string noteId
+                required property string title
+                required property string snippet
+                width: ListView.view.width
+                highlighted: ListView.isCurrentItem
+                onClicked: {
+                    resultList.currentIndex = index
+                    sidebar.openResult(index)
+                }
+
+                contentItem: Column {
+                    spacing: Styles.Primitives.spacing.sp025
+                    Label {
+                        width: parent.width
+                        text: result.title
+                        elide: Text.ElideRight
+                        font.weight: Styles.Primitives.fontWeight.medium
+                    }
+                    Label {
+                        width: parent.width
+                        visible: result.snippet.length > 0
+                        text: result.snippet
+                        textFormat: Text.StyledText
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 3
+                        elide: Text.ElideRight
+                        font.pixelSize: Styles.Primitives.fontSize.small
+                        color: Theme.textMuted
+                    }
+                }
+            }
+
+            Label {
+                anchors.centerIn: parent
+                width: parent.width - 32
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                visible: resultList.count === 0
+                text: qsTr("No note contains all of “%1”").arg(Search.terms.join("”, “"))
                 color: Theme.textMuted
             }
         }

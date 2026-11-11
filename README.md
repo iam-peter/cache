@@ -25,9 +25,15 @@ your projects and the notes on the current canvas. The look comes from
   text, with its images embedded, plus the Markdown for plain-text editors.
   A note that is only one image is also copied as that image. Videos become
   a link to the file, as chat apps can't take an embedded local video.
-- **Project sidebar**: create, rename and trash projects. It lists every
-  note on the canvas in reading order, with search over titles and note
-  text (`Ctrl+F`).
+- **Project sidebar**: create, rename and trash projects, and see every
+  note on the canvas in reading order.
+- **Full-text search** (`Ctrl+F`) over every note in every project. Type
+  words or `"quoted phrases"`; a note matches when it has all of them,
+  ignoring case. Results are grouped by project, the open one first, and
+  each shows a snippet with the matches in bold. `↑`/`↓` and `Enter`, or
+  a click, open the note, switching project if needed. While a search is
+  on, matches are highlighted inside the notes, and results update as
+  you edit.
 - **igitt's themes**: Light, Dark, Dracula, Alucard and the four Catppuccin
   flavours, or System. The canvas, note tints and controls all follow the
   theme. Your own themes go in `~/.config/Note Canvas/themes` (format:
@@ -80,7 +86,8 @@ cmake --build build
 | `fonts/`, `icons/` | Inter and JetBrains Mono (OFL) and Lucide icons (ISC), as in igitt |
 | `src/boardmodel.*` | Notes: load/save, undo, media import, rendering, rich copy |
 | `src/workspace.*` | Project folders in the workspace |
-| `src/documentfilter.*` | Sidebar search and reading-order sort |
+| `src/documentfilter.*` | Reading-order sort of the sidebar's note list |
+| `src/searchmodel.*` | Full-text search over all projects (`Search` in QML) |
 | `src/gridbackground.*` | Scene-graph dot grid |
 | `src/Fonts.*` | Registers the bundled fonts (from igitt) |
 | `qml/Main.qml` | Window, toolbar, shortcuts |

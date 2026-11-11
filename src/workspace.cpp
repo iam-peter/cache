@@ -242,6 +242,16 @@ bool Workspace::removeProject(int row)
     return true;
 }
 
+int Workspace::indexOfPath(const QString &path) const
+{
+    const QString wanted = QDir(path).absolutePath();
+    for (int i = 0; i < m_projects.size(); ++i) {
+        if (m_projects.at(i).path == wanted)
+            return i;
+    }
+    return -1;
+}
+
 QUrl Workspace::projectUrl(int row) const
 {
     if (row < 0 || row >= m_projects.size())

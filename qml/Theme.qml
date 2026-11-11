@@ -33,6 +33,7 @@ QtObject {
     readonly property color text: s.text_default
     readonly property color textMuted: s.text_muted
     readonly property color link: s.text_link
+    readonly property color searchHighlight: Styles.Primitives.alpha(s.warning_default, dark ? 0.45 : 0.35)
     readonly property int radius: Styles.Primitives.radius.r4
 
     // Note colours are the theme's status colours over the card surface

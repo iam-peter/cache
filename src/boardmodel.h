@@ -130,9 +130,11 @@ public:
 
     // A note for display: a list of {kind: "text", html} with images
     // scaled to maxWidth, and {kind: "video", url, name} for each video
-    // that stands on its own line.
+    // that stands on its own line. Occurrences of the highlight terms
+    // (search matches) get highlightColor behind them.
     Q_INVOKABLE QVariantList renderSegments(const QString &markdown, double maxWidth, int pixelSize,
-                                            const QColor &linkColor) const;
+                                            const QColor &linkColor, const QStringList &highlight = {},
+                                            const QColor &highlightColor = {}) const;
     Q_INVOKABLE QString toLocalPath(const QString &pathOrUrl) const;
     Q_INVOKABLE QString exportMarkdown();
 
@@ -144,6 +146,13 @@ signals:
     void countChanged();
     void undoStateChanged();
     void viewRestored();
+
+public:
+    // For the search, which reads the open project from memory: what is
+    // on disk may be up to a save behind
+    const QList<BoardItem> &items() const { return m_items; }
+    static QString titleFor(const BoardItem &item);
+    static QString titleForText(const QString &markdown);
 
 private:
     bool valid(int row) const { return row >= 0 && row < m_items.size(); }
@@ -159,7 +168,8 @@ private:
     static QString mediaMarkdown(const QString &rel);
     QString resolveLocal(const QString &target) const;
     QString renderHtml(const QString &markdown, double maxWidth, int pixelSize, const QColor &linkColor,
-                       bool forClipboard) const;
+                       bool forClipboard, const QStringList &highlight = {},
+                       const QColor &highlightColor = {}) const;
     QString dataUri(const QString &path) const;
     BoardItem makeNote(double x, double y, const QString &text) const;
     int topZ() const;
@@ -171,7 +181,6 @@ private:
     QSizeF displaySize(const QString &absPath, const QString &type) const;
     void adoptLooseNotes();
     static QString mediaType(const QString &path);
-    static QString titleFor(const BoardItem &item);
 
     QString m_projectPath;
     QList<BoardItem> m_items;

@@ -794,7 +794,12 @@ QString BoardModel::titleFor(const BoardItem &item)
 {
     if (item.type != QLatin1String("note"))
         return QFileInfo(item.source).fileName();
-    const QStringList lines = item.text.split(QLatin1Char('\n'));
+    return titleForText(item.text);
+}
+
+QString BoardModel::titleForText(const QString &markdown)
+{
+    const QStringList lines = markdown.split(QLatin1Char('\n'));
     QString media;
     for (QString line : lines) {
         line = line.trimmed();
@@ -1012,7 +1017,8 @@ QString BoardModel::resolveLocal(const QString &target) const
 // scaled to maxWidth; for the clipboard they are embedded as data: URIs,
 // as other applications (Teams, mail) cannot read the project's files.
 QString BoardModel::renderHtml(const QString &markdown, double maxWidth, int pixelSize, const QColor &linkColor,
-                               bool forClipboard) const
+                               bool forClipboard, const QStringList &highlight,
+                               const QColor &highlightColor) const
 {
     // A video can't show inside text: there it is a link that plays it
     QString source = markdown;
@@ -1096,6 +1102,17 @@ QString BoardModel::renderHtml(const QString &markdown, double maxWidth, int pix
         cursor.setCharFormat(run.format);
     }
 
+    if (highlightColor.isValid()) {
+        QTextCharFormat mark;
+        mark.setBackground(highlightColor);
+        for (const QString &term : highlight) {
+            if (term.isEmpty())
+                continue;
+            for (QTextCursor found = doc.find(term); !found.isNull(); found = doc.find(term, found))
+                found.mergeCharFormat(mark);
+        }
+    }
+
     QString html = doc.toHtml();
     if (forClipboard) {
         // Only the body, without Qt's fonts, so the text takes on the look
@@ -1130,7 +1147,8 @@ QString BoardModel::dataUri(const QString &path) const
 // The note as pieces for display: runs of rich text, and the videos that
 // stand on a line of their own, which get a player.
 QVariantList BoardModel::renderSegments(const QString &markdown, double maxWidth, int pixelSize,
-                                        const QColor &linkColor) const
+                                        const QColor &linkColor, const QStringList &highlight,
+                                        const QColor &highlightColor) const
 {
     QVariantList segments;
     QStringList chunk;
@@ -1141,7 +1159,7 @@ QVariantList BoardModel::renderSegments(const QString &markdown, double maxWidth
         if (md.trimmed().isEmpty())
             return;
         segments.append(QVariantMap{{QStringLiteral("kind"), QStringLiteral("text")},
-                                    {QStringLiteral("html"), renderHtml(md, maxWidth, pixelSize, linkColor, false)}});
+                                    {QStringLiteral("html"), renderHtml(md, maxWidth, pixelSize, linkColor, false, highlight, highlightColor)}});
     };
     const QStringList lines = markdown.split(QLatin1Char('\n'));
     for (const QString &line : lines) {

@@ -92,8 +92,10 @@ Item {
             spacing: Styles.Primitives.spacing.sp100
 
             Repeater {
+                // Search matches are highlighted while a search is on
                 model: body.card.itemText.trim().length === 0 ? [] : Board.renderSegments(
-                           body.card.itemText, Math.max(40, flick.width - 2), body.textSize, Theme.link)
+                           body.card.itemText, Math.max(40, flick.width - 2), body.textSize, Theme.link,
+                           Search.terms, Theme.searchHighlight)
 
                 delegate: Loader {
                     id: segment

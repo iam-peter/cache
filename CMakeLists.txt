@@ -38,6 +38,7 @@ qt_add_qml_module(notecanvas
     SOURCES
         src/boardmodel.h src/boardmodel.cpp
         src/documentfilter.h src/documentfilter.cpp
+        src/searchmodel.h src/searchmodel.cpp
         src/workspace.h src/workspace.cpp
         src/gridbackground.h src/gridbackground.cpp
         src/Fonts.h src/Fonts.cpp
