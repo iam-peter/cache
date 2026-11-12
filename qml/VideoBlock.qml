@@ -5,8 +5,10 @@ import QtMultimedia
 import IgittStyle as Styles
 import Cache
 
-// A video embedded in a note, playing in place. It shows its first frame
-// until played; the expand button opens it large.
+// A video embedded in a note. It shows a still of its first frame; a
+// player is loaded only while the pointer is over it or it plays, so
+// panning, zooming and resizing past videos is as quick as past images.
+// The expand button opens it large.
 Rectangle {
     id: block
 
@@ -14,33 +16,76 @@ Rectangle {
     required property string name
     signal expandRequested()
 
-    readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
-    readonly property real aspect: player.metaData.value(MediaMetaData.Resolution)
-                                   ? player.metaData.value(MediaMetaData.Resolution).width
-                                     / Math.max(1, player.metaData.value(MediaMetaData.Resolution).height)
-                                   : 16 / 9
+    readonly property url poster: (Posters.revision, Posters.poster(block.source))
+    readonly property Item live: liveLoader.item
+    readonly property bool playing: live !== null && live.playing
+    // Play was pressed before the player was there (a touch screen, no hover)
+    property bool wantPlay: false
+    // The player wants to stay: playing, or paused part way. Set by the
+    // player itself (a binding to it would loop through the Loader)
+    property bool keepLive: false
+
+    // The poster's shape (its size as loaded), the video's once it plays
+    readonly property real aspect: posterImage.status === Image.Ready && posterImage.implicitHeight > 0
+                                   ? posterImage.implicitWidth / posterImage.implicitHeight
+                                   : live !== null && live.aspect > 0 ? live.aspect : 16 / 9
 
     implicitHeight: width / aspect
     radius: Theme.radius
     color: "#000000"
 
-    MediaPlayer {
-        id: player
-        source: block.source
-        videoOutput: output
-        audioOutput: AudioOutput { }
-        // Pausing a loaded video that never played shows its first frame
-        onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia && playbackState === MediaPlayer.StoppedState)
-                                  pause()
-    }
-
-    VideoOutput {
-        id: output
-        anchors.fill: parent
-        fillMode: VideoOutput.PreserveAspectFit
-    }
-
     HoverHandler { id: hover }
+
+    Image {
+        id: posterImage
+        anchors.fill: parent
+        source: block.poster
+        fillMode: Image.PreserveAspectFit
+        asynchronous: true
+        // The width it is shown at, on this screen (posters are at most
+        // 960 wide)
+        sourceSize.width: Math.min(960, Math.ceil(width * Screen.devicePixelRatio))
+    }
+
+    Loader {
+        id: liveLoader
+        anchors.fill: parent
+        active: hover.hovered || block.wantPlay || block.keepLive
+        sourceComponent: Item {
+            readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
+            // Paused part way: keep the place while the pointer is away
+            readonly property bool keep: playing || (player.position > 0 && player.mediaStatus !== MediaPlayer.EndOfMedia)
+            onKeepChanged: block.keepLive = keep
+            Component.onDestruction: block.keepLive = false
+            readonly property real aspect: player.metaData.value(MediaMetaData.Resolution)
+                                           ? player.metaData.value(MediaMetaData.Resolution).width
+                                             / Math.max(1, player.metaData.value(MediaMetaData.Resolution).height)
+                                           : 0
+            readonly property alias player: player
+
+            MediaPlayer {
+                id: player
+                source: block.source
+                videoOutput: output
+                audioOutput: AudioOutput { }
+                onMediaStatusChanged: {
+                    if (mediaStatus !== MediaPlayer.LoadedMedia || playbackState !== MediaPlayer.StoppedState)
+                        return
+                    if (block.wantPlay) {
+                        block.wantPlay = false
+                        play()
+                    } else {
+                        pause() // shows the first frame, over the poster
+                    }
+                }
+            }
+            VideoOutput {
+                id: output
+                anchors.fill: parent
+                fillMode: VideoOutput.PreserveAspectFit
+            }
+        }
+    }
 
     Label {
         anchors.left: parent.left
@@ -56,11 +101,11 @@ Rectangle {
 
     Label {
         anchors.centerIn: parent
-        visible: player.error !== MediaPlayer.NoError
+        visible: block.live !== null && block.live.player.error !== MediaPlayer.NoError
         width: parent.width - 20
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.Wrap
-        text: player.errorString
+        text: block.live !== null ? block.live.player.errorString : ""
         color: "#ffffff"
     }
 
@@ -86,7 +131,14 @@ Rectangle {
         MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
-            onClicked: block.playing ? player.pause() : player.play()
+            onClicked: {
+                if (block.live === null)
+                    block.wantPlay = true
+                else if (block.playing)
+                    block.live.player.pause()
+                else
+                    block.live.player.play()
+            }
         }
     }
 
@@ -109,7 +161,8 @@ Rectangle {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             onClicked: {
-                player.pause()
+                if (block.live !== null)
+                    block.live.player.pause()
                 block.expandRequested()
             }
         }
@@ -117,15 +170,16 @@ Rectangle {
 
     // Progress; click to seek
     Rectangle {
+        readonly property var player: block.live !== null ? block.live.player : null
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         height: 5
         color: "#40ffffff"
-        visible: player.duration > 0 && (block.playing || hover.hovered || player.position > 0)
+        visible: player !== null && player.duration > 0 && (block.playing || hover.hovered || player.position > 0)
 
         Rectangle {
-            width: parent.width * player.position / Math.max(1, player.duration)
+            width: parent.player ? parent.width * parent.player.position / Math.max(1, parent.player.duration) : 0
             height: parent.height
             color: Theme.accent
         }
@@ -133,7 +187,7 @@ Rectangle {
             anchors.fill: parent
             anchors.topMargin: -6
             cursorShape: Qt.PointingHandCursor
-            onClicked: (mouse) => player.position = player.duration * mouse.x / width
+            onClicked: (mouse) => parent.player.position = parent.player.duration * mouse.x / width
         }
     }
 }

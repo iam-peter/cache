@@ -110,7 +110,9 @@ request; the [website](pages/) is published from `pages/` by the
     headings, bold and italics, links, lists and tables; images in it are
     saved with the note
   - **images and videos** are copied into `assets/` and shown, scaled to
-    the note; videos play inside it (expand for a large player)
+    the note; videos show a still of their first frame and load a player
+    when the pointer is over them, so canvases full of videos stay quick,
+    and play inside the note (expand for a large player)
   - **any other file** (PDF, Office documents, archives…) is copied into
     `assets/` and attached as a card with its type and size that opens it
   - **cells copied from a spreadsheet**, and CSV files, become a table

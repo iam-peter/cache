@@ -1493,7 +1493,8 @@ Item {
         }
     }
 
-    // Plays a video full size
+    // Plays a video full size. The player is made when it opens: kept
+    // around, it cost every start of the app
     Popup {
         id: videoPopup
         property url source
@@ -1502,42 +1503,50 @@ Item {
         width: Math.min(parent.width - 80, 1100)
         height: Math.min(parent.height - 80, width * 9 / 16 + 48)
         modal: true
+        // Takes the keys while open, so Esc closes it
+        focus: true
         padding: 0
-        onOpened: popupPlayer.play()
-        onClosed: { popupPlayer.stop(); source = "" }
+        onClosed: source = ""
 
-        MediaPlayer {
-            id: popupPlayer
-            source: videoPopup.source
-            videoOutput: popupOutput
-            audioOutput: AudioOutput { }
-        }
-        Rectangle {
-            anchors.fill: popupOutput
-            color: "#000000"
-        }
-        VideoOutput {
-            id: popupOutput
+        Loader {
             anchors.fill: parent
-            anchors.bottomMargin: 48
-        }
-        RowLayout {
-            anchors.bottom: parent.bottom
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.margins: Styles.Primitives.spacing.sp100
-            IconButton {
-                iconName: popupPlayer.playbackState === MediaPlayer.PlayingState ? "pause" : "play"
-                onClicked: popupPlayer.playbackState === MediaPlayer.PlayingState ? popupPlayer.pause() : popupPlayer.play()
+            active: videoPopup.visible && videoPopup.source.toString() !== ""
+            sourceComponent: Item {
+                MediaPlayer {
+                    id: popupPlayer
+                    source: videoPopup.source
+                    videoOutput: popupOutput
+                    audioOutput: AudioOutput { }
+                    Component.onCompleted: play()
+                }
+                Rectangle {
+                    anchors.fill: popupOutput
+                    color: "#000000"
+                }
+                VideoOutput {
+                    id: popupOutput
+                    anchors.fill: parent
+                    anchors.bottomMargin: 48
+                }
+                RowLayout {
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.margins: Styles.Primitives.spacing.sp100
+                    IconButton {
+                        iconName: popupPlayer.playbackState === MediaPlayer.PlayingState ? "pause" : "play"
+                        onClicked: popupPlayer.playbackState === MediaPlayer.PlayingState ? popupPlayer.pause() : popupPlayer.play()
+                    }
+                    Slider {
+                        Layout.fillWidth: true
+                        from: 0
+                        to: Math.max(1, popupPlayer.duration)
+                        value: popupPlayer.position
+                        onMoved: popupPlayer.position = value
+                    }
+                    IconButton { iconName: "x"; onClicked: videoPopup.close() }
+                }
             }
-            Slider {
-                Layout.fillWidth: true
-                from: 0
-                to: Math.max(1, popupPlayer.duration)
-                value: popupPlayer.position
-                onMoved: popupPlayer.position = value
-            }
-            IconButton { iconName: "x"; onClicked: videoPopup.close() }
         }
     }
 

@@ -81,6 +81,7 @@ qt_add_qml_module(cache
         src/fuzzy.h src/fuzzy.cpp
         src/history.h src/history.cpp
         src/workspace.h src/workspace.cpp
+        src/videoposters.h src/videoposters.cpp
         src/gridbackground.h src/gridbackground.cpp
         src/Fonts.h src/Fonts.cpp
     RESOURCES
@@ -146,9 +147,17 @@ if(BUILD_TESTING)
     target_link_libraries(tst_history PRIVATE Qt6::Core Qt6::Qml Qt6::Test)
     add_test(NAME tst_history COMMAND tst_history -o ${test_output_dir}/tst_history.txt,txt -o -,txt)
 
+    # Video posters, made with Qt Multimedia from a tiny clip
+    qt_add_executable(tst_posters tests/tst_posters.cpp src/videoposters.h src/videoposters.cpp)
+    target_include_directories(tst_posters PRIVATE src)
+    target_compile_definitions(tst_posters PRIVATE CACHE_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+    target_link_libraries(tst_posters PRIVATE Qt6::Gui Qt6::Qml Qt6::Multimedia Qt6::Test)
+    add_test(NAME tst_posters COMMAND tst_posters -platform offscreen
+        -o ${test_output_dir}/tst_posters.txt,txt -o -,txt)
+
     # Console programs: qt_standard_project_setup makes GUI programs on
     # Windows, which print nothing, so a failing test would leave an empty log
-    set_target_properties(tst_fuzzy tst_markdown tst_board tst_history PROPERTIES
+    set_target_properties(tst_fuzzy tst_markdown tst_board tst_history tst_posters PROPERTIES
         WIN32_EXECUTABLE FALSE MACOSX_BUNDLE FALSE)
 endif()
 
