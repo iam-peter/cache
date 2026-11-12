@@ -302,185 +302,204 @@ Item {
         }
     }
 
-    // --- Floating toolbar, for one selected item ---------------------------
-    Rectangle {
-        id: toolbar
-        visible: root.chrome && root.soleSelection && !root.canvas.moving
-        scale: root.inv
-        transformOrigin: Item.BottomLeft
-        x: 0
-        y: -height - (root.isSection ? 40 : 10) * root.inv
-        z: 12
-        width: actions.implicitWidth + 2 * Styles.Primitives.spacing.sp050
-        height: actions.implicitHeight + 2 * Styles.Primitives.spacing.sp050
-        radius: Theme.radius
-        color: Theme.s.background_elevated
-        border.color: Theme.s.stroke_subtle
-
-        Styles.Shadow {
-            z: -1
-            anchors.fill: parent
-            radius: parent.radius
-            depth: 2
-        }
-
-        component Swatch: Item {
-            id: swatch
-            required property string key
-            property color fill: Theme.swatch(key)
-            width: 20
-            height: 24
-            Rectangle {
-                anchors.centerIn: parent
-                width: 14
-                height: 14
-                radius: 7
-                color: swatch.key === "" ? Theme.card : swatch.fill
-                border.width: root.itemColor === swatch.key ? 2 : 1
-                border.color: root.itemColor === swatch.key ? Theme.accent : Theme.s.stroke_field
-            }
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: Board.setColorOf(root.canvas.selection, swatch.key)
-            }
-        }
-        component Tip: IconButton {
-            property string tip
-            ToolTip.visible: hovered && tip.length > 0
-            ToolTip.delay: 600
-            ToolTip.text: tip
-        }
-
-        Row {
-            id: actions
+    // Parts of the floating toolbar
+    component Swatch: Item {
+        id: swatch
+        required property string key
+        property color fill: Theme.swatch(key)
+        width: 20
+        height: 24
+        Rectangle {
             anchors.centerIn: parent
-            spacing: Styles.Primitives.spacing.sp025
+            width: 14
+            height: 14
+            radius: 7
+            color: swatch.key === "" ? Theme.card : swatch.fill
+            border.width: root.itemColor === swatch.key ? 2 : 1
+            border.color: root.itemColor === swatch.key ? Theme.accent : Theme.s.stroke_field
+        }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: Board.setColorOf(root.canvas.selection, swatch.key)
+        }
+    }
+    component Tip: IconButton {
+        property string tip
+        ToolTip.visible: hovered && tip.length > 0
+        ToolTip.delay: 600
+        ToolTip.text: tip
+    }
 
-            Tip {
-                iconName: "grip-vertical"
-                tip: qsTr("Drag to move")
-                MouseArea {
+    // --- Floating toolbar, for one selected item ---------------------------
+    // Built for the one selected item only: a toolbar in every card made
+    // opening a project and adding a note slow
+    Loader {
+        active: root.chrome && root.soleSelection
+        // Made between frames: the selection or the editor shows at once
+        asynchronous: true
+        z: 12
+        sourceComponent: Component {
+            Rectangle {
+                id: toolbar
+                visible: !root.canvas.moving
+                scale: root.inv
+                transformOrigin: Item.BottomLeft
+                x: 0
+                y: -height - (root.isSection ? 40 : 10) * root.inv
+                width: actions.implicitWidth + 2 * Styles.Primitives.spacing.sp050
+                height: actions.implicitHeight + 2 * Styles.Primitives.spacing.sp050
+                radius: Theme.radius
+                color: Theme.s.background_elevated
+                border.color: Theme.s.stroke_subtle
+
+                Styles.Shadow {
+                    z: -1
                     anchors.fill: parent
-                    cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-                    preventStealing: true
-                    onPressed: (mouse) => root.pressAt(mapToItem(root.parent, mouse.x, mouse.y), 0)
-                    onPositionChanged: (mouse) => root.dragTo(mapToItem(root.parent, mouse.x, mouse.y), mouse.modifiers)
-                    onReleased: root.release()
+                    radius: parent.radius
+                    depth: 2
                 }
-            }
 
-            // While editing a note: Markdown for the selection or its lines
-            Repeater {
-                model: root.formatting ? [
-                    ["h1", "heading-1", qsTr("Heading 1")], ["h2", "heading-2", qsTr("Heading 2")],
-                    ["h3", "heading-3", qsTr("Heading 3")], [],
-                    ["bold", "bold", qsTr("Bold (Ctrl+B)")], ["italic", "italic", qsTr("Italic (Ctrl+I)")],
-                    ["strike", "strikethrough", qsTr("Strikethrough")], ["inline-code", "code", qsTr("Inline code (Ctrl+E)")],
-                    ["link", "link", qsTr("Link (Ctrl+K)")], [],
-                    ["bullet", "list", qsTr("Bulleted list")], ["number", "list-ordered", qsTr("Numbered list")],
-                    ["task", "list-checks", qsTr("Checklist")], ["quote", "quote", qsTr("Quote")], [],
-                    ["codeblock", "square-code", qsTr("Code block (Ctrl+Shift+K)")], ["table", "table", qsTr("Table")],
-                    ["rule", "separator-horizontal", qsTr("Divider")]] : []
-                delegate: Loader {
-                    required property var modelData
-                    anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-                    sourceComponent: modelData.length === 0 ? formatGap : formatButton
-                    Component {
-                        id: formatGap
-                        ToolSeparator { height: 24 }
+                Row {
+                    id: actions
+                    anchors.centerIn: parent
+                    spacing: Styles.Primitives.spacing.sp025
+
+                    Tip {
+                        iconName: "grip-vertical"
+                        tip: qsTr("Drag to move")
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                            preventStealing: true
+                            onPressed: (mouse) => root.pressAt(mapToItem(root.parent, mouse.x, mouse.y), 0)
+                            onPositionChanged: (mouse) => root.dragTo(mapToItem(root.parent, mouse.x, mouse.y), mouse.modifiers)
+                            onReleased: root.release()
+                        }
                     }
-                    Component {
-                        id: formatButton
-                        Tip {
-                            iconName: modelData[1]
-                            tip: modelData[2]
-                            // The editor keeps its focus and selection
-                            focusPolicy: Qt.NoFocus
-                            onClicked: root.canvas.formatRequested(root.itemId, modelData[0])
+
+                // While editing a note: Markdown for the selection or its
+                // lines, made between frames so the editor shows at once
+                Loader {
+                    active: root.formatting
+                    asynchronous: true
+                    anchors.verticalCenter: parent.verticalCenter
+                    sourceComponent: Row {
+                        spacing: Styles.Primitives.spacing.sp025
+                        Repeater {
+                            model: [
+                                ["h1", "heading-1", qsTr("Heading 1")], ["h2", "heading-2", qsTr("Heading 2")],
+                                ["h3", "heading-3", qsTr("Heading 3")], [],
+                                ["bold", "bold", qsTr("Bold (Ctrl+B)")], ["italic", "italic", qsTr("Italic (Ctrl+I)")],
+                                ["strike", "strikethrough", qsTr("Strikethrough")], ["inline-code", "code", qsTr("Inline code (Ctrl+E)")],
+                                ["link", "link", qsTr("Link (Ctrl+K)")], [],
+                                ["bullet", "list", qsTr("Bulleted list")], ["number", "list-ordered", qsTr("Numbered list")],
+                                ["task", "list-checks", qsTr("Checklist")], ["quote", "quote", qsTr("Quote")], [],
+                                ["codeblock", "square-code", qsTr("Code block (Ctrl+Shift+K)")], ["table", "table", qsTr("Table")],
+                                ["rule", "separator-horizontal", qsTr("Divider")]]
+                            delegate: Loader {
+                                required property var modelData
+                                anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+                                sourceComponent: modelData.length === 0 ? formatGap : formatButton
+                                Component {
+                                    id: formatGap
+                                    ToolSeparator { height: 24 }
+                                }
+                                Component {
+                                    id: formatButton
+                                    Tip {
+                                        iconName: modelData[1]
+                                        tip: modelData[2]
+                                        // The editor keeps its focus and selection
+                                        focusPolicy: Qt.NoFocus
+                                        onClicked: root.canvas.formatRequested(root.itemId, modelData[0])
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-            }
 
-            // Shapes: which one
-            Repeater {
-                model: root.isShape ? [["rect", "square"], ["ellipse", "circle"], ["diamond", "diamond"], ["triangle", "triangle"]] : []
-                delegate: Tip {
-                    required property var modelData
-                    iconName: modelData[1]
-                    checkable: true
-                    checked: (root.itemShape || "rect") === modelData[0]
-                    onClicked: Board.setShape(root.index, modelData[0])
-                }
-            }
-            // Text: how big
-            Repeater {
-                model: root.isText ? [["S", 16], ["M", 24], ["L", 36], ["XL", 56]] : []
-                delegate: ToolButton {
-                    required property var modelData
-                    styles: [Styles.ButtonStyle.small]
-                    text: modelData[0]
-                    checkable: true
-                    checked: Math.round(root.itemSize) === modelData[1]
-                    onClicked: {
-                        Board.setSize(root.index, modelData[1])
-                        Board.setGeometry(root.index, root.x, root.y, root.width, modelData[1] * 1.4 + 8)
+                // Shapes: which one
+                    Repeater {
+                        model: root.isShape ? [["rect", "square"], ["ellipse", "circle"], ["diamond", "diamond"], ["triangle", "triangle"]] : []
+                        delegate: Tip {
+                            required property var modelData
+                            iconName: modelData[1]
+                            checkable: true
+                            checked: (root.itemShape || "rect") === modelData[0]
+                            onClicked: Board.setShape(root.index, modelData[0])
+                        }
+                    }
+                    // Text: how big
+                    Repeater {
+                        model: root.isText ? [["S", 16], ["M", 24], ["L", 36], ["XL", 56]] : []
+                        delegate: ToolButton {
+                            required property var modelData
+                            styles: [Styles.ButtonStyle.small]
+                            text: modelData[0]
+                            checkable: true
+                            checked: Math.round(root.itemSize) === modelData[1]
+                            onClicked: {
+                                Board.setSize(root.index, modelData[1])
+                                Board.setGeometry(root.index, root.x, root.y, root.width, modelData[1] * 1.4 + 8)
+                            }
+                        }
+                    }
+
+                    Repeater {
+                        model: root.formatting ? [] : root.isStroke || root.isText ? Theme.penColors : Theme.noteKeys
+                        delegate: Swatch {
+                            required property string modelData
+                            key: modelData
+                            fill: root.isStroke || root.isText ? Theme.penColor(modelData) : Theme.swatch(modelData)
+                        }
+                    }
+
+                    ToolSeparator { height: 24; visible: !root.isStroke }
+
+                    Tip {
+                        visible: !root.isStroke
+                        iconName: root.editing ? "check" : "pencil"
+                        tip: root.editing ? qsTr("Done (Esc)") : root.isSection ? qsTr("Rename") : qsTr("Edit (Enter)")
+                        onClicked: root.editing ? root.canvas.finishEditing() : root.canvas.startEditing(root.itemId)
+                    }
+                    Tip {
+                        visible: root.isNote
+                        iconName: "image"
+                        tip: qsTr("Add images, videos or files to this note")
+                        onClicked: root.canvas.pickMedia(root.index)
+                    }
+                    Tip {
+                        visible: root.isNote && !root.formatting
+                        iconName: "code"
+                        tip: qsTr("Add a code block (Ctrl+Shift+K while editing)")
+                        onClicked: root.canvas.insertCode(root.itemId)
+                    }
+                    Tip {
+                        visible: root.isNote && !root.formatting
+                        iconName: "copy"
+                        tip: qsTr("Copy with images, to paste into Teams or mail (Ctrl+C)")
+                        onClicked: root.canvas.copyRow(root.index)
+                    }
+                    SizePipette {
+                        visible: !root.isStroke && !root.formatting
+                        canvas: root.canvas
+                        ids: [root.itemId]
+                    }
+                    Tip {
+                        visible: root.childCount > 0 && root.connectable && !root.formatting
+                        iconName: "network"
+                        tip: qsTr("Tidy this branch")
+                        onClicked: Board.tidy(root.itemId)
+                    }
+                    Tip {
+                        visible: !root.formatting
+                        iconName: "trash-2"
+                        tip: qsTr("Delete (Del)")
+                        onClicked: root.canvas.deleteSelected()
                     }
                 }
-            }
-
-            Repeater {
-                model: root.formatting ? [] : root.isStroke || root.isText ? Theme.penColors : Theme.noteKeys
-                delegate: Swatch {
-                    required property string modelData
-                    key: modelData
-                    fill: root.isStroke || root.isText ? Theme.penColor(modelData) : Theme.swatch(modelData)
-                }
-            }
-
-            ToolSeparator { height: 24; visible: !root.isStroke }
-
-            Tip {
-                visible: !root.isStroke
-                iconName: root.editing ? "check" : "pencil"
-                tip: root.editing ? qsTr("Done (Esc)") : root.isSection ? qsTr("Rename") : qsTr("Edit (Enter)")
-                onClicked: root.editing ? root.canvas.finishEditing() : root.canvas.startEditing(root.itemId)
-            }
-            Tip {
-                visible: root.isNote
-                iconName: "image"
-                tip: qsTr("Add images, videos or files to this note")
-                onClicked: root.canvas.pickMedia(root.index)
-            }
-            Tip {
-                visible: root.isNote && !root.formatting
-                iconName: "code"
-                tip: qsTr("Add a code block (Ctrl+Shift+K while editing)")
-                onClicked: root.canvas.insertCode(root.itemId)
-            }
-            Tip {
-                visible: root.isNote && !root.formatting
-                iconName: "copy"
-                tip: qsTr("Copy with images, to paste into Teams or mail (Ctrl+C)")
-                onClicked: root.canvas.copyRow(root.index)
-            }
-            SizePipette {
-                visible: !root.isStroke && !root.formatting
-                canvas: root.canvas
-                ids: [root.itemId]
-            }
-            Tip {
-                visible: root.childCount > 0 && root.connectable && !root.formatting
-                iconName: "network"
-                tip: qsTr("Tidy this branch")
-                onClicked: Board.tidy(root.itemId)
-            }
-            Tip {
-                visible: !root.formatting
-                iconName: "trash-2"
-                tip: qsTr("Delete (Del)")
-                onClicked: root.canvas.deleteSelected()
             }
         }
     }
