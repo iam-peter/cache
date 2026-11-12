@@ -428,10 +428,13 @@ void BoardModel::markDirty()
     m_saveTimer.start();
 }
 
-void BoardModel::emitRow(int row)
+const QList<int> BoardModel::kTextRoles{TextRole, TitleRole, SearchRole};
+const QList<int> BoardModel::kGeometryRoles{PosXRole, PosYRole, WidthRole, HeightRole};
+
+void BoardModel::emitRow(int row, const QList<int> &roles)
 {
     const QModelIndex idx = index(row);
-    emit dataChanged(idx, idx);
+    emit dataChanged(idx, idx, roles);
 }
 
 // ---------------------------------------------------------------------------
@@ -593,7 +596,7 @@ void BoardModel::appendMediaToNote(int row, const QStringList &rels)
     it.text = (text.isEmpty() ? QString() : text + QStringLiteral("\n\n")) + parts.join(QStringLiteral("\n\n"))
               + QLatin1Char('\n');
     it.h = std::min(it.h + grow, std::max(it.h, 1200.0));
-    emitRow(row);
+    emitRow(row, kTextRoles + QList<int>{HeightRole});
     updateDerived();
     markDirty();
 }
@@ -667,7 +670,7 @@ void BoardModel::setGeometry(int row, double x, double y, double w, double h)
     it.y = y;
     it.w = w;
     it.h = h;
-    emitRow(row);
+    emitRow(row, kGeometryRoles);
     updateDerived();
     markDirty();
 }
@@ -679,7 +682,7 @@ void BoardModel::setText(int row, const QString &text)
     // Consecutive autosaves of one editing session form a single undo step
     pushUndo(QStringLiteral("text:") + m_items.at(row).id);
     m_items[row].text = text;
-    emitRow(row);
+    emitRow(row, kTextRoles);
     if (m_items.at(row).type == QLatin1String("section"))
         emitAll({SectionTitleRole});
     textsChanged();
@@ -692,7 +695,7 @@ void BoardModel::setColor(int row, const QString &color)
         return;
     pushUndo();
     m_items[row].color = color;
-    emitRow(row);
+    emitRow(row, {ColorRole});
     markDirty();
 }
 
@@ -707,7 +710,7 @@ void BoardModel::raise(int row)
     if (z == top && alone)
         return;
     m_items[row].z = top + 1;
-    emitRow(row);
+    emitRow(row, {ZRole});
     markDirty();
 }
 
@@ -716,7 +719,7 @@ void BoardModel::lower(int row)
     if (!valid(row))
         return;
     m_items[row].z = bottomZ() - 1;
-    emitRow(row);
+    emitRow(row, {ZRole});
     markDirty();
 }
 

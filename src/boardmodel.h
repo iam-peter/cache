@@ -313,7 +313,11 @@ public:
 
 private:
     bool valid(int row) const { return row >= 0 && row < m_state.items.size(); }
-    void emitRow(int row);
+    // Only the roles that changed: an empty list makes QML treat every role
+    // of the item as new, re-running all its bindings
+    void emitRow(int row, const QList<int> &roles = {});
+    static const QList<int> kTextRoles;     // the text, and the title and search text made of it
+    static const QList<int> kGeometryRoles; // where it is and how big
     void emitAll(const QList<int> &roles = {});
     void markDirty();
     void pushUndo(const QString &coalesceKey = {});

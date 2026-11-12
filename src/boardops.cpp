@@ -467,7 +467,7 @@ void BoardModel::setShape(int row, const QString &shape)
         return;
     pushUndo();
     m_items[row].shape = shape;
-    emitRow(row);
+    emitRow(row, {ShapeRole});
     markDirty();
 }
 
@@ -477,7 +477,7 @@ void BoardModel::setSize(int row, double size)
         return;
     pushUndo();
     m_items[row].size = size;
-    emitRow(row);
+    emitRow(row, {SizeRole});
     markDirty();
 }
 
@@ -490,7 +490,7 @@ void BoardModel::toggleTask(int row, int task)
         return;
     pushUndo();
     m_items[row].text = text;
-    emitRow(row);
+    emitRow(row, kTextRoles);
     markDirty();
 }
 
@@ -515,7 +515,7 @@ void BoardModel::moveItems(const QVariantList &positions)
         }
         m_items[row].x = x;
         m_items[row].y = y;
-        emitRow(row);
+        emitRow(row, {PosXRole, PosYRole});
     }
     if (pushed) {
         updateDerived();
@@ -618,7 +618,7 @@ void BoardModel::setColorOf(const QStringList &ids, const QString &color)
             pushed = true;
         }
         m_items[row].color = color;
-        emitRow(row);
+        emitRow(row, {ColorRole});
     }
     if (pushed)
         markDirty();
@@ -677,7 +677,7 @@ bool BoardModel::matchSize(const QStringList &ids, const QString &sourceId, cons
         }
         m_items[row].w = newW;
         m_items[row].h = newH;
-        emitRow(row);
+        emitRow(row, {WidthRole, HeightRole});
     }
     if (pushed)
         markDirty();
@@ -912,7 +912,7 @@ QString BoardModel::addSibling(const QString &id)
         const int r = indexOf(sibling);
         if (sibling != added && sibling != id && m_items.at(r).y >= y - 1) {
             m_items[r].y += shift;
-            emitRow(r);
+            emitRow(r, {PosYRole});
         }
     }
     updateDerived();
@@ -926,7 +926,7 @@ void BoardModel::toggleCollapsed(const QString &id)
         return;
     pushUndo();
     m_items[row].collapsed = !m_items.at(row).collapsed;
-    emitRow(row);
+    emitRow(row, {CollapsedRole});
     structureChanged();
 }
 

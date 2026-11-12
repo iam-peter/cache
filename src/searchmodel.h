@@ -8,6 +8,7 @@
 #include <QtQml/qqmlregistration.h>
 
 #include "fuzzy.h"
+#include "markdown.h"
 
 class BoardModel;
 class Workspace;
@@ -110,7 +111,13 @@ private:
         QDateTime modified;
         QString text;
         QString title;
-        Fuzzy::Index index;
+        QList<Markdown::Task> tasks;
+        QStringList linkTargets; // its [[links]]
+        // Built when a search first needs it, not at every keystroke's save
+        mutable Fuzzy::Index index;
+        mutable bool indexed = false;
+        void setText(const QString &t);
+        const Fuzzy::Index &fuzzy() const;
     };
     // A note of the index
     struct Entry {
@@ -124,7 +131,14 @@ private:
     void connectSources();
     void run();
     void touch();
+    // Notes on disk may have changed too: another project was open, the
+    // workspace changed
+    void touchDisk();
     const QList<Entry> &index();
+    // The index as it is, for bindings: the rebuild after a change comes
+    // with the revision that makes them ask again, not inside them
+    const QList<Entry> &currentIndex();
+    void scanDisk();
     int resolve(const QString &target, const QString &fromProject); // index of the Entry, or -1
     // Whether the note has every term; its score ranks the results and
     // `words` gets what to highlight
@@ -141,8 +155,22 @@ private:
     QTimer m_touchTimer;
     QList<Entry> m_entries;
     QHash<QString, QList<int>> m_backlinks; // projectPath \n id -> entries linking to it
+    QHash<QString, QList<int>> m_byTitle;   // title, lower case -> entries
+    // The projects from the last look at the disk: name, path, and the
+    // notes of those that weren't open
+    struct DiskProject {
+        QString name;
+        QString path;
+        QList<Entry> entries;
+    };
+    QList<DiskProject> m_disk;
+    QString m_diskOpenPath; // the project that was open then
     bool m_indexDirty = true;
-    qint64 m_indexedAt = 0;
+    bool m_diskDirty = true;
+    qint64 m_diskScannedAt = 0;
+    int m_generation = 0; // counts rebuilds of the index
+    QVariantList m_openTasks;
+    int m_openTasksGeneration = -1;
     int m_revision = 0;
     BoardModel *m_board = nullptr;
     Workspace *m_workspace = nullptr;

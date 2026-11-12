@@ -151,7 +151,7 @@ Pane {
             visible: !Search.active
             TabButton { text: qsTr("Notes (%1)").arg(documentList.count) }
             TabButton {
-                readonly property int open: (Search.revision, Board.count, Search.openTasks().length)
+                readonly property int open: (Search.revision, Search.openTasks().length)
                 text: open > 0 ? qsTr("Open tasks (%1)").arg(open) : qsTr("Open tasks")
             }
         }
@@ -209,7 +209,6 @@ Pane {
                 if (!visible)
                     return []
                 Search.revision
-                Board.count
                 const rows = []
                 let project = ""
                 for (const task of Search.openTasks()) {

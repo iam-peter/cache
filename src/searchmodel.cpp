@@ -33,6 +33,7 @@ SearchModel::SearchModel(QObject *parent)
     m_touchTimer.setInterval(300);
     connect(&m_touchTimer, &QTimer::timeout, this, [this] {
         m_indexDirty = true;
+        index();
         ++m_revision;
         emit revisionChanged();
     });
@@ -92,6 +93,9 @@ void SearchModel::setQuery(const QString &query)
         m_folded.clear();
         for (const QString &term : terms)
             m_folded << Fuzzy::fold(term);
+        // Someone searching: notes changed on disk in the meantime count
+        if (QDateTime::currentMSecsSinceEpoch() - m_diskScannedAt > 3000)
+            m_diskDirty = true;
         m_timer.start();
     }
     emit queryChanged();
@@ -105,6 +109,12 @@ void SearchModel::refresh()
 
 // Something changed: the index is rebuilt on its next use, and bindings
 // that read revision ask again
+void SearchModel::touchDisk()
+{
+    m_diskDirty = true;
+    touch();
+}
+
 void SearchModel::touch()
 {
     m_indexDirty = true;
@@ -221,90 +231,136 @@ void SearchModel::connectSources()
                 });
         connect(m_board, &QAbstractItemModel::rowsInserted, this, &SearchModel::touch);
         connect(m_board, &QAbstractItemModel::rowsRemoved, this, &SearchModel::touch);
-        connect(m_board, &QAbstractItemModel::modelReset, this, &SearchModel::touch);
+        // Another project: the one open before is on disk now
+        connect(m_board, &QAbstractItemModel::modelReset, this, &SearchModel::touchDisk);
     }
     if (m_workspace) {
-        connect(m_workspace, &Workspace::rootPathChanged, this, &SearchModel::touch);
-        connect(m_workspace, &QAbstractItemModel::modelReset, this, &SearchModel::touch);
+        connect(m_workspace, &Workspace::rootPathChanged, this, &SearchModel::touchDisk);
+        connect(m_workspace, &QAbstractItemModel::modelReset, this, &SearchModel::touchDisk);
     }
 }
 
-// Every note of every project, the open project's from memory. Rebuilt
-// when something changed or a few seconds passed (files elsewhere may have
-// changed); unchanged files come from the cache.
-const QList<SearchModel::Entry> &SearchModel::index()
+void SearchModel::CachedNote::setText(const QString &t)
 {
-    connectSources();
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (!m_indexDirty && now - m_indexedAt < 3000)
-        return m_entries;
-    m_indexDirty = false;
-    m_indexedAt = now;
-    m_entries.clear();
-    m_backlinks.clear();
-    if (!m_workspace)
-        return m_entries;
+    text = t;
+    title = BoardModel::titleForText(t);
+    tasks = Markdown::tasks(t);
+    linkTargets.clear();
+    if (t.contains(QLatin1String("[[")))
+        for (const Markdown::WikiLink &link : Markdown::wikiLinks(t))
+            linkTargets << link.target;
+    indexed = false;
+}
 
-    const QString open = m_board ? QDir(m_board->projectPath()).absolutePath() : QString();
+const Fuzzy::Index &SearchModel::CachedNote::fuzzy() const
+{
+    if (!indexed) {
+        index = Fuzzy::index(text);
+        indexed = true;
+    }
+    return index;
+}
+
+// The notes of the projects that aren't open, from disk; unchanged files
+// come from the cache
+void SearchModel::scanDisk()
+{
+    m_diskDirty = false;
+    m_diskScannedAt = QDateTime::currentMSecsSinceEpoch();
+    m_disk.clear();
+    if (!m_workspace)
+        return;
+    m_diskOpenPath = m_board ? QDir(m_board->projectPath()).absolutePath() : QString();
     QSet<QString> seen;
-    QSet<QString> live;
     const QFileInfoList projects = QDir(m_workspace->rootPath())
                                        .entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase);
     for (const QFileInfo &project : projects) {
         if (project.fileName().startsWith(QLatin1Char('.')))
             continue;
-        const QString path = project.absoluteFilePath();
-        if (m_board && path == open) {
-            for (const BoardItem &it : m_board->items()) {
-                if (it.type != QLatin1String("note"))
-                    continue;
-                live.insert(it.id);
-                CachedNote &cached = m_openCache[it.id];
-                if (cached.text != it.text || cached.title.isEmpty()) {
-                    cached.text = it.text;
-                    cached.title = BoardModel::titleForText(it.text);
-                    cached.index = Fuzzy::index(it.text);
+        DiskProject dp{project.fileName(), project.absoluteFilePath(), {}};
+        if (dp.path != m_diskOpenPath) {
+            const QFileInfoList notes = QDir(QDir(dp.path).filePath(QStringLiteral("notes")))
+                                            .entryInfoList({QStringLiteral("*.md")}, QDir::Files);
+            for (const QFileInfo &note : notes) {
+                const QString file = note.absoluteFilePath();
+                seen.insert(file);
+                CachedNote &cached = m_cache[file];
+                if (cached.modified != note.lastModified() || cached.title.isEmpty()) {
+                    QFile f(file);
+                    cached.setText(f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString());
+                    cached.modified = note.lastModified();
                 }
-                m_entries.append({project.fileName(), path, it.id, true, &cached});
+                dp.entries.append({dp.name, dp.path, note.completeBaseName(), false, nullptr});
             }
-            continue;
         }
-        const QFileInfoList notes = QDir(QDir(path).filePath(QStringLiteral("notes")))
-                                        .entryInfoList({QStringLiteral("*.md")}, QDir::Files);
-        for (const QFileInfo &note : notes) {
-            const QString file = note.absoluteFilePath();
-            seen.insert(file);
-            CachedNote &cached = m_cache[file];
-            if (cached.modified != note.lastModified() || cached.title.isEmpty()) {
-                QFile f(file);
-                cached.text = f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
-                cached.title = BoardModel::titleForText(cached.text);
-                cached.index = Fuzzy::index(cached.text);
-                cached.modified = note.lastModified();
-            }
-            m_entries.append({project.fileName(), path, note.completeBaseName(), false, &cached});
-        }
+        m_disk.append(dp);
     }
-    // Forget notes that are gone. Entries point into the caches, so this
-    // happens after the last insertion and before anything reads them.
     for (auto it = m_cache.begin(); it != m_cache.end();)
         it = seen.contains(it.key()) ? std::next(it) : m_cache.erase(it);
-    for (auto it = m_openCache.begin(); it != m_openCache.end();)
-        it = live.contains(it.key()) ? std::next(it) : m_openCache.erase(it);
-    // QHash may have moved its nodes while growing: point the entries again
-    for (Entry &e : m_entries) {
-        e.note = e.current ? &m_openCache[e.id]
-                           : &m_cache[QDir(QDir(e.projectPath).filePath(QStringLiteral("notes"))).filePath(e.id + QStringLiteral(".md"))];
+    // Only now that the cache is done growing and shrinking: where each
+    // entry's note is
+    for (DiskProject &dp : m_disk) {
+        for (Entry &e : dp.entries)
+            e.note = &m_cache[QDir(QDir(dp.path).filePath(QStringLiteral("notes"))).filePath(e.id + QStringLiteral(".md"))];
     }
+}
+
+// Every note of every project, the open project's from memory. After an
+// edit only the open project is looked at again; the disk when another
+// project was opened, the workspace changed, or half a minute passed
+// (files may have changed underneath).
+const QList<SearchModel::Entry> &SearchModel::index()
+{
+    connectSources();
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const QString open = m_board ? QDir(m_board->projectPath()).absolutePath() : QString();
+    const bool stale = now - m_diskScannedAt > 30000;
+    if (!m_indexDirty && !m_diskDirty && !stale)
+        return m_entries;
+    if (m_diskDirty || stale || open != m_diskOpenPath)
+        scanDisk();
+    m_indexDirty = false;
+    ++m_generation;
+
+    // The open project, from the board
+    QList<Entry> openEntries;
+    if (m_board) {
+        QSet<QString> live;
+        for (const BoardItem &it : m_board->items()) {
+            if (it.type != QLatin1String("note"))
+                continue;
+            live.insert(it.id);
+            CachedNote &cached = m_openCache[it.id];
+            if (cached.text != it.text || cached.title.isEmpty())
+                cached.setText(it.text);
+        }
+        for (auto it = m_openCache.begin(); it != m_openCache.end();)
+            it = live.contains(it.key()) ? std::next(it) : m_openCache.erase(it);
+        const QString name = QFileInfo(open).fileName();
+        for (const BoardItem &it : m_board->items()) {
+            if (it.type == QLatin1String("note"))
+                openEntries.append({name, open, it.id, true, &m_openCache[it.id]});
+        }
+    }
+
+    m_entries.clear();
+    m_backlinks.clear();
+    m_byTitle.clear();
+    for (const DiskProject &dp : std::as_const(m_disk)) {
+        if (dp.path == open)
+            m_entries += openEntries;
+        else
+            m_entries += dp.entries;
+    }
+    for (int i = 0; i < m_entries.size(); ++i)
+        m_byTitle[m_entries.at(i).note->title.toLower()].append(i);
 
     // Who links to whom
     for (int i = 0; i < m_entries.size(); ++i) {
         const Entry &e = m_entries.at(i);
-        if (!e.note->text.contains(QLatin1String("[[")))
-            continue;
         QSet<int> targets;
-        for (const Markdown::WikiLink &link : Markdown::wikiLinks(e.note->text)) {
-            const int target = resolve(link.target, e.projectPath);
+        for (const QString &linkTarget : e.note->linkTargets) {
+            const int target = resolve(linkTarget, e.projectPath);
             if (target >= 0 && target != i && !targets.contains(target)) {
                 targets.insert(target);
                 const Entry &t = m_entries.at(target);
@@ -313,6 +369,11 @@ const QList<SearchModel::Entry> &SearchModel::index()
         }
     }
     return m_entries;
+}
+
+const QList<SearchModel::Entry> &SearchModel::currentIndex()
+{
+    return m_generation > 0 ? m_entries : index();
 }
 
 int SearchModel::resolve(const QString &target, const QString &fromProject)
@@ -331,7 +392,7 @@ int SearchModel::resolve(const QString &target, const QString &fromProject)
         }
     }
     int elsewhere = -1;
-    for (int i = 0; i < m_entries.size(); ++i) {
+    for (const int i : m_byTitle.value(title.toLower())) {
         const Entry &e = m_entries.at(i);
         if (e.note->title.compare(title, Qt::CaseInsensitive) != 0)
             continue;
@@ -350,7 +411,7 @@ int SearchModel::resolve(const QString &target, const QString &fromProject)
 
 QVariantMap SearchModel::findNote(const QString &target)
 {
-    index();
+    currentIndex();
     const QString open = m_board ? QDir(m_board->projectPath()).absolutePath() : QString();
     const int i = resolve(target, open);
     if (i < 0)
@@ -430,13 +491,16 @@ QVariantList SearchModel::backlinks(const QString &projectPath, const QString &n
 
 int SearchModel::backlinkCount(const QString &projectPath, const QString &noteId)
 {
-    index();
+    currentIndex();
     return int(m_backlinks.value(QDir(projectPath).absolutePath() + QLatin1Char('\n') + noteId).size());
 }
 
 QVariantList SearchModel::openTasks()
 {
-    index();
+    currentIndex();
+    // The same list for every binding that asks before the next change
+    if (m_openTasksGeneration == m_generation)
+        return m_openTasks;
     QList<Entry> entries = m_entries;
     std::stable_sort(entries.begin(), entries.end(), [](const Entry &a, const Entry &b) {
         if (a.current != b.current)
@@ -445,7 +509,7 @@ QVariantList SearchModel::openTasks()
     });
     QVariantList list;
     for (const Entry &e : std::as_const(entries)) {
-        const QList<Markdown::Task> tasks = Markdown::tasks(e.note->text);
+        const QList<Markdown::Task> &tasks = e.note->tasks;
         for (int n = 0; n < tasks.size(); ++n) {
             if (tasks.at(n).done)
                 continue;
@@ -460,6 +524,8 @@ QVariantList SearchModel::openTasks()
             });
         }
     }
+    m_openTasks = list;
+    m_openTasksGeneration = m_generation;
     return list;
 }
 
@@ -497,7 +563,7 @@ void SearchModel::run()
             const CachedNote &note = *e.note;
             int score = 0;
             QStringList words;
-            if (!match(note.title, note.index, &score, &words))
+            if (!match(note.title, note.fuzzy(), &score, &words))
                 continue;
             words.removeDuplicates();
             for (const QString &word : std::as_const(words)) {

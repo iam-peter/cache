@@ -502,7 +502,7 @@ void BoardModel::appendToNote(int row, const QString &markdown)
         text.chop(1);
     it.text = (text.isEmpty() ? QString() : text + QStringLiteral("\n\n")) + markdown + QLatin1Char('\n');
     it.h = std::min(it.h + estimateHeight(markdown, it.w) - 40, std::max(it.h, 1200.0));
-    emitRow(row);
+    emitRow(row, kTextRoles + QList<int>{HeightRole});
     updateDerived();
     textsChanged();
     markDirty();
@@ -585,7 +585,7 @@ void BoardModel::replaceInNotes(const QString &before, const QString &after)
         if (m_items.at(row).type != QLatin1String("note") || !m_items.at(row).text.contains(before))
             continue;
         m_items[row].text.replace(before, after);
-        emitRow(row);
+        emitRow(row, kTextRoles);
         changed = true;
     }
     if (changed) {

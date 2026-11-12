@@ -253,8 +253,10 @@ Item {
             spacing: Styles.Primitives.spacing.sp100
 
             Repeater {
-                // Search matches are highlighted while a search is on
-                model: body.card.itemText.trim().length === 0 ? [] : Board.renderSegments(
+                // Search matches are highlighted while a search is on. Not
+                // while editing: the editor covers it, and laying the text out
+                // again at every autosave made typing stutter
+                model: body.editing || body.card.itemText.trim().length === 0 ? [] : Board.renderSegments(
                            body.card.itemText, Math.max(40, flick.width - 2), body.textSize, Theme.renderColors,
                            Search.highlightWords)
 
