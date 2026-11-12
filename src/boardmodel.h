@@ -8,6 +8,7 @@
 #include <QRectF>
 #include <QSet>
 #include <QSizeF>
+#include <QThreadPool>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantMap>
@@ -150,6 +151,7 @@ public:
     // Project lifecycle
     Q_INVOKABLE void load(const QString &projectDir);
     Q_INVOKABLE void close();
+    // Writes what changed now, after any writes under way in the background
     Q_INVOKABLE void save();
 
     // Creating items. Media positions are the centre of the new item.
@@ -375,6 +377,19 @@ private:
     double m_viewY = 0;
     double m_viewZoom = 1;
     QTimer m_saveTimer;
+    // Autosaves write their files here, one after the other, so saving
+    // (which syncs every file to disk) never holds up typing
+    QThreadPool m_writer;
+    struct FileWrite {
+        QString path;
+        QByteArray data;
+        bool remove = false;
+    };
+    // What has changed since the last save, as files to write or remove;
+    // the model counts as saved from here on
+    QList<FileWrite> takeWrites();
+    static bool writeFiles(const QList<FileWrite> &writes);
+    void saveInBackground();
     mutable QHash<QString, QSizeF> m_imageSizes;
     QNetworkAccessManager *m_network = nullptr;
 

@@ -12,6 +12,7 @@
 #include <QTemporaryDir>
 #include <QBuffer>
 #include <QImage>
+#include <QSignalSpy>
 #include <QTest>
 
 // Serves /page (an HTML page with a title) and /pic.png on localhost
@@ -74,6 +75,36 @@ private slots:
         QFont font(QStringLiteral("Inter"));
         font.setPixelSize(14);
         QGuiApplication::setFont(font);
+    }
+
+    // Autosaves write in the background; anything that reads the files
+    // (save, loading another project, quitting) waits for them
+    void autosaveInBackground()
+    {
+        const QString path = project("autosave");
+        const auto noteText = [&](const QString &id) {
+            QFile f(path + QStringLiteral("/notes/%1.md").arg(id));
+            return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
+        };
+        BoardModel board;
+        board.load(path);
+        const int row = board.addNote(0, 0, QStringLiteral("# First"));
+        const QString id = board.get(row).value("id").toString();
+        QSignalSpy saved(&board, &BoardModel::saved);
+        // The save timer's work, as typing pauses
+        board.setText(row, QStringLiteral("# Second"));
+        QTRY_COMPARE_WITH_TIMEOUT(noteText(id), QStringLiteral("# Second"), 5000);
+        QTRY_VERIFY(saved.count() > 0);
+
+        // An explicit save is done when it returns, background writes first
+        board.setText(row, QStringLiteral("# Third"));
+        board.save();
+        QCOMPARE(noteText(id), QStringLiteral("# Third"));
+
+        // Switching projects writes the old one before reading the new
+        board.setText(row, QStringLiteral("# Fourth"));
+        board.load(project("autosave-other"));
+        QCOMPARE(noteText(id), QStringLiteral("# Fourth"));
     }
 
     void linksPersist()

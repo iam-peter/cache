@@ -13,6 +13,7 @@ History::History(QObject *parent)
     , m_git(QStandardPaths::findExecutable(QStringLiteral("git")))
 {
     m_enabled = QSettings().value(QStringLiteral("history/enabled"), true).toBool();
+    m_pool.setMaxThreadCount(1);
     m_timer.setSingleShot(true);
     m_timer.setInterval(20 * 1000);
     connect(&m_timer, &QTimer::timeout, this, &History::flush);
@@ -22,6 +23,12 @@ History::History(QObject *parent)
 History::~History()
 {
     flush();
+    waitForCommits();
+}
+
+void History::waitForCommits()
+{
+    m_pool.waitForDone();
 }
 
 void History::setEnabled(bool enabled)
@@ -115,13 +122,21 @@ void History::flush()
 {
     m_timer.stop();
     const QStringList projects = std::exchange(m_pendingProjects, {});
-    for (const QString &project : projects)
-        commit(m_pendingRoot, project, QStringLiteral("Update %1").arg(project));
+    if (projects.isEmpty())
+        return;
+    const QString root = m_pendingRoot;
+    // commit() only reads members that never change and runs git; its
+    // signal reaches QML queued
+    m_pool.start([this, root, projects] {
+        for (const QString &project : projects)
+            commit(root, project, QStringLiteral("Update %1").arg(project));
+    });
 }
 
 QVariantList History::versions(const QString &workspaceRoot, const QString &project)
 {
     flush();
+    waitForCommits();
     QVariantList list;
     QByteArray out;
     if (m_git.isEmpty() || !run(workspaceRoot, {QStringLiteral("log"), QStringLiteral("-n"), QStringLiteral("300"),
@@ -147,6 +162,7 @@ bool History::restore(const QString &workspaceRoot, const QString &project, cons
     if (m_git.isEmpty() || sha.isEmpty())
         return false;
     flush();
+    waitForCommits();
     commit(workspaceRoot, project, QStringLiteral("Update %1").arg(project));
     const QString path = project + QLatin1Char('/');
     // Without overlay: files added since that version go away too

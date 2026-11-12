@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QProcess>
 #include <QTemporaryDir>
+#include <QSignalSpy>
 #include <QTest>
 
 class TestHistory : public QObject
@@ -50,6 +51,23 @@ private slots:
         QVERIFY(!QFile::exists(root.filePath("P/notes/b.md"))); // added later: gone
         // The restore is a version of its own, so it can be undone
         QCOMPARE(history.versions(root.path(), "P").size(), 3);
+    }
+
+    // A scheduled version is committed in the background; asking for the
+    // versions waits for it
+    void commitsInTheBackground()
+    {
+        History history;
+        if (!history.available())
+            QSKIP("git is not installed");
+        QTemporaryDir root;
+        write(root.filePath("P/notes/a.md"), "first");
+        history.schedule(root.path(), "P");
+        QSignalSpy committed(&history, &History::committed);
+        history.flush(); // returns before git is done
+        QCOMPARE(history.versions(root.path(), "P").size(), 1);
+        QTRY_COMPARE(committed.count(), 1); // emitted on the git thread
+        QCOMPARE(committed.first().first().toString(), QStringLiteral("P"));
     }
 
     void ownRepositoryInsideAnother()

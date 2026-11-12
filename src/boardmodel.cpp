@@ -20,6 +20,7 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QMimeData>
+#include <QPointer>
 #include <QSaveFile>
 #include <QSet>
 #include <QTextBlock>
@@ -87,7 +88,8 @@ BoardModel::BoardModel(QObject *parent)
 {
     m_saveTimer.setSingleShot(true);
     m_saveTimer.setInterval(700);
-    connect(&m_saveTimer, &QTimer::timeout, this, &BoardModel::save);
+    m_writer.setMaxThreadCount(1);
+    connect(&m_saveTimer, &QTimer::timeout, this, &BoardModel::saveInBackground);
     connect(qApp, &QCoreApplication::aboutToQuit, this, &BoardModel::save);
 }
 
@@ -322,40 +324,79 @@ void BoardModel::close()
 void BoardModel::save()
 {
     m_saveTimer.stop();
-    if (!m_dirty || m_projectPath.isEmpty())
-        return;
-    QDir dir(m_projectPath);
-    if (!dir.exists()) { // project was removed underneath us
-        m_dirty = false;
-        return;
-    }
-    dir.mkpath(QStringLiteral("notes"));
+    m_writer.waitForDone();
+    const QList<FileWrite> writes = takeWrites();
+    if (!writes.isEmpty() && writeFiles(writes))
+        emit saved();
+}
 
+void BoardModel::saveInBackground()
+{
+    m_saveTimer.stop();
+    const QList<FileWrite> writes = takeWrites();
+    if (writes.isEmpty())
+        return;
+    const QPointer<BoardModel> self(this);
+    m_writer.start([writes, self] {
+        const bool ok = writeFiles(writes);
+        QMetaObject::invokeMethod(qApp, [self, ok] {
+            if (!self)
+                return;
+            if (ok) {
+                emit self->saved();
+            } else { // try again, writing every note
+                self->m_savedTexts.clear();
+                self->markDirty();
+            }
+        }, Qt::QueuedConnection);
+    });
+}
+
+bool BoardModel::writeFiles(const QList<FileWrite> &writes)
+{
+    bool ok = true;
+    for (const FileWrite &w : writes) {
+        if (w.remove) {
+            QFile::remove(w.path);
+            continue;
+        }
+        QDir().mkpath(QFileInfo(w.path).absolutePath());
+        QSaveFile file(w.path);
+        ok = file.open(QIODevice::WriteOnly) && file.write(w.data) == w.data.size() && file.commit() && ok;
+    }
+    return ok;
+}
+
+QList<BoardModel::FileWrite> BoardModel::takeWrites()
+{
+    if (!m_dirty || m_projectPath.isEmpty())
+        return {};
+    QDir dir(m_projectPath);
+    m_dirty = false;
+    if (!dir.exists()) // project was removed underneath us
+        return {};
+
+    QList<FileWrite> writes;
     QSet<QString> liveNotes;
     QJsonArray items;
     for (const BoardItem &it : std::as_const(m_items)) {
-        const QJsonObject o = toJson(it, false);
         if (it.type == QLatin1String("note")) {
-            const QString rel = QStringLiteral("notes/%1.md").arg(it.id);
             liveNotes.insert(it.id);
             const auto saved = m_savedTexts.constFind(it.id);
-            if (saved == m_savedTexts.cend() || *saved != it.text || !QFile::exists(dir.filePath(rel))) {
-                QSaveFile md(dir.filePath(rel));
-                if (md.open(QIODevice::WriteOnly)) {
-                    md.write(it.text.toUtf8());
-                    if (md.commit())
-                        m_savedTexts.insert(it.id, it.text);
-                }
+            const QString path = dir.filePath(QStringLiteral("notes/%1.md").arg(it.id));
+            if (saved == m_savedTexts.cend() || *saved != it.text || !QFile::exists(path)) {
+                writes.append({path, it.text.toUtf8()});
+                m_savedTexts.insert(it.id, it.text);
             }
         }
-        items.append(o);
+        items.append(toJson(it, false));
     }
 
     // Notes deleted from the canvas lose their Markdown file. Assets are kept,
     // so undo and duplicates never point at a missing file.
     for (auto i = m_savedTexts.begin(); i != m_savedTexts.end();) {
         if (!liveNotes.contains(i.key())) {
-            QFile::remove(dir.filePath(QStringLiteral("notes/%1.md").arg(i.key())));
+            writes.append({dir.filePath(QStringLiteral("notes/%1.md").arg(i.key())), {}, true});
             i = m_savedTexts.erase(i);
         } else {
             ++i;
@@ -377,14 +418,8 @@ void BoardModel::save()
                                                 {QStringLiteral("zoom"), m_viewZoom},
                                             });
     }
-    QSaveFile file(dir.filePath(QStringLiteral("canvas.json")));
-    if (file.open(QIODevice::WriteOnly)) {
-        file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
-        if (file.commit()) {
-            m_dirty = false;
-            emit saved();
-        }
-    }
+    writes.append({dir.filePath(QStringLiteral("canvas.json")), QJsonDocument(root).toJson(QJsonDocument::Indented)});
+    return writes;
 }
 
 void BoardModel::markDirty()

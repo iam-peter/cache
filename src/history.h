@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QThreadPool>
 #include <QTimer>
 #include <QVariantList>
 #include <QtQml/qqmlregistration.h>
@@ -29,8 +30,10 @@ public:
 
     // Commits the project's changes in a while; again calls restart the wait
     Q_INVOKABLE void schedule(const QString &workspaceRoot, const QString &project);
-    // Commits what is waiting now
+    // Commits what is waiting, in the background: git never holds up typing
     Q_INVOKABLE void flush();
+    // Until the commits under way are done
+    void waitForCommits();
     // The project's versions, newest first: sha, time (ms since the epoch),
     // subject
     Q_INVOKABLE QVariantList versions(const QString &workspaceRoot, const QString &project);
@@ -53,6 +56,8 @@ private:
     QString m_git;
     bool m_enabled = true;
     QTimer m_timer;
+    // One commit after the other, off the GUI thread
+    QThreadPool m_pool;
     QString m_pendingRoot;
     QStringList m_pendingProjects;
 };
