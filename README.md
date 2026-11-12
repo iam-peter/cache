@@ -197,6 +197,10 @@ cmake --build build
 ./build/cache
 ```
 
+With `CACHE_TRACE_LATENCY=1` set, Cache prints how long each key press
+and click takes until a frame showing it is on screen, for checking that
+typing stays as quick as in a plain editor.
+
 `--workspace <folder>` opens another workspace for that start without
 saving it, and `--grab <png>` saves a screenshot of the window and quits
 (the smoke tests of the packages use both). Cache used to be called Note

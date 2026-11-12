@@ -1,5 +1,8 @@
 #include <QCommandLineParser>
 #include <QDir>
+#include <QElapsedTimer>
+#include <QKeyEvent>
+#include <QMutex>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QIcon>
@@ -38,6 +41,63 @@ void carryOverNoteCanvas()
             settings.setValue(QStringLiteral("workspace/root"), oldRoot);
     }
 }
+
+// CACHE_TRACE_LATENCY=1: how long each key press and click takes until a
+// frame showing it is on screen, printed to stderr. For measuring how
+// responsive typing and editing feel.
+class LatencyProbe : public QObject
+{
+public:
+    explicit LatencyProbe(QQuickWindow *window)
+        : QObject(window)
+    {
+        m_clock.start();
+        window->installEventFilter(this);
+        connect(window, &QQuickWindow::frameSwapped, this, [this] {
+            const qint64 now = m_clock.nsecsElapsed();
+            QList<Event> pending;
+            {
+                const QMutexLocker lock(&m_mutex);
+                pending.swap(m_pending);
+            }
+            for (const Event &e : std::as_const(pending)) {
+                const QByteArray ms = QByteArray::number((now - e.at) / 1e6, 'f', 1);
+                fprintf(stderr, "latency %s %s ms\n", e.what, ms.constData());
+            }
+        }, Qt::DirectConnection);
+    }
+
+protected:
+    bool eventFilter(QObject *, QEvent *event) override
+    {
+        const char *what = nullptr;
+        // Every key press is first offered to shortcuts, and one a shortcut
+        // takes never arrives as a key press
+        if (event->type() == QEvent::ShortcutOverride) {
+            const auto *key = static_cast<QKeyEvent *>(event);
+            const bool modifier = key->key() == Qt::Key_Control || key->key() == Qt::Key_Shift
+                                  || key->key() == Qt::Key_Alt || key->key() == Qt::Key_Meta;
+            if (!modifier && !key->isAutoRepeat())
+                what = "key";
+        } else if (event->type() == QEvent::MouseButtonPress) {
+            what = "click";
+        }
+        if (what) {
+            const QMutexLocker lock(&m_mutex);
+            m_pending.append({what, m_clock.nsecsElapsed()});
+        }
+        return false;
+    }
+
+private:
+    struct Event {
+        const char *what;
+        qint64 at;
+    };
+    QElapsedTimer m_clock;
+    QMutex m_mutex; // frames are swapped on the render thread
+    QList<Event> m_pending;
+};
 
 } // namespace
 
@@ -83,6 +143,12 @@ int main(int argc, char *argv[])
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
         [] { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
     engine.loadFromModule("Cache", "Main");
+
+    if (qEnvironmentVariableIsSet("CACHE_TRACE_LATENCY")) {
+        const auto roots = engine.rootObjects();
+        if (auto *window = roots.isEmpty() ? nullptr : qobject_cast<QQuickWindow *>(roots.first()))
+            new LatencyProbe(window);
+    }
 
     if (parser.isSet(grabOption)) {
         const QString out = parser.value(grabOption);
