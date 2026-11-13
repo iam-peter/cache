@@ -1657,12 +1657,7 @@ Item {
         property int row: -1
         readonly property var item: row >= 0 ? Board.get(row) : ({})
         MenuItem { text: qsTr("Edit"); enabled: cardMenu.item.type !== "stroke"; onTriggered: view.startEditing(cardMenu.item.id) }
-        MenuItem {
-            text: view.selection.length > 1 ? qsTr("Copy %1 items").arg(view.selection.length)
-                                            : cardMenu.item.type === "note" ? qsTr("Copy note with images") : qsTr("Copy")
-            onTriggered: view.copySelected()
-        }
-        MenuItem { text: qsTr("Copy as picture"); onTriggered: view.exportImage(view.selection, "copy") }
+        // Every way to copy, the rich copy for Teams among them
         CopyMenu { canvas: view }
         MenuItem {
             text: view.selection.length > 1 ? qsTr("Fit selection") : qsTr("Zoom to it")
