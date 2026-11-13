@@ -16,11 +16,16 @@ Item {
     implicitWidth: size
     implicitHeight: size
 
-    IconImage {
+    // Only with an icon: an IconImage without one asks the desktop's icon
+    // theme for a nameless icon, which searches every folder of it
+    Loader {
         anchors.fill: parent
-        source: Icons.source(icon.name)
-        sourceSize: Qt.size(icon.size, icon.size)
-        color: icon.color
-        fillMode: Image.PreserveAspectFit
+        active: icon.name !== ""
+        sourceComponent: IconImage {
+            source: Icons.source(icon.name)
+            sourceSize: Qt.size(icon.size, icon.size)
+            color: icon.color
+            fillMode: Image.PreserveAspectFit
+        }
     }
 }
