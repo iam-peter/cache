@@ -167,6 +167,9 @@ Item {
             if (mouse.button === Qt.LeftButton)
                 root.release()
         }
+        // Taken away mid-drag (a popup, the window losing the mouse): the
+        // move or connector still ends, or the canvas would stay moving
+        onCanceled: root.release()
         onDoubleClicked: (mouse) => {
             if (mouse.button === Qt.LeftButton && !root.isStroke)
                 root.canvas.startEditing(root.itemId)
@@ -280,6 +283,7 @@ Item {
                 }
                 onPositionChanged: (mouse) => root.dragTo(mapToItem(root.parent, mouse.x, mouse.y), mouse.modifiers)
                 onReleased: root.release()
+                onCanceled: root.release()
             }
         }
     }
@@ -326,7 +330,7 @@ Item {
     }
     component Tip: IconButton {
         property string tip
-        ToolTip.visible: hovered && tip.length > 0
+        ToolTip.visible: hovered && tip.length > 0 && !root.canvas.moving
         ToolTip.delay: 600
         ToolTip.text: tip
     }
@@ -342,7 +346,9 @@ Item {
         sourceComponent: Component {
             Rectangle {
                 id: toolbar
-                visible: !root.canvas.moving
+                // Out of sight while moving, but not hidden: hiding it would
+                // take the mouse from its grip, ending the drag at once
+                opacity: root.canvas.moving ? 0 : 1
                 scale: root.inv
                 transformOrigin: Item.BottomLeft
                 x: 0
@@ -375,6 +381,7 @@ Item {
                             onPressed: (mouse) => root.pressAt(mapToItem(root.parent, mouse.x, mouse.y), 0)
                             onPositionChanged: (mouse) => root.dragTo(mapToItem(root.parent, mouse.x, mouse.y), mouse.modifiers)
                             onReleased: root.release()
+                            onCanceled: root.release()
                         }
                     }
 
@@ -383,6 +390,9 @@ Item {
                 Loader {
                     active: root.formatting
                     asynchronous: true
+                    // Gone from the row with its buttons, not an empty gap
+                    visible: active && status === Loader.Ready
+                    width: visible && item ? item.implicitWidth : 0
                     anchors.verticalCenter: parent.verticalCenter
                     sourceComponent: Row {
                         spacing: Styles.Primitives.spacing.sp025

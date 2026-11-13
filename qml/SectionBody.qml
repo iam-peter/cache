@@ -79,6 +79,7 @@ Item {
             onPressed: (mouse) => body.card.pressAt(mapToItem(body.card.parent, mouse.x, mouse.y), mouse.modifiers)
             onPositionChanged: (mouse) => body.card.dragTo(mapToItem(body.card.parent, mouse.x, mouse.y), mouse.modifiers)
             onReleased: body.card.release()
+            onCanceled: body.card.release()
             onDoubleClicked: body.card.canvas.startEditing(body.card.itemId)
         }
     }
