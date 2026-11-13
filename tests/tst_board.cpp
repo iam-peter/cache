@@ -532,6 +532,67 @@ private slots:
         QCOMPARE(board.templates(m_dir.path()).size(), list.size() + 1);
     }
 
+    // Notes as a prompt for an AI chat: text alone as text; with images, files
+    // (the text as a .md file next to them), since a chat's paste takes one
+    // or the other
+    void copyAsPrompt()
+    {
+        BoardModel board;
+        const QString path = project("prompt");
+        board.load(path);
+        QDir(path).mkpath("assets");
+        QImage(8, 8, QImage::Format_RGB32).save(path + "/assets/shot one.png");
+        QFile video(path + "/assets/clip.mp4");
+        QVERIFY(video.open(QIODevice::WriteOnly));
+        video.write("not really a video");
+        video.close();
+        QFile pdf(path + "/assets/spec.pdf");
+        QVERIFY(pdf.open(QIODevice::WriteOnly));
+        pdf.write("%PDF-1.4");
+        pdf.close();
+
+        const QString plain = board.get(board.addNote(0, 0, QStringLiteral("# Plain\n\nJust [[Words]]."))).value("id").toString();
+        QVariantMap result = board.copyAsPrompt({plain});
+        QCOMPARE(result.value("text").toString(), QStringLiteral("# Plain\n\nJust Words."));
+        QVERIFY(result.value("files").toStringList().isEmpty());
+        const QMimeData *mime = QGuiApplication::clipboard()->mimeData();
+        QVERIFY(!mime->hasUrls());
+        QCOMPARE(mime->text(), QStringLiteral("# Plain\n\nJust Words."));
+
+        const QString rich = board.get(board.addNote(0, 300, QStringLiteral(
+            "# Bug: the toolbar\n\nLook here:\n\n![](assets/shot%20one.png)\n\n![clip](assets/clip.mp4)\n\n"
+            "[The spec](assets/spec.pdf), [Qt](https://qt.io), ![gone](assets/gone.png)"))).value("id").toString();
+        result = board.copyAsPrompt({plain, rich});
+        const QString text = result.value("text").toString();
+        // In reading order, links pointing at the attached files' names
+        QVERIFY2(text.startsWith(QStringLiteral("# Plain")), qPrintable(text));
+        QVERIFY2(text.contains(QStringLiteral("\n\n---\n\n# Bug: the toolbar")), qPrintable(text));
+        QVERIFY2(text.contains(QStringLiteral("![shot one.png](shot one.png)")), qPrintable(text));
+        QVERIFY2(text.contains(QStringLiteral("[Video: clip.mp4]")), qPrintable(text));
+        QVERIFY2(text.contains(QStringLiteral("[The spec](spec.pdf)")), qPrintable(text));
+        QVERIFY2(text.contains(QStringLiteral("[Qt](https://qt.io)")), qPrintable(text));
+        QVERIFY2(text.contains(QStringLiteral("![gone](assets/gone.png)")), qPrintable(text));
+        QCOMPARE(result.value("attachments").toInt(), 2);
+
+        const QStringList files = result.value("files").toStringList();
+        QCOMPARE(files.size(), 3);
+        QVERIFY(files.at(0).endsWith(QStringLiteral("/prompt.md"))); // several notes: the project's name
+        QCOMPARE(QFileInfo(files.at(1)).fileName(), QStringLiteral("shot one.png"));
+        QCOMPARE(QFileInfo(files.at(2)).fileName(), QStringLiteral("spec.pdf"));
+        QFile md(files.at(0));
+        QVERIFY(md.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(md.readAll()).trimmed(), text);
+
+        mime = QGuiApplication::clipboard()->mimeData();
+        QCOMPARE(mime->urls().size(), 3);
+        QVERIFY(mime->hasFormat(QStringLiteral("x-special/gnome-copied-files")));
+        QCOMPARE(mime->text(), text);
+
+        // One note: named after its title
+        result = board.copyAsPrompt({rich});
+        QVERIFY(result.value("files").toStringList().first().endsWith(QStringLiteral("/Bug- the toolbar.md")));
+    }
+
     void clipboardHtmlForTeams()
     {
         BoardModel board;

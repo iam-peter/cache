@@ -127,6 +127,13 @@ request; the [website](pages/) is published from `pages/` by the
     blocks and tasks as ☐ and ☑, plus the Markdown for plain-text editors.
     A note that is only one image is also copied as that image; videos
     become a link to the file.
+  - **Copy as prompt** (`Ctrl+Alt+C`, or the speech bubble on a note)
+    copies the selected notes for Claude or another AI chat. Without
+    images their Markdown goes as text; with images or files they go as
+    files, since a chat's paste takes files or text but not both: the
+    text as `<title>.md`, its links pointing at the attached images and
+    files, which are the project's own. Videos are left out. One paste
+    attaches it all.
   - `Ctrl+Shift+C` (or the selection toolbar) copies the selection as a
     picture, at twice the screen's resolution, without selection marks.
   - **⋯ → Export canvas as PNG / PDF** saves the whole canvas (or the

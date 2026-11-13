@@ -482,6 +482,12 @@ Item {
                         tip: qsTr("Copy with images, to paste into Teams or mail (Ctrl+C)")
                         onClicked: root.canvas.copyRow(root.index)
                     }
+                    Tip {
+                        visible: root.isNote && !root.formatting
+                        iconName: "message-square-text"
+                        tip: qsTr("Copy as a prompt for Claude or another chat: the text, and the images as attachments (Ctrl+Alt+C)")
+                        onClicked: root.canvas.copyAsPrompt()
+                    }
                     SizePipette {
                         visible: !root.isStroke && !root.formatting
                         canvas: root.canvas

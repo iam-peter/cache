@@ -20,8 +20,10 @@
 #include <QPainter>
 #include <QPainterPathStroker>
 #include <QPdfWriter>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QUrl>
 #include <QUuid>
 
 #include <algorithm>
@@ -1068,6 +1070,97 @@ QString BoardModel::noteByTitle(const QString &title) const
 
 // ---------------------------------------------------------------------------
 // Clipboard and export
+
+BoardModel::Prompt BoardModel::promptOf(const QStringList &ids) const
+{
+    BoardState state = stateOf(ids);
+    std::sort(state.items.begin(), state.items.end(), [this](const BoardItem &a, const BoardItem &b) {
+        return m_readingOrder.value(a.id) < m_readingOrder.value(b.id);
+    });
+    // ![alt](target) and [text](target)
+    static const QRegularExpression linkRe(QStringLiteral(R"((!?)\[([^\]]*)\]\(([^)\s]+)\))"));
+    Prompt prompt;
+    QStringList parts;
+    for (const BoardItem &it : std::as_const(state.items)) {
+        if (it.type != QLatin1String("note") && it.type != QLatin1String("text"))
+            continue;
+        QString text = Markdown::unlinkify(it.text).trimmed();
+        if (text.isEmpty())
+            continue;
+        if (prompt.title.isEmpty())
+            prompt.title = titleFor(it);
+        QString out;
+        qsizetype last = 0;
+        for (auto m = linkRe.globalMatch(text); m.hasNext();) {
+            const QRegularExpressionMatch match = m.next();
+            out += text.mid(last, match.capturedStart() - last);
+            last = match.capturedEnd();
+            const QString local = resolveLocal(match.captured(3));
+            const QFileInfo fi(local);
+            if (local.isEmpty() || !fi.isFile()) { // the web, or gone: as it is
+                out += match.captured(0);
+                continue;
+            }
+            const QString name = fi.fileName();
+            if (mediaType(local) == QLatin1String("video")) { // a chat can't take it
+                out += QStringLiteral("[Video: %1]").arg(name);
+                continue;
+            }
+            if (!prompt.attachments.contains(fi.absoluteFilePath()))
+                prompt.attachments << fi.absoluteFilePath();
+            const QString label = match.captured(2).isEmpty() ? name : match.captured(2);
+            out += match.captured(1) + QLatin1Char('[') + label + QStringLiteral("](") + name + QLatin1Char(')');
+        }
+        out += text.mid(last);
+        parts << out;
+    }
+    prompt.text = parts.join(QStringLiteral("\n\n---\n\n"));
+    if (state.items.size() > 1 && parts.size() > 1)
+        prompt.title = QFileInfo(m_projectPath).fileName();
+    return prompt;
+}
+
+QVariantMap BoardModel::copyAsPrompt(const QStringList &ids)
+{
+    const Prompt prompt = promptOf(ids);
+    if (prompt.text.isEmpty())
+        return {};
+    auto *mime = new QMimeData;
+    mime->setText(prompt.text); // terminals and text fields take this
+    QStringList files;
+    if (!prompt.attachments.isEmpty()) {
+        // A fresh folder each time, so earlier prompts don't linger
+        QDir dir(tempPath(QStringLiteral("prompt")));
+        dir.removeRecursively();
+        QDir().mkpath(dir.path());
+        static const QRegularExpression unsafe(QStringLiteral(R"([\\/:*?"<>|\x00-\x1f]+)"));
+        QString name = prompt.title;
+        name.replace(unsafe, QStringLiteral("-"));
+        name = name.trimmed().left(60).trimmed();
+        if (name.isEmpty())
+            name = QStringLiteral("Prompt");
+        const QString md = dir.filePath(name + QStringLiteral(".md"));
+        QSaveFile file(md);
+        if (file.open(QIODevice::WriteOnly)) {
+            file.write(prompt.text.toUtf8() + '\n');
+            file.commit();
+        }
+        files << md << prompt.attachments;
+        QList<QUrl> urls;
+        QByteArray gnome = "copy";
+        for (const QString &f : std::as_const(files)) {
+            urls << QUrl::fromLocalFile(f);
+            gnome += '\n' + QUrl::fromLocalFile(f).toEncoded();
+        }
+        mime->setUrls(urls);
+        // GNOME's file managers and some apps look for this instead
+        mime->setData(QStringLiteral("x-special/gnome-copied-files"), gnome);
+    }
+    QGuiApplication::clipboard()->setMimeData(mime);
+    return {{QStringLiteral("text"), prompt.text},
+            {QStringLiteral("files"), files},
+            {QStringLiteral("attachments"), int(prompt.attachments.size())}};
+}
 
 void BoardModel::copyItems(const QStringList &ids) const
 {

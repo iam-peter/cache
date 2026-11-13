@@ -378,6 +378,19 @@ Item {
             toast.show(qsTr("Copied %1 items").arg(selection.length))
         }
     }
+    // The selected notes as a prompt for Claude or another AI chat: their
+    // text, and their images and files as attachments
+    function copyAsPrompt() {
+        if (selection.length === 0)
+            return
+        const result = Board.copyAsPrompt(selection)
+        if (!result.text)
+            toast.show(qsTr("Nothing to copy: no text in the selection"))
+        else if (result.attachments > 0)
+            toast.show(qsTr("Copied as a prompt: the text as a file and %n attachment(s). Paste them into Claude or another chat.", "", result.attachments))
+        else
+            toast.show(qsTr("Copied as a prompt. Paste it into Claude or another chat."))
+    }
     function nudge(dx, dy) {
         if (selection.length === 0)
             return
@@ -830,6 +843,8 @@ Item {
             view.spaceHeld = true
         } else if (event.matches(StandardKey.Paste)) {
             view.pasteAt(view.insertionPoint())
+        } else if (ctrl && alt && event.key === Qt.Key_C) {
+            view.copyAsPrompt()
         } else if (ctrl && shift && event.key === Qt.Key_C) {
             view.exportImage(view.selection, "copy")
         } else if (event.matches(StandardKey.Copy)) {
@@ -1589,6 +1604,7 @@ Item {
             onTriggered: view.copySelected()
         }
         MenuItem { text: qsTr("Copy as picture"); onTriggered: view.exportImage(view.selection, "copy") }
+        MenuItem { text: qsTr("Copy as prompt (Ctrl+Alt+C)"); onTriggered: view.copyAsPrompt() }
         MenuItem {
             text: view.selection.length > 1 ? qsTr("Fit selection") : qsTr("Zoom to it")
             onTriggered: view.selection.length > 1 ? view.fitSelection() : view.focusItem(cardMenu.item.id)
