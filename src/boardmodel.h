@@ -290,6 +290,30 @@ public:
     //   {kind: "embed", target, line} an ![[embedded]] note preview
     // Tasks become task:<n> links, [[wiki links]] note:<title> links, and
     // occurrences of `highlight` get highlightColor behind them.
+    // The images, videos and files the note with `noteId` shows, then
+    // those of the other notes in reading order: name (the alt text, or the
+    // file name), file, path (as written), url, kind (image, video, file),
+    // noteId, noteTitle, current (in that note), at (where its Markdown
+    // starts in the note's text)
+    // `currentText`: the note's text as being edited, which may hold media
+    // not saved to it yet
+    Q_INVOKABLE QVariantList mediaList(const QString &noteId, const QString &currentText = QString()) const;
+    struct Media {
+        QString name;
+        QString file;
+        QString path;
+        QString absolute;
+        QString kind;
+        qsizetype at = 0;
+    };
+    QList<Media> mediaOf(const QString &markdown) const;
+    // Every medium of the project's notes; rebuilt after text changes
+    const QList<Media> &projectMedia() const;
+    mutable QList<Media> m_projectMedia;
+    mutable bool m_projectMediaDirty = true;
+    // Media names in `markdown` as links to media:<path>, so hovering one in
+    // a note shows it; not inside links, images or code
+    static QString linkMediaNames(const QString &markdown, const QList<Media> &media);
     Q_INVOKABLE QVariantList renderSegments(const QString &markdown, double maxWidth, int pixelSize,
                                             const QVariantMap &colors, const QStringList &highlight = {}) const;
     // Shows or hides the preview of the [[link]] on `line` of a note

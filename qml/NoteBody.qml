@@ -166,6 +166,65 @@ Item {
         }
     }
 
+    // --- Referring to media: @, or the start of a media name ------------
+    property var mediaItems: []
+    property int mediaStart: -1   // where the typed name (or @) starts
+    property bool mediaByAt: false
+    readonly property var mediaCurrent: mediaPopup.opened && mediaList.currentIndex >= 0
+                                        ? mediaItems[mediaList.currentIndex] : null
+    // The entry in view: its own note's Markdown line in the editor, or
+    // the other note on the canvas
+    onMediaCurrentChanged: card.canvas.mediaHighlightId = mediaCurrent && !mediaCurrent.current ? mediaCurrent.noteId : ""
+
+    // @ and what follows, or a word of 3 letters or more
+    function mediaTrigger() {
+        const before = editor.getText(Math.max(0, editor.cursorPosition - 80), editor.cursorPosition)
+        let m = before.match(/@([^\s@\[\]()]*)$/)
+        if (m)
+            return { at: true, prefix: m[1], start: editor.cursorPosition - m[0].length }
+        m = before.match(/(?:^|[\s(])([\w.\-]{3,})$/)
+        if (m)
+            return { at: false, prefix: m[1], start: editor.cursorPosition - m[1].length }
+        return null
+    }
+    function updateMediaSuggestions() {
+        const t = mediaTrigger()
+        if (!t) {
+            mediaPopup.close()
+            return
+        }
+        const p = t.prefix.toLowerCase()
+        const fits = (m) => {
+            const name = m.name.toLowerCase(), file = m.file.toLowerCase()
+            // A typed word only offers names it starts, and not one it already is
+            return t.at ? name.includes(p) || file.includes(p)
+                        : (name.startsWith(p) || file.startsWith(p)) && name !== p && file !== p
+        }
+        const items = Board.mediaList(card.itemId, editor.text).filter(fits)
+        if (items.length === 0) {
+            mediaPopup.close()
+            return
+        }
+        mediaItems = items
+        mediaStart = t.start
+        mediaByAt = t.at
+        mediaList.currentIndex = 0
+        const r = editor.mapToItem(Overlay.overlay, editor.cursorRectangle.x, editor.cursorRectangle.y
+                                   + editor.cursorRectangle.height)
+        mediaPopup.x = r.x
+        mediaPopup.y = r.y + 4
+        mediaPopup.open()
+    }
+    function acceptMedia(item) {
+        if (!item)
+            return
+        editor.remove(mediaStart, editor.cursorPosition)
+        // Another note's medium by its file name: that one is linked in
+        // every note, where a name like "other" would be just a word
+        editor.insert(mediaStart, item.current ? item.name : item.file)
+        mediaPopup.close()
+    }
+
     function openLink(link) {
         if (link.startsWith("task:")) {
             Board.toggleTask(card.index, parseInt(link.substring(5)))
@@ -175,6 +234,8 @@ Item {
             card.canvas.openWikiLink(decodeURIComponent(link.substring(5)), card.itemId)
             return
         }
+        if (link.startsWith("media:"))
+            link = decodeURIComponent(link.substring(6))
         const url = /^[a-z][a-z0-9+.-]+:/i.test(link) ? link : Board.projectUrl + "/" + link
         if (/\.(mp4|webm|mkv|mov|avi|m4v|ogv)$/i.test(link))
             card.canvas.playVideo(url)
@@ -188,6 +249,7 @@ Item {
         } else {
             commitTimer.stop()
             suggestions.close()
+            mediaPopup.close()
             commit()
             growTimer.start()
         }
@@ -292,6 +354,13 @@ Item {
                                                                      linkHover.point.scenePosition)
                                 else
                                     body.card.canvas.hideLinkPreview()
+                                // A media name: the medium it means
+                                if (link.startsWith("media:"))
+                                    body.card.canvas.showMediaPreview(
+                                        Board.projectUrl + "/" + decodeURIComponent(link.substring(6)),
+                                        linkHover.point.scenePosition)
+                                else
+                                    body.card.canvas.hideMediaPreview()
                             }
                             HoverHandler {
                                 id: linkHover
@@ -407,6 +476,29 @@ Item {
                     event.accepted = true
             }
             Keys.onPressed: (event) => {
+                if (mediaPopup.opened) {
+                    if (event.key === Qt.Key_Down || event.key === Qt.Key_Up) {
+                        if (event.key === Qt.Key_Down)
+                            mediaList.incrementCurrentIndex()
+                        else
+                            mediaList.decrementCurrentIndex()
+                        event.accepted = true
+                        return
+                    }
+                    // Enter takes it after @; after a plain word only Tab
+                    // does, so Enter still starts a new line
+                    if (event.key === Qt.Key_Tab
+                            || (body.mediaByAt && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter))) {
+                        body.acceptMedia(body.mediaItems[mediaList.currentIndex])
+                        event.accepted = true
+                        return
+                    }
+                    if (event.key === Qt.Key_Escape) {
+                        mediaPopup.close()
+                        event.accepted = true
+                        return
+                    }
+                }
                 if (suggestions.opened) {
                     if (event.key === Qt.Key_Down) {
                         suggestionList.incrementCurrentIndex()
@@ -465,8 +557,10 @@ Item {
                 const prefix = linkPrefix()
                 if (prefix === null) {
                     suggestions.close()
+                    body.updateMediaSuggestions()
                     return
                 }
+                mediaPopup.close()
                 suggestionList.model = Search.suggestNotes(prefix, 8)
                 suggestionList.currentIndex = 0
                 if (suggestionList.count > 0) {
@@ -477,6 +571,97 @@ Item {
                     suggestions.open()
                 } else {
                     suggestions.close()
+                }
+            }
+        }
+    }
+
+    // The Markdown line of the medium the list is on, in this note
+    Rectangle {
+        readonly property var item: body.mediaCurrent && body.mediaCurrent.current ? body.mediaCurrent : null
+        readonly property rect line: item ? (editor.text, editor.positionToRectangle(item.at)) : Qt.rect(0, 0, 0, 0)
+        parent: editor
+        visible: item !== null
+        z: -1
+        x: 0
+        y: line.y - 2
+        width: editor.width
+        height: line.height + 4
+        radius: Theme.radius
+        color: Qt.alpha(Theme.accent, 0.18)
+        border.color: Theme.accent
+    }
+
+    // Media to refer to, with a picture of each
+    Popup {
+        id: mediaPopup
+        parent: Overlay.overlay
+        width: 340
+        padding: Styles.Primitives.spacing.sp050
+        focus: false
+        closePolicy: Popup.CloseOnPressOutside
+        onClosed: body.card.canvas.mediaHighlightId = ""
+
+        ListView {
+            id: mediaList
+            implicitHeight: Math.min(contentHeight, 300)
+            width: parent.width
+            clip: true
+            highlightMoveDuration: 0
+            model: body.mediaItems
+            delegate: ItemDelegate {
+                id: mediaEntry
+                required property var modelData
+                required property int index
+                width: ListView.view.width
+                height: 48
+                highlighted: ListView.isCurrentItem
+                onClicked: body.acceptMedia(modelData)
+                onHoveredChanged: if (hovered) mediaList.currentIndex = index
+                contentItem: Row {
+                    spacing: Styles.Primitives.spacing.sp100
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 56
+                        height: 36
+                        radius: 3
+                        clip: true
+                        color: Theme.s.background_secondary
+                        border.color: Theme.s.stroke_subtle
+                        Image {
+                            anchors.fill: parent
+                            visible: status === Image.Ready
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            sourceSize: Qt.size(112, 72)
+                            source: mediaEntry.modelData.kind === "image" ? mediaEntry.modelData.url
+                                  : mediaEntry.modelData.kind === "video" ? (Posters.revision, Posters.poster(mediaEntry.modelData.url))
+                                  : ""
+                        }
+                        Icon {
+                            anchors.centerIn: parent
+                            visible: mediaEntry.modelData.kind !== "image"
+                            name: mediaEntry.modelData.kind === "video" ? "film" : "link"
+                            color: mediaEntry.modelData.kind === "video" ? "#ffffff" : Theme.textMuted
+                        }
+                    }
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: mediaEntry.width - 56 - 3 * Styles.Primitives.spacing.sp100
+                        Label {
+                            width: parent.width
+                            text: mediaEntry.modelData.name
+                            elide: Text.ElideRight
+                        }
+                        Label {
+                            width: parent.width
+                            text: (mediaEntry.modelData.current ? qsTr("This note") : mediaEntry.modelData.noteTitle)
+                                  + (mediaEntry.modelData.file !== mediaEntry.modelData.name ? " · " + mediaEntry.modelData.file : "")
+                            elide: Text.ElideRight
+                            color: Theme.textMuted
+                            font.pixelSize: Styles.Primitives.fontSize.small
+                        }
+                    }
                 }
             }
         }

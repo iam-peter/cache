@@ -94,6 +94,14 @@ request; the [website](pages/) is published from `pages/` by the
   own shows a **preview** of the linked note, `![[Title]]`, which its
   chevron hides and shows again. Notes show how many notes link to them;
   links between notes of a canvas can be drawn as dotted lines.
+- **Referring to media**: type `@` while writing for a list of the
+  images, videos and files of the note, then of the others, each with a
+  picture; typing the start of a name (three letters or more) offers it
+  too (Tab takes it there, so Enter still starts a new line). A medium's
+  name is its alt text, `![screenshot123](assets/…)`, or its file name;
+  another note's media go by file name. The entry the list is on is
+  marked: its line in the editor, or the other note on the canvas. In
+  the note, the names are links: hovering one shows the medium.
 - **Sections**: labelled areas (`S`) that take along what lies in them when
   moved. They are the chapters of the sidebar's note list.
 - **Shapes, text and pen**: shapes with labels for flowcharts, free text in

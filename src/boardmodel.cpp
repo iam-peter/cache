@@ -197,6 +197,7 @@ QString BoardModel::assetsDir() const
 void BoardModel::load(const QString &projectDir)
 {
     save();
+    m_projectMediaDirty = true;
 
     beginResetModel();
     m_items.clear();
@@ -433,6 +434,8 @@ const QList<int> BoardModel::kGeometryRoles{PosXRole, PosYRole, WidthRole, Heigh
 
 void BoardModel::emitRow(int row, const QList<int> &roles)
 {
+    if (roles.isEmpty() || roles.contains(TextRole))
+        m_projectMediaDirty = true;
     const QModelIndex idx = index(row);
     emit dataChanged(idx, idx, roles);
 }
@@ -1361,11 +1364,156 @@ QList<Piece> piecesOf(const QString &markdown, const std::function<QString(const
 
 } // namespace
 
+QList<BoardModel::Media> BoardModel::mediaOf(const QString &markdown) const
+{
+    static const QRegularExpression linkRe(QStringLiteral(R"((!?)\[([^\]]*)\]\(([^)\s]+)\))"));
+    QList<Media> list;
+    for (auto m = linkRe.globalMatch(markdown); m.hasNext();) {
+        const QRegularExpressionMatch match = m.next();
+        const QString local = resolveLocal(match.captured(3));
+        const QFileInfo fi(local);
+        if (local.isEmpty() || !fi.isFile())
+            continue;
+        const bool image = !match.captured(1).isEmpty();
+        // A plain link counts when it is to one of the project's files
+        if (!image && !fi.absoluteFilePath().startsWith(QDir(m_projectPath).absolutePath() + QLatin1Char('/')))
+            continue;
+        const QString type = mediaType(local);
+        Media media;
+        media.file = fi.fileName();
+        media.name = match.captured(2).trimmed().isEmpty() ? media.file : match.captured(2).trimmed();
+        media.path = match.captured(3);
+        media.absolute = fi.absoluteFilePath();
+        media.kind = type.isEmpty() ? QStringLiteral("file") : type;
+        media.at = match.capturedStart();
+        list << media;
+    }
+    return list;
+}
+
+const QList<BoardModel::Media> &BoardModel::projectMedia() const
+{
+    if (m_projectMediaDirty) {
+        m_projectMedia.clear();
+        for (const BoardItem &it : m_items) {
+            if (it.type == QLatin1String("note") && it.text.contains(QLatin1Char('(')))
+                m_projectMedia += mediaOf(it.text);
+        }
+        m_projectMediaDirty = false;
+    }
+    return m_projectMedia;
+}
+
+QVariantList BoardModel::mediaList(const QString &noteId, const QString &currentText) const
+{
+    QList<const BoardItem *> notes;
+    for (const BoardItem &it : m_items) {
+        if (it.type == QLatin1String("note") && (it.id == noteId || it.text.contains(QLatin1Char('('))))
+            notes << &it;
+    }
+    std::sort(notes.begin(), notes.end(), [this, &noteId](const BoardItem *a, const BoardItem *b) {
+        if ((a->id == noteId) != (b->id == noteId))
+            return a->id == noteId;
+        return m_readingOrder.value(a->id) < m_readingOrder.value(b->id);
+    });
+    QVariantList list;
+    QSet<QString> seen;
+    for (const BoardItem *it : std::as_const(notes)) {
+        const bool current = it->id == noteId;
+        for (const Media &m : mediaOf(current && !currentText.isNull() ? currentText : it->text)) {
+            if (seen.contains(it->id + m.absolute))
+                continue;
+            seen.insert(it->id + m.absolute);
+            list.append(QVariantMap{
+                {QStringLiteral("name"), m.name},
+                {QStringLiteral("file"), m.file},
+                {QStringLiteral("path"), m.path},
+                {QStringLiteral("url"), QUrl::fromLocalFile(m.absolute)},
+                {QStringLiteral("kind"), m.kind},
+                {QStringLiteral("noteId"), it->id},
+                {QStringLiteral("noteTitle"), titleFor(*it)},
+                {QStringLiteral("current"), current},
+                {QStringLiteral("at"), int(m.at)},
+            });
+        }
+    }
+    return list;
+}
+
+QString BoardModel::linkMediaNames(const QString &markdown, const QList<Media> &media)
+{
+    // Longest first, so "shot 2" isn't taken as "shot"; short names would
+    // turn up in ordinary words
+    // Alt texts that are no names: they'd link every such word
+    static const QStringList generic{QStringLiteral("image"), QStringLiteral("img"), QStringLiteral("picture"),
+                                     QStringLiteral("photo"), QStringLiteral("video"), QStringLiteral("screenshot"),
+                                     QStringLiteral("file")};
+    QList<Media> names;
+    for (const Media &m : media) {
+        if (m.name.size() >= 3 && !generic.contains(m.name.toLower()))
+            names << m;
+        if (m.file != m.name && m.file.size() >= 3)
+            names << Media{m.file, m.file, m.path, m.absolute, m.kind, m.at};
+    }
+    if (names.isEmpty())
+        return markdown;
+    std::sort(names.begin(), names.end(), [](const Media &a, const Media &b) { return a.name.size() > b.name.size(); });
+    QStringList alternatives;
+    for (const Media &m : std::as_const(names))
+        alternatives << QRegularExpression::escape(m.name);
+    // A name on its own: not part of a longer word or path
+    const QRegularExpression nameRe(QStringLiteral(R"((?<![\w/.@-])(%1)(?![\w/-]|\.\w))").arg(alternatives.join(QLatin1Char('|'))),
+                                    QRegularExpression::CaseInsensitiveOption | QRegularExpression::UseUnicodePropertiesOption);
+    // What stays as it is: links, images, [[links]], code
+    static const QRegularExpression keep(QStringLiteral(R"(!?\[[^\]]*\]\([^)]*\)|\[\[[^\]]*\]\]|`[^`]*`|<[^>]*>)"));
+    QString out;
+    qsizetype last = 0;
+    const auto linkIn = [&](const QString &part) {
+        QString result;
+        qsizetype from = 0;
+        for (auto m = nameRe.globalMatch(part); m.hasNext();) {
+            const QRegularExpressionMatch match = m.next();
+            result += part.mid(from, match.capturedStart(1) - from);
+            const QString found = match.captured(1);
+            QString path;
+            for (const Media &n : std::as_const(names)) {
+                if (n.name.compare(found, Qt::CaseInsensitive) == 0) {
+                    path = n.path;
+                    break;
+                }
+            }
+            result += QStringLiteral("[%1](media:%2)").arg(found, QString::fromLatin1(QUrl::toPercentEncoding(path, "/")));
+            from = match.capturedEnd(1);
+        }
+        return result + part.mid(from);
+    };
+    for (auto m = keep.globalMatch(markdown); m.hasNext();) {
+        const QRegularExpressionMatch match = m.next();
+        out += linkIn(markdown.mid(last, match.capturedStart() - last)) + match.captured(0);
+        last = match.capturedEnd();
+    }
+    return out + linkIn(markdown.mid(last));
+}
+
 QVariantList BoardModel::renderSegments(const QString &markdown, double maxWidth, int pixelSize,
                                         const QVariantMap &colors, const QStringList &highlight) const
 {
     QVariantList segments;
     int task = 0;
+    // Its own media by name and file name; the other notes' by file name,
+    // which is distinctive where a name like "other" is a word
+    QList<Media> media = mediaOf(markdown);
+    QSet<QString> own;
+    for (const Media &m : std::as_const(media))
+        own.insert(m.absolute);
+    for (const Media &m : projectMedia()) {
+        if (!own.contains(m.absolute)) {
+            own.insert(m.absolute);
+            Media byFile = m;
+            byFile.name = m.file;
+            media << byFile;
+        }
+    }
     const QList<Piece> pieces = piecesOf(
         markdown, [this](const QString &t) { return resolveLocal(t); },
         [](const QString &path) { return mediaType(path) == QLatin1String("video"); });
@@ -1374,7 +1522,8 @@ QVariantList BoardModel::renderSegments(const QString &markdown, double maxWidth
         case Piece::Text:
             segments.append(QVariantMap{
                 {QStringLiteral("kind"), QStringLiteral("text")},
-                {QStringLiteral("html"), renderHtml(piece.markdown, maxWidth, pixelSize, colors, false, highlight, task)}});
+                {QStringLiteral("html"), renderHtml(linkMediaNames(piece.markdown, media), maxWidth, pixelSize, colors, false,
+                                                    highlight, task)}});
             task += int(Markdown::tasks(piece.markdown).size());
             break;
         case Piece::Video:

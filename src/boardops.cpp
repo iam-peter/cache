@@ -188,6 +188,7 @@ void BoardModel::emitAll(const QList<int> &roles)
 
 void BoardModel::updateDerived()
 {
+    m_projectMediaDirty = true;
     // Folded mindmap branches: everything a collapsed item's connectors lead
     // to, and on from there
     QHash<QString, QStringList> children;
@@ -284,6 +285,7 @@ void BoardModel::structureChanged()
 
 void BoardModel::textsChanged()
 {
+    m_projectMediaDirty = true;
     QVariantList edges;
     QSet<QString> seen;
     const QString project = QFileInfo(m_projectPath).fileName();

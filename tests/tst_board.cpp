@@ -593,6 +593,52 @@ private slots:
         QVERIFY(result.value("files").toStringList().first().endsWith(QStringLiteral("/Bug- the toolbar.md")));
     }
 
+    // Media a note shows, its own first; their names linked in its text
+    void mediaReferences()
+    {
+        BoardModel board;
+        const QString path = project("media");
+        board.load(path);
+        QDir(path).mkpath("assets");
+        for (const char *name : {"toolbar.png", "menu.png", "other.png", "paste-1.png"})
+            QImage(4, 4, QImage::Format_RGB32).save(path + "/assets/" + name);
+        QFile pdf(path + "/assets/spec.pdf");
+        QVERIFY(pdf.open(QIODevice::WriteOnly));
+        pdf.close();
+
+        const QString a = board.get(board.addNote(0, 0, QStringLiteral(
+            "# A\n\n![](assets/toolbar.png)\n\n![screenshot123](assets/paste-1.png)\n\n[spec](assets/spec.pdf) [web](https://x.org)"))).value("id").toString();
+        board.addNote(0, 400, QStringLiteral("# B\n\n![other](assets/other.png) ![](assets/gone.png)"));
+        const QString c = board.get(board.addNote(400, 0, QStringLiteral("# C\n\n![menu](assets/menu.png)"))).value("id").toString();
+
+        // From C: its own first, then the others in reading order (A, then B)
+        const QVariantList list = board.mediaList(c);
+        QStringList names;
+        for (const QVariant &v : list)
+            names << v.toMap().value("name").toString();
+        QCOMPARE(names, (QStringList{"menu", "toolbar.png", "screenshot123", "spec", "other"}));
+        QVERIFY(list.first().toMap().value("current").toBool());
+        QVERIFY(!list.at(1).toMap().value("current").toBool());
+        QCOMPARE(list.at(2).toMap().value("file").toString(), QStringLiteral("paste-1.png"));
+        QCOMPARE(list.at(2).toMap().value("noteId").toString(), a);
+        QCOMPARE(list.at(3).toMap().value("kind").toString(), QStringLiteral("file"));
+
+        // Names in the text become links; the media's own Markdown, other
+        // links, code and parts of longer words stay as they are
+        const QList<BoardModel::Media> media = board.mediaOf(board.getById(a).value("text").toString());
+        QCOMPARE(BoardModel::linkMediaNames(QStringLiteral("As screenshot123 shows, and toolbar.png."), media),
+                 QStringLiteral("As [screenshot123](media:assets/paste-1.png) shows, and [toolbar.png](media:assets/toolbar.png)."));
+        QCOMPARE(BoardModel::linkMediaNames(QStringLiteral("SCREENSHOT123 and paste-1.png"), media),
+                 QStringLiteral("[SCREENSHOT123](media:assets/paste-1.png) and [paste-1.png](media:assets/paste-1.png)"));
+        const QString untouched = QStringLiteral("![screenshot123](assets/paste-1.png) `screenshot123` [[screenshot123]] "
+                                                 "myscreenshot123 assets/toolbar.png toolbar.pngs");
+        QCOMPARE(BoardModel::linkMediaNames(untouched, media), untouched);
+        // Generic alt texts aren't names
+        const QList<BoardModel::Media> generic = board.mediaOf(QStringLiteral("![image](assets/other.png)"));
+        QCOMPARE(BoardModel::linkMediaNames(QStringLiteral("an image of other.png"), generic),
+                 QStringLiteral("an image of [other.png](media:assets/other.png)"));
+    }
+
     void clipboardHtmlForTeams()
     {
         BoardModel board;

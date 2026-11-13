@@ -50,6 +50,8 @@ Item {
     property string relinkId: ""   // the connector whose end is being moved
     // The size pipette while it is picking: { what: width|height|size, ids }
     property var sizePick: null
+    // A note whose medium the editor's media list is on: outlined
+    property string mediaHighlightId: ""
     property string sizePickHover: ""
     property string relinkEnd: ""  // "from" or "to"
     property bool exporting: false
@@ -703,6 +705,15 @@ Item {
         previewTimer.stop()
         linkPreview.close()
     }
+    // A medium named in a note's text, shown while the pointer is on its name
+    function showMediaPreview(url, scenePos) {
+        mediaPreview.source = url
+        const p = view.mapFromItem(null, scenePos.x, scenePos.y)
+        mediaPreview.x = Math.max(8, Math.min(p.x + 12, view.width - mediaPreview.width - 8))
+        mediaPreview.y = Math.max(8, Math.min(p.y + 18, view.height - mediaPreview.height - 8))
+        mediaPreview.open()
+    }
+    function hideMediaPreview() { mediaPreview.close() }
     function showBacklinks(id, anchor) {
         backlinkMenu.entries = Search.backlinks(Board.projectPath, id)
         backlinkMenu.popup(anchor, 0, anchor.height)
@@ -1380,6 +1391,21 @@ Item {
         border.color: Theme.accent
         border.width: 2
     }
+    // The note holding the medium the editor's media list is on
+    Rectangle {
+        readonly property var it: view.mediaHighlightId !== "" ? (Board.count, Board.getById(view.mediaHighlightId)) : null
+        visible: it !== null && it.id !== undefined
+        z: 3001
+        x: it ? view.panX + it.x * view.zoom - 4 : 0
+        y: it ? view.panY + it.y * view.zoom - 4 : 0
+        width: it ? it.w * view.zoom + 8 : 0
+        height: it ? it.h * view.zoom + 8 : 0
+        radius: Theme.radius
+        color: Qt.alpha(Theme.accent, 0.08)
+        border.color: Theme.accent
+        border.width: 3
+    }
+
     // What the pipette does now
     Rectangle {
         visible: view.sizePick !== null
@@ -1505,6 +1531,33 @@ Item {
                 text: modelData.current ? modelData.title : modelData.projectName + " / " + modelData.title
                 onTriggered: view.openNote(modelData.projectPath, modelData.noteId)
             }
+        }
+    }
+
+    // A medium named in a note: its picture (a video's still)
+    Popup {
+        id: mediaPreview
+        property url source
+        readonly property bool video: /\.(mp4|webm|mkv|mov|avi|m4v|ogv)$/i.test(source.toString())
+        width: Math.min(360, view.width - 16)
+        height: previewImage.status === Image.Ready && previewImage.implicitWidth > 0
+                ? width * previewImage.implicitHeight / previewImage.implicitWidth + 2 * padding : 120
+        padding: Styles.Primitives.spacing.sp050
+        closePolicy: Popup.CloseOnPressOutside | Popup.CloseOnEscape
+        focus: false
+        Image {
+            id: previewImage
+            anchors.fill: parent
+            fillMode: Image.PreserveAspectFit
+            asynchronous: true
+            sourceSize.width: 720
+            source: mediaPreview.video ? (Posters.revision, Posters.poster(mediaPreview.source)) : mediaPreview.source
+        }
+        Label {
+            anchors.centerIn: parent
+            visible: previewImage.status !== Image.Ready
+            text: decodeURIComponent(mediaPreview.source.toString().split("/").pop())
+            color: Theme.textMuted
         }
     }
 
