@@ -8,6 +8,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Qt6 6.9 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Multimedia Network Svg)
 qt_standard_project_setup(REQUIRES 6.8)
 
+# An installed Cache (cmake --install, e.g. into ~/.local) finds the Qt
+# it was built against
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH ON)
+
 # Lay QML modules out by URI so qmllint and qmlls find them (as igitt does)
 set(QT_QML_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml)
 

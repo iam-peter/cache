@@ -199,6 +199,20 @@ cmake --build build
 ./build/cache
 ```
 
+For daily use, install a release build next to the debug one in
+`build/`; it goes into `~/.local` with an entry in the application menu
+and finds the Qt it was built against:
+
+```bash
+cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$HOME/.local -DCMAKE_PREFIX_PATH=$HOME/Qt/6.12.0/gcc_64
+```
+
+```bash
+cmake --build build-release && cmake --install build-release
+```
+
+Run the second command again to update it.
+
 With `CACHE_TRACE_LATENCY=1` set, Cache prints how long each key press
 and click takes until a frame showing it is on screen, for checking that
 typing stays as quick as in a plain editor.
