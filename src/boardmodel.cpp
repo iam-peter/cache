@@ -1108,6 +1108,9 @@ QString BoardModel::renderHtml(const QString &markdown, double maxWidth, int pix
 
     // A video can't show inside text: there it is a link that plays it
     QString source = forClipboard ? Markdown::unlinkify(markdown) : Markdown::linkify(markdown);
+    // Qt's Markdown reader drops images without alt text: their file name
+    static const QRegularExpression unnamed(QStringLiteral(R"(!\[\]\(([^)\s]*?)([^/)\s]+)\))"));
+    source.replace(unnamed, QStringLiteral("![\\2](\\1\\2)"));
     source.replace(kVideoImage, QStringLiteral("[▶ \\1](\\2)"));
 
     QTextDocument doc;
