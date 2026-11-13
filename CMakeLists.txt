@@ -65,6 +65,7 @@ qt_add_qml_module(cache
         qml/ToolPalette.qml
         qml/Minimap.qml
         qml/SelectionBar.qml
+        qml/CopyMenu.qml
         qml/SizePipette.qml
         qml/LinkBar.qml
         qml/LinkEnds.qml

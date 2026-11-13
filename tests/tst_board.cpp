@@ -532,64 +532,76 @@ private slots:
         QCOMPARE(board.templates(m_dir.path()).size(), list.size() + 1);
     }
 
-    // Notes as a prompt for an AI chat, in two parts, since a chat's paste
-    // takes text or files but not both: the text as text, then the images
-    // and files
-    void copyAsPrompt()
+    // Notes for a chat's prompt: their Markdown as it is; their text with
+    // the media taken out and mentions of them named after the files; the
+    // media as files named after the media
+    void copyNotes()
     {
         BoardModel board;
-        const QString path = project("prompt");
+        const QString path = project("copynotes");
         board.load(path);
         QDir(path).mkpath("assets");
-        QImage(8, 8, QImage::Format_RGB32).save(path + "/assets/shot one.png");
+        QImage blue(8, 8, QImage::Format_RGB32);
+        blue.fill(Qt::blue);
+        blue.save(path + "/assets/paste-1.png");
+        QImage(8, 8, QImage::Format_RGB32).save(path + "/assets/menu.png");
+        QImage(8, 8, QImage::Format_RGB32).save(path + "/assets/b.png");
         QFile video(path + "/assets/clip.mp4");
         QVERIFY(video.open(QIODevice::WriteOnly));
-        video.write("not really a video");
         video.close();
         QFile pdf(path + "/assets/spec.pdf");
         QVERIFY(pdf.open(QIODevice::WriteOnly));
         pdf.write("%PDF-1.4");
         pdf.close();
 
-        const QString plain = board.get(board.addNote(0, 0, QStringLiteral("# Plain\n\nJust [[Words]]."))).value("id").toString();
-        QVariantMap result = board.copyAsPrompt({plain});
-        QCOMPARE(result.value("text").toString(), QStringLiteral("# Plain\n\nJust Words."));
-        QCOMPARE(result.value("attachments").toInt(), 0);
-        const QMimeData *mime = QGuiApplication::clipboard()->mimeData();
-        QVERIFY(!mime->hasUrls());
-        QCOMPARE(mime->text(), QStringLiteral("# Plain\n\nJust Words."));
-        QVERIFY(board.copyAsPrompt({plain}, QStringLiteral("attachments")).isEmpty()); // none to copy
+        const QString first = board.get(board.addNote(0, 0, QStringLiteral(
+            "# Toolbar bug\n\n![screenshot123](assets/paste-1.png)\n\n![](assets/menu.png)\n\n![clip](assets/clip.mp4)\n\n\n"
+            "As screenshot123 shows (and paste-1.png, menu.png), see [[Other]]. The clip shows it too.\n"
+            "Inline ![shot](assets/b.png) here, [The spec](assets/spec.pdf), [spec.pdf](assets/spec.pdf), "
+            "[Qt](https://qt.io), ![gone](assets/gone.png)"))).value("id").toString();
+        const QString second = board.get(board.addNote(0, 600, QStringLiteral("# Second\n\n![shot](assets/menu.png)"))).value("id").toString();
 
-        const QString rich = board.get(board.addNote(0, 300, QStringLiteral(
-            "# Bug: the toolbar\n\nLook here:\n\n![](assets/shot%20one.png)\n\n![clip](assets/clip.mp4)\n\n"
-            "[The spec](assets/spec.pdf), [Qt](https://qt.io), ![gone](assets/gone.png)"))).value("id").toString();
-        // First the text, as text
-        result = board.copyAsPrompt({plain, rich});
-        const QString text = result.value("text").toString();
-        // In reading order, links pointing at the attached files' names
-        QVERIFY2(text.startsWith(QStringLiteral("# Plain")), qPrintable(text));
-        QVERIFY2(text.contains(QStringLiteral("\n\n---\n\n# Bug: the toolbar")), qPrintable(text));
-        QVERIFY2(text.contains(QStringLiteral("![shot one.png](shot one.png)")), qPrintable(text));
-        QVERIFY2(text.contains(QStringLiteral("[Video: clip.mp4]")), qPrintable(text));
-        QVERIFY2(text.contains(QStringLiteral("[The spec](spec.pdf)")), qPrintable(text));
-        QVERIFY2(text.contains(QStringLiteral("[Qt](https://qt.io)")), qPrintable(text));
-        QVERIFY2(text.contains(QStringLiteral("![gone](assets/gone.png)")), qPrintable(text));
-        QCOMPARE(result.value("attachments").toInt(), 2);
-        QVERIFY(result.value("files").toStringList().isEmpty());
-        mime = QGuiApplication::clipboard()->mimeData();
-        QVERIFY(!mime->hasUrls());
-        QCOMPARE(mime->text(), text);
+        // Raw: the Markdown as it is
+        QVariantMap result = board.copyNotes({first}, QStringLiteral("markdown"));
+        QVERIFY(result.value("text").toString().startsWith(QStringLiteral("# Toolbar bug\n\n![screenshot123](assets/paste-1.png)")));
+        QCOMPARE(QGuiApplication::clipboard()->mimeData()->text(), result.value("text").toString());
 
-        // Then the images and files
-        result = board.copyAsPrompt({plain, rich}, QStringLiteral("attachments"));
+        // Text only
+        result = board.copyNotes({first}, QStringLiteral("text"));
+        QCOMPARE(result.value("text").toString(), QStringLiteral(
+            "# Toolbar bug\n\n"
+            "As screenshot123.png shows (and screenshot123.png, menu.png), see Other. The clip shows it too.\n"
+            "Inline shot.png here, The spec.pdf, The spec.pdf, [Qt](https://qt.io), ![gone](assets/gone.png)"));
+        QVERIFY(!QGuiApplication::clipboard()->mimeData()->hasUrls());
+        QCOMPARE(result.value("attachments").toInt(), 4);
+
+        // Media only: copies named after the media, videos left out
+        result = board.copyNotes({first, second}, QStringLiteral("media"));
         const QStringList files = result.value("files").toStringList();
-        QCOMPARE(files.size(), 2);
-        QCOMPARE(QFileInfo(files.at(0)).fileName(), QStringLiteral("shot one.png"));
-        QCOMPARE(QFileInfo(files.at(1)).fileName(), QStringLiteral("spec.pdf"));
-        mime = QGuiApplication::clipboard()->mimeData();
-        QCOMPARE(mime->urls().size(), 2);
+        QStringList names;
+        for (const QString &f : files)
+            names << QFileInfo(f).fileName();
+        // menu.png shows in both notes: once
+        // A file link's text names its file, as an image's alt text does
+        QCOMPARE(names, (QStringList{"screenshot123.png", "menu.png", "shot.png", "The spec.pdf"}));
+        QCOMPARE(QImage(files.first()).pixelColor(1, 1), QColor(Qt::blue)); // the right picture
+        const QMimeData *mime = QGuiApplication::clipboard()->mimeData();
+        QCOMPARE(mime->urls().size(), 4);
         QVERIFY(mime->hasFormat(QStringLiteral("x-special/gnome-copied-files")));
         QVERIFY(!mime->hasFormat(QStringLiteral("text/plain"))); // files only: a chat attaches them
+
+        // Two media of the same name: the second one numbered
+        const QString third = board.get(board.addNote(600, 0, QStringLiteral("![shot](assets/b.png) ![shot](assets/paste-1.png)"))).value("id").toString();
+        result = board.copyNotes({third}, QStringLiteral("media"));
+        names.clear();
+        for (const QString &f : result.value("files").toStringList())
+            names << QFileInfo(f).fileName();
+        QCOMPARE(names, (QStringList{"shot.png", "shot 2.png"}));
+        QCOMPARE(board.copyNotes({third}, QStringLiteral("text")).value("text").toString(), QStringLiteral("shot.png shot 2.png"));
+
+        // Nothing to copy
+        const QString plain = board.get(board.addNote(900, 0, QStringLiteral("Just words"))).value("id").toString();
+        QCOMPARE(board.copyNotes({plain}, QStringLiteral("media")).value("attachments").toInt(), 0);
     }
 
     // Media a note shows, its own first; their names linked in its text

@@ -380,33 +380,25 @@ Item {
             toast.show(qsTr("Copied %1 items").arg(selection.length))
         }
     }
-    // The selected notes as a prompt for Claude or another AI chat. A
-    // chat's paste takes text or files, never both, so it goes in two
-    // steps: first the text as text, to edit in the prompt box; pressed
-    // again for the same notes, their images and files.
-    property var promptPending: null // { key, ids, at }: images still to copy
-    function copyAsPrompt() {
+    // The selected notes as "markdown" (as it is), "text" (without media,
+    // mentions named after the files "media" copies) or "media" (their
+    // images and files): for a chat's prompt box, which takes text or files
+    // in one paste, never both
+    function copyNotes(mode) {
         if (selection.length === 0)
             return
-        const key = selection.slice().sort().join("\n")
-        if (promptPending && promptPending.key === key && Date.now() - promptPending.at < 5 * 60 * 1000) {
-            const files = Board.copyAsPrompt(promptPending.ids, "attachments")
-            promptPending = null
-            toast.show(files.attachments === 1 ? qsTr("Copied the attachment. Paste it into the chat too.")
-                                               : qsTr("Copied %1 attachments. Paste them into the chat too.").arg(files.attachments), 5)
-            return
-        }
-        const result = Board.copyAsPrompt(selection, "text")
-        promptPending = null
-        if (!result.text) {
+        const result = Board.copyNotes(selection, mode)
+        if (mode === "media") {
+            const n = result.files ? result.files.length : 0
+            toast.show(n === 0 ? qsTr("No images or files to copy")
+                       : n === 1 ? qsTr("Copied 1 file, named as the note names it. Paste it into the chat.")
+                       : qsTr("Copied %1 files, named as the notes name them. Paste them into the chat.").arg(n), 5)
+        } else if (!result.text) {
             toast.show(qsTr("Nothing to copy: no text in the selection"))
-        } else if (result.attachments > 0) {
-            promptPending = { key: key, ids: selection.slice(), at: Date.now() }
-            toast.show(result.attachments === 1
-                       ? qsTr("Copied the text. Paste it, then press Ctrl+Alt+C again for its attachment.")
-                       : qsTr("Copied the text. Paste it, then press Ctrl+Alt+C again for its %1 attachments.").arg(result.attachments), 8)
+        } else if (mode === "text" && result.attachments > 0) {
+            toast.show(qsTr("Copied the text. Its images and files are named as Copy › Media only names them."), 5)
         } else {
-            toast.show(qsTr("Copied as a prompt. Paste it into Claude or another chat."))
+            toast.show(mode === "text" ? qsTr("Copied the text") : qsTr("Copied the Markdown"))
         }
     }
     function nudge(dx, dy) {
@@ -870,8 +862,6 @@ Item {
             view.spaceHeld = true
         } else if (event.matches(StandardKey.Paste)) {
             view.pasteAt(view.insertionPoint())
-        } else if (ctrl && alt && event.key === Qt.Key_C) {
-            view.copyAsPrompt()
         } else if (ctrl && shift && event.key === Qt.Key_C) {
             view.exportImage(view.selection, "copy")
         } else if (event.matches(StandardKey.Copy)) {
@@ -1673,7 +1663,7 @@ Item {
             onTriggered: view.copySelected()
         }
         MenuItem { text: qsTr("Copy as picture"); onTriggered: view.exportImage(view.selection, "copy") }
-        MenuItem { text: qsTr("Copy as prompt (Ctrl+Alt+C)"); onTriggered: view.copyAsPrompt() }
+        CopyMenu { canvas: view }
         MenuItem {
             text: view.selection.length > 1 ? qsTr("Fit selection") : qsTr("Zoom to it")
             onTriggered: view.selection.length > 1 ? view.fitSelection() : view.focusItem(cardMenu.item.id)

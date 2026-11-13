@@ -311,7 +311,6 @@ ApplicationWindow {
                     ["[[", qsTr("While editing: link another note")],
                     ["Ctrl+Shift+K", qsTr("While editing: code block")],
                     ["Ctrl+C", qsTr("Copy (a note: with its images, for Teams)")],
-                    ["Ctrl+Alt+C", qsTr("Copy as a prompt for Claude: the text; again for its images")],
                     ["Ctrl+Shift+C", qsTr("Copy the selection as a picture")],
                     ["Ctrl+V", qsTr("Paste items, images, videos or text")],
                     ["Ctrl+D", qsTr("Duplicate")],

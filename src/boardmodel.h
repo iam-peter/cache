@@ -259,16 +259,26 @@ public:
     Q_INVOKABLE void copyToClipboard(int row) const;
     // Several items: to paste on a canvas, plus their text as rich text
     Q_INVOKABLE void copyItems(const QStringList &ids) const;
-    // The notes of `ids` (reading order) as a prompt for an AI chat such as
-    // Claude, on the clipboard, in two parts: a chat's paste takes text or
-    // files, never both. "text": their Markdown, the links to their images
-    // and files pointing at those files' names. "attachments": the images
-    // and files themselves (videos left out). Returns {text, files,
-    // attachments}, whichever part was copied.
-    Q_INVOKABLE QVariantMap copyAsPrompt(const QStringList &ids, const QString &part = QStringLiteral("text"));
+    // The notes of `ids`, in reading order, on the clipboard as `mode` has
+    // it, for an AI chat's prompt box and other places that take text:
+    //   markdown  their Markdown as it is
+    //   text      their text without the media: images and videos left
+    //             out, mentions of them by name and links to files named
+    //             after the files "media" copies
+    //   media     their images and files, as files named after the media
+    //             (screenshot123.png for ![screenshot123](assets/…)), to
+    //             paste next to the text; a paste takes files or text,
+    //             never both. Videos are left out.
+    // Returns {text, files, attachments}.
+    Q_INVOKABLE QVariantMap copyNotes(const QStringList &ids, const QString &mode);
+    struct Attachment {
+        QString source; // the asset
+        QString name;   // what it is called in the chat
+    };
     struct Prompt {
+        QString markdown;
         QString text;
-        QStringList attachments; // absolute paths
+        QList<Attachment> attachments;
     };
     Prompt promptOf(const QStringList &ids) const;
     Q_INVOKABLE bool copyImageFile(const QString &path) const;
@@ -313,6 +323,9 @@ public:
     // Media names in `markdown` as links to media:<path>, so hovering one in
     // a note shows it; not inside links, images or code
     static QString linkMediaNames(const QString &markdown, const QList<Media> &media);
+    // Each media name in `markdown` (by the same rules) as `replace` has it
+    static QString replaceMediaNames(const QString &markdown, const QList<Media> &media,
+                                     const std::function<QString(const QString &, const Media &)> &replace);
     Q_INVOKABLE QVariantList renderSegments(const QString &markdown, double maxWidth, int pixelSize,
                                             const QVariantMap &colors, const QStringList &highlight = {}) const;
     // Shows or hides the preview of the [[link]] on `line` of a note

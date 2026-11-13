@@ -1440,7 +1440,8 @@ QVariantList BoardModel::mediaList(const QString &noteId, const QString &current
     return list;
 }
 
-QString BoardModel::linkMediaNames(const QString &markdown, const QList<Media> &media)
+QString BoardModel::replaceMediaNames(const QString &markdown, const QList<Media> &media,
+                                      const std::function<QString(const QString &, const Media &)> &replace)
 {
     // Longest first, so "shot 2" isn't taken as "shot"; short names would
     // turn up in ordinary words
@@ -1475,14 +1476,12 @@ QString BoardModel::linkMediaNames(const QString &markdown, const QList<Media> &
             const QRegularExpressionMatch match = m.next();
             result += part.mid(from, match.capturedStart(1) - from);
             const QString found = match.captured(1);
-            QString path;
             for (const Media &n : std::as_const(names)) {
                 if (n.name.compare(found, Qt::CaseInsensitive) == 0) {
-                    path = n.path;
+                    result += replace(found, n);
                     break;
                 }
             }
-            result += QStringLiteral("[%1](media:%2)").arg(found, QString::fromLatin1(QUrl::toPercentEncoding(path, "/")));
             from = match.capturedEnd(1);
         }
         return result + part.mid(from);
@@ -1493,6 +1492,13 @@ QString BoardModel::linkMediaNames(const QString &markdown, const QList<Media> &
         last = match.capturedEnd();
     }
     return out + linkIn(markdown.mid(last));
+}
+
+QString BoardModel::linkMediaNames(const QString &markdown, const QList<Media> &media)
+{
+    return replaceMediaNames(markdown, media, [](const QString &found, const Media &m) {
+        return QStringLiteral("[%1](media:%2)").arg(found, QString::fromLatin1(QUrl::toPercentEncoding(m.path, "/")));
+    });
 }
 
 QVariantList BoardModel::renderSegments(const QString &markdown, double maxWidth, int pixelSize,

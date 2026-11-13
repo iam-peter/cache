@@ -1079,61 +1079,114 @@ BoardModel::Prompt BoardModel::promptOf(const QStringList &ids) const
     std::sort(state.items.begin(), state.items.end(), [this](const BoardItem &a, const BoardItem &b) {
         return m_readingOrder.value(a.id) < m_readingOrder.value(b.id);
     });
-    // ![alt](target) and [text](target)
-    static const QRegularExpression linkRe(QStringLiteral(R"((!?)\[([^\]]*)\]\(([^)\s]+)\))"));
-    Prompt prompt;
-    QStringList parts;
+    QList<const BoardItem *> notes;
     for (const BoardItem &it : std::as_const(state.items)) {
-        if (it.type != QLatin1String("note") && it.type != QLatin1String("text"))
-            continue;
-        QString text = Markdown::unlinkify(it.text).trimmed();
-        if (text.isEmpty())
-            continue;
+        if ((it.type == QLatin1String("note") || it.type == QLatin1String("text")) && !it.text.trimmed().isEmpty())
+            notes << &it;
+    }
+
+    Prompt prompt;
+    // What each medium is called in the chat: its name with the file's
+    // extension, made unique
+    static const QRegularExpression unsafe(QStringLiteral(R"([\\/:*?"<>|\x00-\x1f]+)"));
+    QHash<QString, QString> nameOf; // absolute path -> attachment name
+    QSet<QString> taken;
+    QList<Media> media;
+    for (const BoardItem *it : std::as_const(notes)) {
+        for (const Media &m : mediaOf(it->text)) {
+            media << m;
+            if (m.kind == QLatin1String("video") || nameOf.contains(m.absolute))
+                continue;
+            const QString ext = QFileInfo(m.file).suffix();
+            QString base = m.name;
+            if (!ext.isEmpty() && base.endsWith(QLatin1Char('.') + ext, Qt::CaseInsensitive))
+                base.chop(ext.size() + 1);
+            base = base.replace(unsafe, QStringLiteral("-")).trimmed();
+            if (base.isEmpty())
+                base = QFileInfo(m.file).completeBaseName();
+            const auto withExt = [&ext](const QString &b) { return ext.isEmpty() ? b : b + QLatin1Char('.') + ext; };
+            QString name = withExt(base);
+            for (int n = 2; taken.contains(name.toLower()); ++n)
+                name = withExt(base + QLatin1Char(' ') + QString::number(n));
+            taken.insert(name.toLower());
+            nameOf.insert(m.absolute, name);
+            prompt.attachments << Attachment{m.absolute, name};
+        }
+    }
+
+    static const QRegularExpression linkRe(QStringLiteral(R"((!?)\[([^\]]*)\]\(([^)\s]+)\))"));
+    static const QRegularExpression embedLine(QStringLiteral(R"(^\s*!\[[^\]]*\]\(([^)\s]+)\)\s*$)"));
+    static const QRegularExpression blankLines(QStringLiteral(R"(\n{3,})"));
+    QStringList raw, texts;
+    for (const BoardItem *it : std::as_const(notes)) {
+        raw << it->text.trimmed();
+        // Mentions by name: the attachment's name (videos keep theirs)
+        QString text = replaceMediaNames(Markdown::unlinkify(it->text), media,
+                                         [&nameOf](const QString &found, const Media &m) {
+                                             return nameOf.value(m.absolute, found);
+                                         });
+        // Images and videos on lines of their own: gone
+        QStringList lines;
+        for (const QString &line : text.split(QLatin1Char('\n'))) {
+            const QRegularExpressionMatch embed = embedLine.match(line);
+            if (embed.hasMatch() && QFileInfo(resolveLocal(embed.captured(1))).isFile())
+                continue;
+            lines << line;
+        }
+        text = lines.join(QLatin1Char('\n'));
+        // In a sentence: an image by its attachment's name, a file link as
+        // its text and the attachment's name
         QString out;
         qsizetype last = 0;
         for (auto m = linkRe.globalMatch(text); m.hasNext();) {
             const QRegularExpressionMatch match = m.next();
             out += text.mid(last, match.capturedStart() - last);
             last = match.capturedEnd();
-            const QString local = resolveLocal(match.captured(3));
-            const QFileInfo fi(local);
-            if (local.isEmpty() || !fi.isFile()) { // the web, or gone: as it is
+            const QFileInfo fi(resolveLocal(match.captured(3)));
+            if (!fi.isFile()) { // the web, or gone: as it is
                 out += match.captured(0);
                 continue;
             }
-            const QString name = fi.fileName();
-            if (mediaType(local) == QLatin1String("video")) { // a chat can't take it
-                out += QStringLiteral("[Video: %1]").arg(name);
-                continue;
-            }
-            if (!prompt.attachments.contains(fi.absoluteFilePath()))
-                prompt.attachments << fi.absoluteFilePath();
-            const QString label = match.captured(2).isEmpty() ? name : match.captured(2);
-            out += match.captured(1) + QLatin1Char('[') + label + QStringLiteral("](") + name + QLatin1Char(')');
+            const QString name = nameOf.value(fi.absoluteFilePath(), fi.fileName());
+            const QString label = match.captured(2).trimmed();
+            // The link's text is the name (or the file's): the name will do
+            if (!match.captured(1).isEmpty() || label.isEmpty() || label == name || label == fi.fileName()
+                || name == label + QLatin1Char('.') + fi.suffix())
+                out += name;
+            else
+                out += QStringLiteral("%1 (%2)").arg(label, name);
         }
         out += text.mid(last);
-        parts << out;
+        texts << out.replace(blankLines, QStringLiteral("\n\n")).trimmed();
     }
-    prompt.text = parts.join(QStringLiteral("\n\n---\n\n"));
+    prompt.markdown = raw.join(QStringLiteral("\n\n---\n\n"));
+    prompt.text = texts.join(QStringLiteral("\n\n---\n\n"));
     return prompt;
 }
 
-QVariantMap BoardModel::copyAsPrompt(const QStringList &ids, const QString &part)
+QVariantMap BoardModel::copyNotes(const QStringList &ids, const QString &mode)
 {
     const Prompt prompt = promptOf(ids);
-    if (prompt.text.isEmpty())
-        return {};
     auto *mime = new QMimeData;
     QStringList files;
-    if (part == QLatin1String("attachments")) {
-        if (prompt.attachments.isEmpty())
-            return {};
-        files = prompt.attachments;
+    if (mode == QLatin1String("media")) {
+        if (prompt.attachments.isEmpty()) {
+            delete mime;
+            return {{QStringLiteral("attachments"), 0}};
+        }
+        // Copies named as the chat should see them, in a fresh folder
+        QDir dir(tempPath(QStringLiteral("media")));
+        dir.removeRecursively();
+        QDir().mkpath(dir.path());
         QList<QUrl> urls;
         QByteArray gnome = "copy";
-        for (const QString &f : std::as_const(files)) {
-            urls << QUrl::fromLocalFile(f);
-            gnome += '\n' + QUrl::fromLocalFile(f).toEncoded();
+        for (const Attachment &a : prompt.attachments) {
+            const QString copy = dir.filePath(a.name);
+            if (!QFile::copy(a.source, copy))
+                continue;
+            files << copy;
+            urls << QUrl::fromLocalFile(copy);
+            gnome += '\n' + QUrl::fromLocalFile(copy).toEncoded();
         }
         mime->setUrls(urls);
         // GNOME's file managers and some apps look for this instead
@@ -1142,10 +1195,15 @@ QVariantMap BoardModel::copyAsPrompt(const QStringList &ids, const QString &part
         if (files.size() == 1 && mediaType(files.first()) == QLatin1String("image"))
             mime->setImageData(QImage(files.first()));
     } else {
-        mime->setText(prompt.text);
+        const QString text = mode == QLatin1String("markdown") ? prompt.markdown : prompt.text;
+        if (text.isEmpty()) {
+            delete mime;
+            return {};
+        }
+        mime->setText(text);
     }
     QGuiApplication::clipboard()->setMimeData(mime);
-    return {{QStringLiteral("text"), prompt.text},
+    return {{QStringLiteral("text"), mode == QLatin1String("markdown") ? prompt.markdown : prompt.text},
             {QStringLiteral("files"), files},
             {QStringLiteral("attachments"), int(prompt.attachments.size())}};
 }

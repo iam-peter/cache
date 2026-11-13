@@ -489,14 +489,12 @@ Item {
                     Tip {
                         visible: root.isNote && !root.formatting
                         iconName: "copy"
-                        tip: qsTr("Copy with images, to paste into Teams or mail (Ctrl+C)")
-                        onClicked: root.canvas.copyRow(root.index)
-                    }
-                    Tip {
-                        visible: root.isNote && !root.formatting
-                        iconName: "message-square-text"
-                        tip: qsTr("Copy as a prompt for Claude or another chat: the text; again for its images (Ctrl+Alt+C)")
-                        onClicked: root.canvas.copyAsPrompt()
+                        tip: qsTr("Copy: Markdown, as image, text only, media only, or for Teams")
+                        onClicked: copyMenu.popup(this, 0, height)
+                        CopyMenu {
+                            id: copyMenu
+                            canvas: root.canvas
+                        }
                     }
                     SizePipette {
                         visible: !root.isStroke && !root.formatting
