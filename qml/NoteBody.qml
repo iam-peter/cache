@@ -433,13 +433,20 @@ Item {
         }
     }
 
-    ScrollView {
+    // A Flickable, not a ScrollView: a ScrollView scrolls on the arrow keys
+    // the editor doesn't use itself (Right at the very end), which pushed
+    // the text out of sight sideways. Lines wrap; it scrolls up and down.
+    Flickable {
         id: editScroll
         anchors.fill: parent
         anchors.margins: Styles.Primitives.spacing.sp050
         visible: body.editing
+        clip: true
+        flickableDirection: Flickable.VerticalFlick
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollBar { }
 
-        TextArea {
+        TextArea.flickable: TextArea {
             id: editor
             wrapMode: TextEdit.Wrap
             textFormat: TextEdit.PlainText
