@@ -380,18 +380,34 @@ Item {
             toast.show(qsTr("Copied %1 items").arg(selection.length))
         }
     }
-    // The selected notes as a prompt for Claude or another AI chat: their
-    // text, and their images and files as attachments
+    // The selected notes as a prompt for Claude or another AI chat. A
+    // chat's paste takes text or files, never both, so it goes in two
+    // steps: first the text as text, to edit in the prompt box; pressed
+    // again for the same notes, their images and files.
+    property var promptPending: null // { key, ids, at }: images still to copy
     function copyAsPrompt() {
         if (selection.length === 0)
             return
-        const result = Board.copyAsPrompt(selection)
-        if (!result.text)
+        const key = selection.slice().sort().join("\n")
+        if (promptPending && promptPending.key === key && Date.now() - promptPending.at < 5 * 60 * 1000) {
+            const files = Board.copyAsPrompt(promptPending.ids, "attachments")
+            promptPending = null
+            toast.show(files.attachments === 1 ? qsTr("Copied the attachment. Paste it into the chat too.")
+                                               : qsTr("Copied %1 attachments. Paste them into the chat too.").arg(files.attachments), 5)
+            return
+        }
+        const result = Board.copyAsPrompt(selection, "text")
+        promptPending = null
+        if (!result.text) {
             toast.show(qsTr("Nothing to copy: no text in the selection"))
-        else if (result.attachments > 0)
-            toast.show(qsTr("Copied as a prompt: the text as a file and %n attachment(s). Paste them into Claude or another chat.", "", result.attachments))
-        else
+        } else if (result.attachments > 0) {
+            promptPending = { key: key, ids: selection.slice(), at: Date.now() }
+            toast.show(result.attachments === 1
+                       ? qsTr("Copied the text. Paste it, then press Ctrl+Alt+C again for its attachment.")
+                       : qsTr("Copied the text. Paste it, then press Ctrl+Alt+C again for its %1 attachments.").arg(result.attachments), 8)
+        } else {
             toast.show(qsTr("Copied as a prompt. Paste it into Claude or another chat."))
+        }
     }
     function nudge(dx, dy) {
         if (selection.length === 0)

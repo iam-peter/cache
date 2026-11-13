@@ -109,7 +109,7 @@ Rectangle {
         ToolSeparator { height: 24 }
         Action { iconName: "copy"; tip: qsTr("Copy (Ctrl+C)"); onClicked: bar.canvas.copySelected() }
         Action { iconName: "image"; tip: qsTr("Copy as a picture, for Teams (Ctrl+Shift+C)"); onClicked: bar.canvas.exportImage(bar.ids, "copy") }
-        Action { iconName: "message-square-text"; tip: qsTr("Copy as a prompt for Claude or another chat (Ctrl+Alt+C)"); onClicked: bar.canvas.copyAsPrompt() }
+        Action { iconName: "message-square-text"; tip: qsTr("Copy as a prompt for Claude or another chat: the text; again for its images (Ctrl+Alt+C)"); onClicked: bar.canvas.copyAsPrompt() }
         Action { iconName: "layout-template"; tip: qsTr("Save as template"); onClicked: bar.canvas.saveTemplate() }
         Action { iconName: "trash-2"; tip: qsTr("Delete (Del)"); onClicked: bar.canvas.deleteSelected() }
     }

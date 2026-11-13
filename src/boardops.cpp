@@ -1089,8 +1089,6 @@ BoardModel::Prompt BoardModel::promptOf(const QStringList &ids) const
         QString text = Markdown::unlinkify(it.text).trimmed();
         if (text.isEmpty())
             continue;
-        if (prompt.title.isEmpty())
-            prompt.title = titleFor(it);
         QString out;
         qsizetype last = 0;
         for (auto m = linkRe.globalMatch(text); m.hasNext();) {
@@ -1117,37 +1115,20 @@ BoardModel::Prompt BoardModel::promptOf(const QStringList &ids) const
         parts << out;
     }
     prompt.text = parts.join(QStringLiteral("\n\n---\n\n"));
-    if (state.items.size() > 1 && parts.size() > 1)
-        prompt.title = QFileInfo(m_projectPath).fileName();
     return prompt;
 }
 
-QVariantMap BoardModel::copyAsPrompt(const QStringList &ids)
+QVariantMap BoardModel::copyAsPrompt(const QStringList &ids, const QString &part)
 {
     const Prompt prompt = promptOf(ids);
     if (prompt.text.isEmpty())
         return {};
     auto *mime = new QMimeData;
-    mime->setText(prompt.text); // terminals and text fields take this
     QStringList files;
-    if (!prompt.attachments.isEmpty()) {
-        // A fresh folder each time, so earlier prompts don't linger
-        QDir dir(tempPath(QStringLiteral("prompt")));
-        dir.removeRecursively();
-        QDir().mkpath(dir.path());
-        static const QRegularExpression unsafe(QStringLiteral(R"([\\/:*?"<>|\x00-\x1f]+)"));
-        QString name = prompt.title;
-        name.replace(unsafe, QStringLiteral("-"));
-        name = name.trimmed().left(60).trimmed();
-        if (name.isEmpty())
-            name = QStringLiteral("Prompt");
-        const QString md = dir.filePath(name + QStringLiteral(".md"));
-        QSaveFile file(md);
-        if (file.open(QIODevice::WriteOnly)) {
-            file.write(prompt.text.toUtf8() + '\n');
-            file.commit();
-        }
-        files << md << prompt.attachments;
+    if (part == QLatin1String("attachments")) {
+        if (prompt.attachments.isEmpty())
+            return {};
+        files = prompt.attachments;
         QList<QUrl> urls;
         QByteArray gnome = "copy";
         for (const QString &f : std::as_const(files)) {
@@ -1157,6 +1138,11 @@ QVariantMap BoardModel::copyAsPrompt(const QStringList &ids)
         mime->setUrls(urls);
         // GNOME's file managers and some apps look for this instead
         mime->setData(QStringLiteral("x-special/gnome-copied-files"), gnome);
+        // One picture also as a picture, for apps that only take those
+        if (files.size() == 1 && mediaType(files.first()) == QLatin1String("image"))
+            mime->setImageData(QImage(files.first()));
+    } else {
+        mime->setText(prompt.text);
     }
     QGuiApplication::clipboard()->setMimeData(mime);
     return {{QStringLiteral("text"), prompt.text},

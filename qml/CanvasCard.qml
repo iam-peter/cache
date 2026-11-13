@@ -495,7 +495,7 @@ Item {
                     Tip {
                         visible: root.isNote && !root.formatting
                         iconName: "message-square-text"
-                        tip: qsTr("Copy as a prompt for Claude or another chat: the text, and the images as attachments (Ctrl+Alt+C)")
+                        tip: qsTr("Copy as a prompt for Claude or another chat: the text; again for its images (Ctrl+Alt+C)")
                         onClicked: root.canvas.copyAsPrompt()
                     }
                     SizePipette {

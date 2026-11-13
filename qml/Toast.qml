@@ -8,9 +8,11 @@ import Cache
 Rectangle {
     id: toast
 
-    function show(message) {
+    // `seconds`: longer for a message that says what to do next
+    function show(message, seconds) {
         label.text = message
         opacity = 1
+        hideTimer.interval = (seconds || 3.2) * 1000
         hideTimer.restart()
     }
 

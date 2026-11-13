@@ -260,14 +260,13 @@ public:
     // Several items: to paste on a canvas, plus their text as rich text
     Q_INVOKABLE void copyItems(const QStringList &ids) const;
     // The notes of `ids` (reading order) as a prompt for an AI chat such as
-    // Claude, on the clipboard. Without images or files: their Markdown as
-    // text. With them: files, since a chat's paste takes files or text but
-    // not both: the text as "<title>.md" and every image and file the notes
-    // show, their links pointing at those names. Videos are left out.
-    // Returns {text, files, attachments}.
-    Q_INVOKABLE QVariantMap copyAsPrompt(const QStringList &ids);
+    // Claude, on the clipboard, in two parts: a chat's paste takes text or
+    // files, never both. "text": their Markdown, the links to their images
+    // and files pointing at those files' names. "attachments": the images
+    // and files themselves (videos left out). Returns {text, files,
+    // attachments}, whichever part was copied.
+    Q_INVOKABLE QVariantMap copyAsPrompt(const QStringList &ids, const QString &part = QStringLiteral("text"));
     struct Prompt {
-        QString title;
         QString text;
         QStringList attachments; // absolute paths
     };
