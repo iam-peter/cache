@@ -16,6 +16,7 @@ Item {
     clip: true
 
     function beginEdit() {
+        mediaCache = null
         editor.text = card.itemText
         const at = card.canvas.editCursor
         editor.cursorPosition = at >= 0 ? Math.min(at, editor.length) : editor.length
@@ -170,18 +171,24 @@ Item {
     property var mediaItems: []
     property int mediaStart: -1   // where the typed name (or @) starts
     property bool mediaByAt: false
+    property var mediaCache: null  // this editing session's media list
+    property int mediaCacheLinks: -1
     readonly property var mediaCurrent: mediaPopup.opened && mediaList.currentIndex >= 0
                                         ? mediaItems[mediaList.currentIndex] : null
     // The entry in view: its own note's Markdown line in the editor, or
     // the other note on the canvas
     onMediaCurrentChanged: card.canvas.mediaHighlightId = mediaCurrent && !mediaCurrent.current ? mediaCurrent.noteId : ""
+    // Gone while its list showed another note (undo, another project): that
+    // note's outline goes too; only one list is ever open
+    Component.onDestruction: if (mediaItems.length > 0 && card && card.canvas) card.canvas.mediaHighlightId = ""
 
     // @ and what follows, or a word of 3 letters or more
     function mediaTrigger() {
         const before = editor.getText(Math.max(0, editor.cursorPosition - 80), editor.cursorPosition)
-        let m = before.match(/@([^\s@\[\]()]*)$/)
+        // An @ that starts a word: not one inside an e-mail address
+        let m = before.match(/(?:^|[\s(])@([^\s@\[\]()]*)$/)
         if (m)
-            return { at: true, prefix: m[1], start: editor.cursorPosition - m[0].length }
+            return { at: true, prefix: m[1], start: editor.cursorPosition - m[1].length - 1 }
         m = before.match(/(?:^|[\s(])([\w.\-]{3,})$/)
         if (m)
             return { at: false, prefix: m[1], start: editor.cursorPosition - m[1].length }
@@ -200,7 +207,14 @@ Item {
             return t.at ? name.includes(p) || file.includes(p)
                         : (name.startsWith(p) || file.startsWith(p)) && name !== p && file !== p
         }
-        const items = Board.mediaList(card.itemId, editor.text).filter(fits)
+        // Read again only when the note's links changed (a paste, a drop):
+        // not at every keystroke
+        const links = (editor.text.match(/\]\(/g) || []).length
+        if (mediaCache === null || links !== mediaCacheLinks) {
+            mediaCache = Board.mediaList(card.itemId, editor.text)
+            mediaCacheLinks = links
+        }
+        const items = mediaCache.filter(fits)
         if (items.length === 0) {
             mediaPopup.close()
             return
@@ -484,7 +498,11 @@ Item {
             }
             Keys.onPressed: (event) => {
                 if (mediaPopup.opened) {
-                    if (event.key === Qt.Key_Down || event.key === Qt.Key_Up) {
+                    // Offered for a plain word, the list leaves the arrows to
+                    // the cursor: it goes, and the cursor moves
+                    if (!body.mediaByAt && (event.key === Qt.Key_Down || event.key === Qt.Key_Up))
+                        mediaPopup.close()
+                    else if (event.key === Qt.Key_Down || event.key === Qt.Key_Up) {
                         if (event.key === Qt.Key_Down)
                             mediaList.incrementCurrentIndex()
                         else

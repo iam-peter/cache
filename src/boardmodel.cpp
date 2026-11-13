@@ -1112,8 +1112,21 @@ QString BoardModel::renderHtml(const QString &markdown, double maxWidth, int pix
     // A video can't show inside text: there it is a link that plays it
     QString source = forClipboard ? Markdown::unlinkify(markdown) : Markdown::linkify(markdown);
     // Qt's Markdown reader drops images without alt text: their file name
-    static const QRegularExpression unnamed(QStringLiteral(R"(!\[\]\(([^)\s]*?)([^/)\s]+)\))"));
-    source.replace(unnamed, QStringLiteral("![\\2](\\1\\2)"));
+    // (not in inline code, which shows what was written)
+    static const QRegularExpression unnamed(QStringLiteral(R"((`[^`]*`)|!\[\]\(([^)\s]*?)([^/)\s]+)\))"));
+    {
+        QString named;
+        qsizetype last = 0;
+        for (auto m = unnamed.globalMatch(source); m.hasNext();) {
+            const QRegularExpressionMatch match = m.next();
+            named += source.mid(last, match.capturedStart() - last);
+            named += match.capturedLength(1) > 0
+                         ? match.captured(1)
+                         : QStringLiteral("![%1](%2%1)").arg(match.captured(3), match.captured(2));
+            last = match.capturedEnd();
+        }
+        source = named + source.mid(last);
+    }
     source.replace(kVideoImage, QStringLiteral("[▶ \\1](\\2)"));
 
     QTextDocument doc;
@@ -1364,11 +1377,16 @@ QList<Piece> piecesOf(const QString &markdown, const std::function<QString(const
 
 } // namespace
 
+const QRegularExpression &BoardModel::markdownLink()
+{
+    static const QRegularExpression link(QStringLiteral(R"((!?)\[([^\]]*)\]\(([^)\s]+)\))"));
+    return link;
+}
+
 QList<BoardModel::Media> BoardModel::mediaOf(const QString &markdown) const
 {
-    static const QRegularExpression linkRe(QStringLiteral(R"((!?)\[([^\]]*)\]\(([^)\s]+)\))"));
     QList<Media> list;
-    for (auto m = linkRe.globalMatch(markdown); m.hasNext();) {
+    for (auto m = markdownLink().globalMatch(markdown); m.hasNext();) {
         const QRegularExpressionMatch match = m.next();
         const QString local = resolveLocal(match.captured(3));
         const QFileInfo fi(local);
@@ -1443,12 +1461,11 @@ QVariantList BoardModel::mediaList(const QString &noteId, const QString &current
 QString BoardModel::replaceMediaNames(const QString &markdown, const QList<Media> &media,
                                       const std::function<QString(const QString &, const Media &)> &replace)
 {
-    // Longest first, so "shot 2" isn't taken as "shot"; short names would
-    // turn up in ordinary words
-    // Alt texts that are no names: they'd link every such word
+    // Alt texts that are no names: they'd match every such word
     static const QStringList generic{QStringLiteral("image"), QStringLiteral("img"), QStringLiteral("picture"),
                                      QStringLiteral("photo"), QStringLiteral("video"), QStringLiteral("screenshot"),
                                      QStringLiteral("file")};
+    // Names of three letters or more: shorter ones turn up in ordinary words
     QList<Media> names;
     for (const Media &m : media) {
         if (m.name.size() >= 3 && !generic.contains(m.name.toLower()))
@@ -1458,13 +1475,23 @@ QString BoardModel::replaceMediaNames(const QString &markdown, const QList<Media
     }
     if (names.isEmpty())
         return markdown;
+    // Longest first, so "shot 2" isn't taken as "shot"
     std::sort(names.begin(), names.end(), [](const Media &a, const Media &b) { return a.name.size() > b.name.size(); });
     QStringList alternatives;
     for (const Media &m : std::as_const(names))
         alternatives << QRegularExpression::escape(m.name);
-    // A name on its own: not part of a longer word or path
-    const QRegularExpression nameRe(QStringLiteral(R"((?<![\w/.@-])(%1)(?![\w/-]|\.\w))").arg(alternatives.join(QLatin1Char('|'))),
-                                    QRegularExpression::CaseInsensitiveOption | QRegularExpression::UseUnicodePropertiesOption);
+    // A name on its own: not part of a longer word or path. Compiled once
+    // for each set of names, not each time a note renders
+    static QHash<QString, QRegularExpression> compiled;
+    const QString pattern = QStringLiteral(R"((?<![\w/.@-])(%1)(?![\w/-]|\.\w))").arg(alternatives.join(QLatin1Char('|')));
+    auto found = compiled.constFind(pattern);
+    if (found == compiled.cend()) {
+        if (compiled.size() > 256)
+            compiled.clear();
+        found = compiled.insert(pattern, QRegularExpression(pattern, QRegularExpression::CaseInsensitiveOption
+                                                                         | QRegularExpression::UseUnicodePropertiesOption));
+    }
+    const QRegularExpression &nameRe = *found;
     // What stays as it is: links, images, [[links]], code
     static const QRegularExpression keep(QStringLiteral(R"(!?\[[^\]]*\]\([^)]*\)|\[\[[^\]]*\]\]|`[^`]*`|<[^>]*>)"));
     QString out;

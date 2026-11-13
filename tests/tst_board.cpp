@@ -599,6 +599,13 @@ private slots:
         QCOMPARE(names, (QStringList{"shot.png", "shot 2.png"}));
         QCOMPARE(board.copyNotes({third}, QStringLiteral("text")).value("text").toString(), QStringLiteral("shot.png shot 2.png"));
 
+        // Fenced code stays as it is written
+        const QString code = board.get(board.addNote(1200, 0, QStringLiteral(
+            "See screenshot123.\n\n```markdown\n![screenshot123](assets/paste-1.png)\nscreenshot123\n```\n\nscreenshot123 again"))).value("id").toString();
+        QCOMPARE(board.copyNotes({first, code}, QStringLiteral("text")).value("text").toString().section(QStringLiteral("\n\n---\n\n"), 1),
+                 QStringLiteral("See screenshot123.png.\n\n```markdown\n![screenshot123](assets/paste-1.png)\nscreenshot123\n```\n\n"
+                                "screenshot123.png again"));
+
         // Nothing to copy
         const QString plain = board.get(board.addNote(900, 0, QStringLiteral("Just words"))).value("id").toString();
         QCOMPARE(board.copyNotes({plain}, QStringLiteral("media")).value("attachments").toInt(), 0);
@@ -644,6 +651,13 @@ private slots:
         const QString untouched = QStringLiteral("![screenshot123](assets/paste-1.png) `screenshot123` [[screenshot123]] "
                                                  "myscreenshot123 assets/toolbar.png toolbar.pngs");
         QCOMPARE(BoardModel::linkMediaNames(untouched, media), untouched);
+        // An image without alt text shows (Qt drops those), but inline code
+        // shows what was written
+        QString html;
+        for (const QVariant &v : board.renderSegments(QStringLiteral("![](assets/other.png) and `![](x.png)`"), 400, 14, {}))
+            html += v.toMap().value("html").toString();
+        QVERIFY2(html.contains(QStringLiteral("other.png\" alt=\"other.png")) || html.contains(QStringLiteral("alt=\"other.png\"")), qPrintable(html));
+        QVERIFY2(html.contains(QStringLiteral("![](x.png)")), qPrintable(html));
         // Generic alt texts aren't names
         const QList<BoardModel::Media> generic = board.mediaOf(QStringLiteral("![image](assets/other.png)"));
         QCOMPARE(BoardModel::linkMediaNames(QStringLiteral("an image of other.png"), generic),

@@ -1114,49 +1114,72 @@ BoardModel::Prompt BoardModel::promptOf(const QStringList &ids) const
         }
     }
 
-    static const QRegularExpression linkRe(QStringLiteral(R"((!?)\[([^\]]*)\]\(([^)\s]+)\))"));
+    const QRegularExpression &linkRe = markdownLink();
     static const QRegularExpression embedLine(QStringLiteral(R"(^\s*!\[[^\]]*\]\(([^)\s]+)\)\s*$)"));
     static const QRegularExpression blankLines(QStringLiteral(R"(\n{3,})"));
     QStringList raw, texts;
     for (const BoardItem *it : std::as_const(notes)) {
         raw << it->text.trimmed();
-        // Mentions by name: the attachment's name (videos keep theirs)
-        QString text = replaceMediaNames(Markdown::unlinkify(it->text), media,
-                                         [&nameOf](const QString &found, const Media &m) {
-                                             return nameOf.value(m.absolute, found);
-                                         });
-        // Images and videos on lines of their own: gone
-        QStringList lines;
-        for (const QString &line : text.split(QLatin1Char('\n'))) {
-            const QRegularExpressionMatch embed = embedLine.match(line);
-            if (embed.hasMatch() && QFileInfo(resolveLocal(embed.captured(1))).isFile())
-                continue;
-            lines << line;
-        }
-        text = lines.join(QLatin1Char('\n'));
-        // In a sentence: an image by its attachment's name, a file link as
-        // its text and the attachment's name
-        QString out;
-        qsizetype last = 0;
-        for (auto m = linkRe.globalMatch(text); m.hasNext();) {
-            const QRegularExpressionMatch match = m.next();
-            out += text.mid(last, match.capturedStart() - last);
-            last = match.capturedEnd();
-            const QFileInfo fi(resolveLocal(match.captured(3)));
-            if (!fi.isFile()) { // the web, or gone: as it is
-                out += match.captured(0);
-                continue;
+        // Fenced code stays as written; the rest loses its media
+        const auto stripMedia = [&](const QString &part) {
+            // Mentions by name: the attachment's name (videos keep theirs)
+            QString text = replaceMediaNames(part, media,
+                                             [&nameOf](const QString &found, const Media &m) {
+                                                 return nameOf.value(m.absolute, found);
+                                             });
+            // Images and videos on lines of their own: gone
+            QStringList lines;
+            for (const QString &line : text.split(QLatin1Char('\n'))) {
+                const QRegularExpressionMatch embed = embedLine.match(line);
+                if (embed.hasMatch() && QFileInfo(resolveLocal(embed.captured(1))).isFile())
+                    continue;
+                lines << line;
             }
-            const QString name = nameOf.value(fi.absoluteFilePath(), fi.fileName());
-            const QString label = match.captured(2).trimmed();
-            // The link's text is the name (or the file's): the name will do
-            if (!match.captured(1).isEmpty() || label.isEmpty() || label == name || label == fi.fileName()
-                || name == label + QLatin1Char('.') + fi.suffix())
-                out += name;
-            else
-                out += QStringLiteral("%1 (%2)").arg(label, name);
+            text = lines.join(QLatin1Char('\n'));
+            // In a sentence: an image by its attachment's name, a file link as
+            // its text and the attachment's name
+            QString out;
+            qsizetype last = 0;
+            for (auto m = linkRe.globalMatch(text); m.hasNext();) {
+                const QRegularExpressionMatch match = m.next();
+                out += text.mid(last, match.capturedStart() - last);
+                last = match.capturedEnd();
+                const QFileInfo fi(resolveLocal(match.captured(3)));
+                if (!fi.isFile()) { // the web, or gone: as it is
+                    out += match.captured(0);
+                    continue;
+                }
+                const QString name = nameOf.value(fi.absoluteFilePath(), fi.fileName());
+                const QString label = match.captured(2).trimmed();
+                // The link's text is the name (or the file's): the name will do
+                if (!match.captured(1).isEmpty() || label.isEmpty() || label == name || label == fi.fileName()
+                    || name == label + QLatin1Char('.') + fi.suffix())
+                    out += name;
+                else
+                    out += QStringLiteral("%1 (%2)").arg(label, name);
+            }
+            out += text.mid(last);
+            return out;
+        };
+        const QString source = Markdown::unlinkify(it->text);
+        const QStringList sourceLines = source.split(QLatin1Char('\n'));
+        QList<bool> inFence(sourceLines.size(), false);
+        for (const Markdown::Fence &f : Markdown::fences(source)) {
+            for (int l = f.startLine; l <= f.endLine && l < sourceLines.size(); ++l)
+                inFence[l] = true;
         }
-        out += text.mid(last);
+        QString out;
+        for (int l = 0; l < sourceLines.size();) {
+            const bool fence = inFence.at(l);
+            int end = l;
+            while (end < sourceLines.size() && inFence.at(end) == fence)
+                ++end;
+            const QString part = sourceLines.mid(l, end - l).join(QLatin1Char('\n'));
+            if (l > 0)
+                out += QLatin1Char('\n');
+            out += fence ? part : stripMedia(part);
+            l = end;
+        }
         texts << out.replace(blankLines, QStringLiteral("\n\n")).trimmed();
     }
     prompt.markdown = raw.join(QStringLiteral("\n\n---\n\n"));

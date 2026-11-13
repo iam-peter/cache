@@ -316,6 +316,8 @@ public:
         qsizetype at = 0;
     };
     QList<Media> mediaOf(const QString &markdown) const;
+    // [text](target) and ![alt](target): 1 the "!", 2 the text, 3 the target
+    static const QRegularExpression &markdownLink();
     // Every medium of the project's notes; rebuilt after text changes
     const QList<Media> &projectMedia() const;
     mutable QList<Media> m_projectMedia;
