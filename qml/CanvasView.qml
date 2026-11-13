@@ -1643,35 +1643,36 @@ Item {
         property point worldPos
         MenuItem { text: qsTr("New note here"); onTriggered: view.newNoteAt(canvasMenu.worldPos) }
         MenuItem { text: qsTr("New code snippet here"); onTriggered: view.newCodeNoteAt(canvasMenu.worldPos) }
-        MenuItem { text: qsTr("Paste here"); onTriggered: { view.clearSelection(); view.pasteAt(canvasMenu.worldPos) } }
+        KeyedMenuItem { text: qsTr("Paste here"); shortcut: "Ctrl+V"; onTriggered: { view.clearSelection(); view.pasteAt(canvasMenu.worldPos) } }
         MenuItem { text: qsTr("Insert template…"); onTriggered: templateDialog.open() }
         MenuSeparator {}
-        MenuItem { text: qsTr("Select all"); onTriggered: view.selectAll() }
-        MenuItem { text: qsTr("Fit everything"); onTriggered: view.fitAll() }
-        MenuItem { text: qsTr("Fit selection"); enabled: view.selection.length > 0; onTriggered: view.fitSelection() }
-        MenuItem { text: qsTr("Zoom to 100%"); onTriggered: view.resetZoom() }
+        KeyedMenuItem { text: qsTr("Select all"); shortcut: "Ctrl+A"; onTriggered: view.selectAll() }
+        KeyedMenuItem { text: qsTr("Fit everything"); shortcut: "Ctrl+1"; onTriggered: view.fitAll() }
+        KeyedMenuItem { text: qsTr("Fit selection"); shortcut: "Ctrl+2"; enabled: view.selection.length > 0; onTriggered: view.fitSelection() }
+        KeyedMenuItem { text: qsTr("Zoom to 100%"); shortcut: "Ctrl+0"; onTriggered: view.resetZoom() }
     }
 
     Menu {
         id: cardMenu
         property int row: -1
         readonly property var item: row >= 0 ? Board.get(row) : ({})
-        MenuItem { text: qsTr("Edit"); enabled: cardMenu.item.type !== "stroke"; onTriggered: view.startEditing(cardMenu.item.id) }
+        KeyedMenuItem { text: qsTr("Edit"); shortcut: "F2"; enabled: cardMenu.item.type !== "stroke"; onTriggered: view.startEditing(cardMenu.item.id) }
         // Every way to copy, the rich copy for Teams among them
         CopyMenu { canvas: view }
-        MenuItem {
+        KeyedMenuItem {
             text: view.selection.length > 1 ? qsTr("Fit selection") : qsTr("Zoom to it")
+            shortcut: view.selection.length > 1 ? "Ctrl+2" : ""
             onTriggered: view.selection.length > 1 ? view.fitSelection() : view.focusItem(cardMenu.item.id)
         }
         MenuSeparator {}
-        MenuItem { text: qsTr("Add child (Tab)"); enabled: cardMenu.item.type === "note" || cardMenu.item.type === "shape"; onTriggered: view.addChild() }
+        KeyedMenuItem { text: qsTr("Add child"); shortcut: "Tab"; enabled: cardMenu.item.type === "note" || cardMenu.item.type === "shape"; onTriggered: view.addChild() }
         MenuItem { text: qsTr("Tidy branch"); enabled: cardMenu.item.childCount > 0; onTriggered: Board.tidy(cardMenu.item.id) }
         MenuSeparator {}
-        MenuItem { text: qsTr("Duplicate"); onTriggered: view.duplicateSelected() }
+        KeyedMenuItem { text: qsTr("Duplicate"); shortcut: "Ctrl+D"; onTriggered: view.duplicateSelected() }
         MenuItem { text: qsTr("Bring to front"); onTriggered: Board.raise(cardMenu.row) }
         MenuItem { text: qsTr("Send to back"); onTriggered: Board.lower(cardMenu.row) }
         MenuItem { text: qsTr("Save as template…"); onTriggered: templateDialog.saveSelection() }
         MenuSeparator {}
-        MenuItem { text: qsTr("Delete"); onTriggered: view.deleteSelected() }
+        KeyedMenuItem { text: qsTr("Delete"); shortcut: "Del"; onTriggered: view.deleteSelected() }
     }
 }

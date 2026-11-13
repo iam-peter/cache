@@ -223,9 +223,10 @@ ApplicationWindow {
                         onTriggered: { exportDialog.mode = "pdf"; exportDialog.open() }
                     }
                     MenuSeparator {}
-                    MenuItem { text: qsTr("Templates…  (Ctrl+Shift+T)"); onTriggered: templates.open() }
-                    MenuItem {
-                        text: qsTr("History…  (Ctrl+Shift+H)")
+                    KeyedMenuItem { text: qsTr("Templates…"); shortcut: "Ctrl+Shift+T"; onTriggered: templates.open() }
+                    KeyedMenuItem {
+                        text: qsTr("History…")
+                        shortcut: "Ctrl+Shift+H"
                         enabled: History.available
                         onTriggered: historyDialog.open()
                     }
@@ -233,7 +234,7 @@ ApplicationWindow {
                     MenuItem { text: qsTr("Open project folder"); onTriggered: Qt.openUrlExternally(Board.projectUrl) }
                     MenuItem { text: qsTr("Change workspace folder…"); onTriggered: sidebar.changeWorkspace() }
                     MenuSeparator {}
-                    MenuItem { text: qsTr("Keyboard shortcuts"); onTriggered: helpDialog.open() }
+                    KeyedMenuItem { text: qsTr("Keyboard shortcuts"); shortcut: "F1"; onTriggered: helpDialog.open() }
                 }
             }
             IconButton {

@@ -12,6 +12,21 @@ QtObject {
     readonly property var s: Styles.TokenInterface.semantics
     readonly property bool dark: Styles.TokenInterface.dark
 
+    // A shortcut as menus show it: the symbols printed on the keys where
+    // keyboards have them (⇧ Shift, ⇥ Tab, ↵ Enter, ⌫ Backspace), words
+    // where they have words (Ctrl, Alt, Del); on a Mac its own symbols.
+    // "Ctrl+Shift+C" -> "Ctrl ⇧ C", or "⌘ ⇧ C" on a Mac
+    function keys(sequence) {
+        const mac = Qt.platform.os === "osx" || Qt.platform.os === "macos"
+        const names = mac
+            ? { Ctrl: "⌘", Meta: "⌃", Alt: "⌥", Shift: "⇧", Tab: "⇥", Enter: "↵", Return: "↵",
+                Backspace: "⌫", Del: "⌦", Delete: "⌦", Esc: "⎋" }
+            : { Shift: "⇧", Tab: "⇥", Enter: "↵", Return: "↵", Backspace: "⌫", Delete: "Del" }
+        // "Ctrl++" ends in the plus key itself
+        const parts = sequence.endsWith("++") ? sequence.slice(0, -2).split("+").concat(["+"]) : sequence.split("+")
+        return parts.map(k => names[k] !== undefined ? names[k] : k).join(mac ? "" : " ")
+    }
+
     // Preferences, kept between sessions
     readonly property Settings prefs: Settings {
         category: "preferences"
