@@ -446,6 +446,12 @@ QString BoardModel::webMarkdown(const QUrl &url, const QMimeData *mime, bool *me
     }
     if (!title.isEmpty() && title != address)
         return Markdown::link(title, address);
+    // An issue (Jira's /browse/KEY-123): its key. The page itself is behind
+    // a sign-in, so its title would only be the tracker's name.
+    static const QRegularExpression issue(QStringLiteral(R"((?:/browse/|[?&]selectedIssue=)([A-Z][A-Z0-9_]*-\d+)\b)"));
+    const QRegularExpressionMatch key = issue.match(address);
+    if (key.hasMatch())
+        return Markdown::link(key.captured(1), address);
     const QString before = Markdown::link(address, address);
     fetchTitle(before, url);
     return before;

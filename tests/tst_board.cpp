@@ -233,6 +233,13 @@ private slots:
         // An image: fetched into assets
         ids = board.dropData({{"text/uri-list", server.url("/pic.png").toUtf8()}}, 0, 0);
         QTRY_VERIFY(board.getById(ids.first()).value("text").toString().contains(QStringLiteral("](assets/pic.png)")));
+        // An issue: named by its key at once, never by its sign-in page
+        ids = board.dropData({{"text/plain", "https://example.atlassian.net/browse/IDS5-1341"}}, 0, 0);
+        QCOMPARE(board.getById(ids.first()).value("text").toString().trimmed(),
+                 QStringLiteral("[IDS5-1341](https://example.atlassian.net/browse/IDS5-1341)"));
+        ids = board.dropData({{"text/plain", "https://example.atlassian.net/jira/software/projects/IDS5/"
+                                             "boards/7?selectedIssue=IDS5-99"}}, 0, 0);
+        QVERIFY(board.getById(ids.first()).value("text").toString().startsWith(QStringLiteral("[IDS5-99](")));
         // One that can't be had: a link to it
         ids = board.dropData({{"text/plain", "http://127.0.0.1:1/gone.png"}}, 0, 0);
         QTRY_COMPARE(board.getById(ids.first()).value("text").toString().trimmed(),

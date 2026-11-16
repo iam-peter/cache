@@ -128,7 +128,8 @@ request; the [website](pages/) is published from `pages/` by the
   - **any other file** (PDF, Office documents, archives…) is copied into
     `assets/` and attached as a card with its type and size that opens it
   - **cells copied from a spreadsheet**, and CSV files, become a table
-  - **web links** get the page's title; **web images** are downloaded,
+  - **web links** get the page's title, Jira issues their key
+    (`[IDS5-1341](…/browse/IDS5-1341)`); **web images** are downloaded,
     in the background (one that can't be had, say behind a sign-in, stays
     a link)
   - Markdown and text files become notes of their own, and notes copied
