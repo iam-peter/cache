@@ -576,6 +576,14 @@ Item {
                 if (event.key === Qt.Key_Escape) {
                     body.card.canvas.finishEditing()
                     event.accepted = true
+                } else if ((event.matches(StandardKey.Copy) || event.matches(StandardKey.Cut))
+                           && editor.selectedText.length > 0) {
+                    // The Markdown as plain text: the editor's own copy adds
+                    // HTML, which pastes back with "\" for its line breaks
+                    Board.copyText(editor.selectedText)
+                    if (event.matches(StandardKey.Cut))
+                        editor.remove(editor.selectionStart, editor.selectionEnd)
+                    event.accepted = true
                 } else if (event.matches(StandardKey.Paste)) {
                     // Files, images, rich text, links and cells become
                     // Markdown; plain text falls through to the normal paste
