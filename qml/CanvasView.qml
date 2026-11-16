@@ -377,6 +377,30 @@ Item {
                                                            locked.length))
         }
     }
+    // A link card for `url` in the middle of the view, selected
+    function addLinkCard(url) {
+        const c = centerWorld()
+        const row = Board.addItem("link", Math.round(c.x - 160), Math.round(c.y - 100), 320, 200, "", url)
+        if (row >= 0)
+            setSelection([Board.get(row).id])
+        return row
+    }
+    // An empty one, its address being asked for
+    function newLinkCard() {
+        const row = addLinkCard("")
+        if (row >= 0)
+            startEditing(Board.get(row).id)
+    }
+    // To the item a connector comes from, or (toEnd) points to
+    function followLink(linkId, toEnd) {
+        const l = Board.links.find(x => x.id === linkId)
+        if (!l)
+            return
+        const target = toEnd ? l.to : l.from
+        focusItem(target)
+        setSelection([target])
+    }
+
     // The selected notes, each as tall as what it holds
     function fitToContent() {
         for (const id of selection) {

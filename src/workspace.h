@@ -46,6 +46,8 @@ public:
     Q_INVOKABLE bool removeProject(int row);
     Q_INVOKABLE QUrl projectUrl(int row) const;
     Q_INVOKABLE int indexOfPath(const QString &path) const;
+    // [{name, path, row}] of every project, for the command palette
+    Q_INVOKABLE QVariantList projects() const;
 
 signals:
     void rootPathChanged();

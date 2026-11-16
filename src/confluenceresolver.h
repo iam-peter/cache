@@ -22,6 +22,10 @@ public:
     void signIn(const Account &, const QByteArray &, const SignedIn &done) override { done(false, {}); }
     bool signsIn() const override { return false; }
 
+    // Pages and blog posts whose text has `query`, on every Atlassian
+    // site there is an account for
+    void search(const QString &query, const Results &done) override;
+
     // Where a link points in Confluence
     struct Page
     {

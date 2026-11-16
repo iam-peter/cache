@@ -238,6 +238,26 @@ Dialog {
                                 onClicked: Links.accounts.remove(account.modelData.provider, account.modelData.host)
                             }
                         }
+                        // Figma: whose files the command palette searches
+                        RowLayout {
+                            visible: account.modelData.provider === "figma"
+                            Layout.fillWidth: true
+                            spacing: Styles.Primitives.spacing.sp100
+                            Label {
+                                text: qsTr("Teams")
+                                color: Theme.textMuted
+                                font.pixelSize: Styles.Primitives.fontSize.small
+                            }
+                            TextField {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 100 // fills the row; its text doesn't widen the dialog
+                                text: (account.modelData.teams || []).join(", ")
+                                placeholderText: qsTr("Team addresses (figma.com/files/team/…), for searching their files")
+                                font.pixelSize: Styles.Primitives.fontSize.small
+                                onEditingFinished: Links.accounts.setTeams(account.modelData.provider,
+                                                                           account.modelData.host, text)
+                            }
+                        }
                         // Old addresses of the same site: their links are read from this host
                         RowLayout {
                             visible: account.modelData.provider === "jira"

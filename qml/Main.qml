@@ -53,6 +53,9 @@ ApplicationWindow {
 
     // --- Shortcuts ----------------------------------------------------------
 
+    // While the command palette is open, its own keys
+    readonly property bool popupOpen: palette.opened
+    Shortcut { sequences: ["Ctrl+P"]; enabled: !win.popupOpen; onActivated: palette.show() }
     Shortcut { sequences: ["Ctrl+N"]; enabled: !win.popupOpen; onActivated: canvasView.newNote() }
     Shortcut { sequences: ["Ctrl+Shift+I"]; enabled: !win.popupOpen; onActivated: canvasView.pickMedia(canvasView.selectedRow()) }
     Shortcut { sequences: ["Ctrl+B"]; onActivated: sidebar.visible = !sidebar.visible }
@@ -272,6 +275,55 @@ ApplicationWindow {
 
     ExportDialog { id: exportDialog; canvas: canvasView }
 
+    CommandPalette {
+        id: palette
+        canvas: canvasView
+        readonly property var selection: canvasView.selection
+        readonly property bool locked: selection.length > 0 && selection.every(id => Board.getById(id).locked)
+        commands: [
+            { name: qsTr("New note"), keys: "Ctrl+N", run: () => canvasView.newNote() },
+            { name: qsTr("New code snippet"), run: () => canvasView.newCodeNoteAt(canvasView.centerWorld()) },
+            { name: qsTr("New link card"), run: () => canvasView.newLinkCard() },
+            { name: qsTr("Add images, videos or files…"), keys: "Ctrl+Shift+I",
+              run: () => canvasView.pickMedia(canvasView.selectedRow()) },
+            { name: qsTr("Search all projects"), keys: "Ctrl+F",
+              run: () => { sidebar.visible = true; sidebar.focusSearch() } },
+            { name: qsTr("Fit everything"), keys: "Ctrl+1", run: () => canvasView.fitAll() },
+            { name: qsTr("Fit selection"), keys: "Ctrl+2", enabled: selection.length > 0,
+              run: () => canvasView.fitSelection() },
+            { name: qsTr("Zoom to 100%"), keys: "Ctrl+0", run: () => canvasView.resetZoom() },
+            { name: qsTr("Select all"), keys: "Ctrl+A", run: () => canvasView.selectAll() },
+            { name: locked ? qsTr("Unlock the selection") : qsTr("Lock the selection"), enabled: selection.length > 0,
+              run: () => Board.setLocked(selection, !locked) },
+            { name: qsTr("Fit the notes' height to their content"), enabled: selection.length > 0,
+              run: () => canvasView.fitToContent() },
+            { name: qsTr("Arrange in a row"), enabled: selection.length > 1, run: () => Board.arrange(selection, "row") },
+            { name: qsTr("Arrange in a column"), enabled: selection.length > 1,
+              run: () => Board.arrange(selection, "column") },
+            { name: qsTr("Arrange in a grid"), enabled: selection.length > 1, run: () => Board.arrange(selection, "grid") },
+            { name: qsTr("Duplicate"), keys: "Ctrl+D", enabled: selection.length > 0,
+              run: () => canvasView.duplicateSelected() },
+            { name: qsTr("Delete"), keys: "Del", enabled: selection.length > 0 || canvasView.selectedLinkId !== "",
+              run: () => canvasView.deleteSelected() },
+            { name: qsTr("Go to where the connector comes from"), enabled: canvasView.selectedLinkId !== "",
+              run: () => canvasView.followLink(canvasView.selectedLinkId, false) },
+            { name: qsTr("Go to where the connector points"), enabled: canvasView.selectedLinkId !== "",
+              run: () => canvasView.followLink(canvasView.selectedLinkId, true) },
+            { name: qsTr("Export a picture…"), run: () => exportDialog.open() },
+            { name: qsTr("Copy canvas as picture"), run: () => canvasView.exportImage([], "copy") },
+            { name: qsTr("Export canvas as Markdown"), run: () => {
+                const path = Board.exportMarkdown()
+                if (path)
+                    Qt.openUrlExternally("file://" + path)
+            } },
+            { name: qsTr("Templates…"), keys: "Ctrl+Shift+T", run: () => templates.open() },
+            { name: qsTr("History…"), keys: "Ctrl+Shift+H", enabled: History.available, run: () => historyDialog.open() },
+            { name: qsTr("Show or hide the sidebar"), keys: "Ctrl+B", run: () => sidebar.visible = !sidebar.visible },
+            { name: qsTr("Settings"), keys: "Ctrl+,", run: () => settingsDialog.open() },
+            { name: qsTr("Keyboard shortcuts"), keys: "F1", run: () => helpDialog.open() },
+        ]
+    }
+
     Dialog {
         id: helpDialog
         title: qsTr("Keyboard shortcuts")
@@ -316,6 +368,7 @@ ApplicationWindow {
                     ["Ctrl+wheel, + / −", qsTr("Zoom")],
                     ["Ctrl+Z / Ctrl+Shift+Z", qsTr("Undo / redo")],
                     ["Ctrl+0 / Ctrl+1 / Ctrl+2", qsTr("Zoom 100% / fit everything / fit selection")],
+                    ["Ctrl+P", qsTr("Command palette: commands, notes, projects, Jira, Confluence, Figma")],
                     ["Ctrl+F", qsTr("Search all projects")],
                     ["Ctrl+Shift+T / H", qsTr("Templates / history")],
                     ["Ctrl+B", qsTr("Show or hide the sidebar")],

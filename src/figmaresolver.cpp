@@ -10,7 +10,10 @@
 #include <QRegularExpression>
 #include <QUrlQuery>
 
+#include <algorithm>
 #include <cmath>
+#include <memory>
+#include <utility>
 
 namespace {
 
@@ -218,4 +221,99 @@ void FigmaResolver::resolve(const QUrl &url, const Done &done)
                 });
         });
     });
+}
+
+void FigmaResolver::listFiles(const Account &account, const std::function<void()> &done)
+{
+    m_listing << done;
+    if (m_listing.size() > 1)
+        return; // already being read
+    struct Listing {
+        QVariantList files;
+        int pending = 1;
+    };
+    auto listing = std::make_shared<Listing>();
+    const QStringList teams = account.teams;
+    const auto settle = [this, listing, teams] {
+        if (--listing->pending > 0)
+            return;
+        m_files = listing->files;
+        m_filesRead = QDateTime::currentDateTimeUtc();
+        m_filesOf = teams;
+        const auto waiting = std::exchange(m_listing, {});
+        for (const auto &w : waiting)
+            w();
+    };
+    m_links->accounts()->token(account, [this, teams, listing, settle](const QByteArray &token) {
+        if (token.isEmpty()) {
+            settle();
+            return;
+        }
+        for (const QString &team : teams) {
+            ++listing->pending;
+            get(token, QStringLiteral("/v1/teams/%1/projects").arg(team),
+                [this, token, listing, settle](int status, const QJsonObject &json, const QString &) {
+                    if (status == 200) {
+                        for (const QJsonValue &value : json.value(QLatin1String("projects")).toArray()) {
+                            const QJsonObject project = value.toObject();
+                            const QString name = project.value(QLatin1String("name")).toString();
+                            const QString id = project.value(QLatin1String("id")).toVariant().toString();
+                            ++listing->pending;
+                            get(token, QStringLiteral("/v1/projects/%1/files").arg(id),
+                                [listing, settle, name](int status, const QJsonObject &json, const QString &) {
+                                    if (status == 200) {
+                                        for (const QJsonValue &f : json.value(QLatin1String("files")).toArray()) {
+                                            const QJsonObject file = f.toObject();
+                                            listing->files << QVariantMap{
+                                                {QStringLiteral("key"), file.value(QLatin1String("key")).toString()},
+                                                {QStringLiteral("name"), file.value(QLatin1String("name")).toString()},
+                                                {QStringLiteral("project"), name},
+                                                {QStringLiteral("thumbnail"), file.value(QLatin1String("thumbnail_url")).toString()}};
+                                        }
+                                    }
+                                    settle();
+                                });
+                        }
+                    }
+                    settle();
+                });
+        }
+        settle();
+    });
+}
+
+void FigmaResolver::search(const QString &query, const Results &done)
+{
+    const std::optional<Account> account = m_links->accounts()->find(id(), fixedHost());
+    if (!account || account->teams.isEmpty()) {
+        done({});
+        return;
+    }
+    const QStringList words = query.toLower().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    const auto filter = [this, words, done] {
+        QVariantList results;
+        for (const QVariant &v : std::as_const(m_files)) {
+            const QVariantMap file = v.toMap();
+            const QString name = file.value(QStringLiteral("name")).toString();
+            const QString lower = name.toLower();
+            if (!std::all_of(words.cbegin(), words.cend(), [&](const QString &w) { return lower.contains(w); }))
+                continue;
+            results << QVariantMap{
+                {QStringLiteral("title"), name},
+                {QStringLiteral("detail"), QStringLiteral("Figma · %1").arg(file.value(QStringLiteral("project")).toString())},
+                {QStringLiteral("image"), file.value(QStringLiteral("thumbnail"))},
+                {QStringLiteral("url"), QStringLiteral("https://www.figma.com/design/%1/%2")
+                                            .arg(file.value(QStringLiteral("key")).toString(),
+                                                 QString::fromUtf8(QUrl::toPercentEncoding(QString(name).replace(QLatin1Char(' '), QLatin1Char('-')))))}};
+            if (results.size() >= 8)
+                break;
+        }
+        done(results);
+    };
+    const bool fresh = m_filesRead.isValid() && m_filesRead.secsTo(QDateTime::currentDateTimeUtc()) < Links::kFreshSeconds
+                       && m_filesOf == account->teams;
+    if (fresh)
+        filter();
+    else
+        listFiles(*account, filter);
 }

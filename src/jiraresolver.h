@@ -24,6 +24,10 @@ public:
     void resolve(const QUrl &url, const Done &done) override;
     void signIn(const Account &account, const QByteArray &token, const SignedIn &done) override;
 
+    // Issues whose text has `query`, on every Atlassian site there is an
+    // account for; an issue key also finds that issue
+    void search(const QString &query, const Results &done) override;
+
     // An issue as the API gives it, as a link's details
     static LinkInfo infoOf(const QString &key, const QJsonObject &issue);
 

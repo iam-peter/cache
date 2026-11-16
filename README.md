@@ -233,6 +233,15 @@ request; the [website](pages/) is published from `pages/` by the
   send to back, resize handles, arrow-key nudging, undo and redo of
   everything, and export of a whole canvas to one Markdown file.
 
+- **Command palette** (`Ctrl+P`): every command, the notes and sections of
+  every project and the projects, by typing part of their name. It also
+  asks Jira and Confluence (on the Atlassian sites your notes link to, or
+  that have an account of their own) and Figma (the files of the teams
+  given under its account) for what you type; Enter adds what they found
+  to the canvas as a link card, Shift+Enter opens it in the browser.
+- **Following connectors**: a selected connector's toolbar goes to the
+  item it comes from or points to, however far away.
+
 Press `F1` for all shortcuts and `Ctrl+,` for settings.
 
 ## Storage
@@ -343,6 +352,7 @@ ctest --test-dir build --output-on-failure
 | `qml/CodeBlock.qml`, `EmbedBlock.qml`, `VideoBlock.qml`, `FileBlock.qml` | Code, link previews, videos and attached files in notes |
 | `qml/LinkBody.qml` | A link card: a web page or an issue |
 | `qml/ExportDialog.qml`, `Redacted.qml` | Exporting pictures; text as grey bars for privacy |
+| `qml/CommandPalette.qml` | Ctrl+P: commands, notes, sections, projects, and Jira, Confluence and Figma |
 | `qml/Connector.qml` | A connector, its route and arrows |
 | `qml/ToolPalette.qml`, `Minimap.qml`, `SelectionBar.qml`, `LinkBar.qml` | Tools, map, toolbars for selections and connectors |
 | `qml/TemplateDialog.qml`, `HistoryDialog.qml` | Templates and versions |

@@ -134,3 +134,79 @@ LinkInfo JiraResolver::infoOf(const QString &key, const QJsonObject &issue)
         add(QObject::tr("Updated"), QLocale().toString(updated.toLocalTime(), QLocale::ShortFormat));
     return info;
 }
+
+void JiraResolver::search(const QString &query, const Results &done)
+{
+    struct Search {
+        QVariantList results;
+        int pending = 0;
+        Results done;
+    };
+    auto search = std::make_shared<Search>();
+    search->done = done;
+    const auto settle = [search] {
+        if (--search->pending == 0)
+            search->done(search->results);
+    };
+    QString text = query;
+    text.replace(QLatin1Char('\\'), QStringLiteral("\\\\")).replace(QLatin1Char('"'), QStringLiteral("\\\""));
+    const QString jql = QStringLiteral("text ~ \"%1\" ORDER BY updated DESC").arg(text);
+    static const QRegularExpression keyLike(QStringLiteral(R"(^[A-Za-z][A-Za-z0-9_]*-\d+$)"));
+    const QString key = keyLike.match(query).hasMatch() ? query.toUpper() : QString();
+    const QStringList fields = {QStringLiteral("summary"), QStringLiteral("status")};
+
+    search->pending = 1; // until all are asked
+    for (const QString &site : m_links->atlassianSites()) {
+        const auto found = m_links->accountFor(id(), QUrl(QStringLiteral("https://") + site + QLatin1Char('/')));
+        if (!found)
+            continue;
+        const Account account = found->first;
+        const QString host = found->second;
+        // Cloud's search is /search/jql; Data Center keeps /search
+        const QString path = (Links::atlassianSite(host) ? QStringLiteral("/rest/api/3/search/jql?jql=")
+                                                         : QStringLiteral("/rest/api/2/search?jql="))
+                             + QString::fromUtf8(QUrl::toPercentEncoding(jql))
+                             + QStringLiteral("&maxResults=8&fields=summary,status");
+        const auto add = [search, host](const QJsonObject &issue) {
+            const QString k = issue.value(QLatin1String("key")).toString();
+            for (const QVariant &r : std::as_const(search->results)) {
+                if (r.toMap().value(QStringLiteral("key")) == k)
+                    return;
+            }
+            const LinkInfo info = infoOf(k, issue);
+            search->results << QVariantMap{{QStringLiteral("title"), info.summary},
+                                           {QStringLiteral("key"), k},
+                                           {QStringLiteral("detail"), QStringLiteral("%1 · %2").arg(k, host)},
+                                           {QStringLiteral("status"), info.status},
+                                           {QStringLiteral("tone"), info.tone},
+                                           {QStringLiteral("url"), QStringLiteral("https://%1/browse/%2").arg(host, k)}};
+        };
+        search->pending += key.isEmpty() ? 1 : 2;
+        Links *links = m_links;
+        links->accounts()->token(account, [links, account, host, path, key, add, settle](const QByteArray &token) {
+            if (token.isEmpty()) {
+                settle();
+                if (!key.isEmpty())
+                    settle();
+                return;
+            }
+            if (!key.isEmpty()) {
+                links->request(host, account, token,
+                               QStringLiteral("/rest/api/2/issue/%1?fields=summary,status").arg(key),
+                               [add, settle](int status, const QJsonObject &json, const QString &) {
+                                   if (status == 200)
+                                       add(json);
+                                   settle();
+                               });
+            }
+            links->request(host, account, token, path, [add, settle](int status, const QJsonObject &json, const QString &) {
+                if (status == 200) {
+                    for (const QJsonValue &issue : json.value(QLatin1String("issues")).toArray())
+                        add(issue.toObject());
+                }
+                settle();
+            });
+        });
+    }
+    settle();
+}

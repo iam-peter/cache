@@ -122,6 +122,20 @@ Rectangle {
                 ToolTip.text: qsTr("Let the routing choose the sides again (drag an end to choose one)")
             }
             ToolSeparator { height: 24 }
+            // Far apart, the other end is out of sight: go there
+            IconButton {
+                iconName: "arrow-left"
+                onClicked: bar.canvas.followLink(bar.link.id, false)
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Go to where it comes from")
+            }
+            IconButton {
+                iconName: "arrow-right"
+                onClicked: bar.canvas.followLink(bar.link.id, true)
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Go to where it points")
+            }
+            ToolSeparator { height: 24 }
             IconButton {
                 iconName: "type"
                 onClicked: bar.editLabel()

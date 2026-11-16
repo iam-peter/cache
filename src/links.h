@@ -51,6 +51,8 @@ struct Account
     // "old.example.com=site.atlassian.net", read from that site (every
     // site's account must say which). Nothing goes to them.
     QStringList aliases;
+    // Figma: the teams whose files the command palette searches (their ids)
+    QStringList teams;
 
     static inline const QString kEverySite = QStringLiteral("*.atlassian.net");
     bool everySite() const { return host == kEverySite; }
@@ -84,6 +86,10 @@ public:
     // The other hosts the account answers for, from what people type:
     // addresses or host names, separated by commas or spaces
     Q_INVOKABLE void setAliases(const QString &provider, const QString &host, const QString &aliases);
+    // The teams whose files are searched, from their ids or addresses
+    // (figma.com/files/team/123/…)
+    Q_INVOKABLE void setTeams(const QString &provider, const QString &host, const QString &teams);
+    const QList<Account> &all() const { return m_accounts; }
     // The account's token, or empty when there is none. From the keychain
     // the first time, in the background: unlocking it may ask the user.
     void token(const Account &account, const std::function<void(const QByteArray &)> &done);
@@ -133,6 +139,10 @@ public:
     // The one host its accounts are for, whatever people type (Figma's);
     // empty when they name the host
     virtual QString fixedHost() const { return {}; }
+    // What it finds for `query` with its accounts, for the command palette:
+    // [{title, detail, url, status, tone, image}]. Called back once.
+    using Results = std::function<void(const QVariantList &results)>;
+    virtual void search(const QString &query, const Results &done) { Q_UNUSED(query) done({}); }
 };
 
 // Links to what other services hold, read through their resolvers. What
@@ -191,6 +201,13 @@ public:
     // The account for a link, and the site to ask: by the link's host, or
     // by the Atlassian site that host turned out to be an address of
     std::optional<std::pair<Account, QString>> accountFor(const QString &provider, const QUrl &url) const;
+    // Searches every service with an account for `query` (three letters or
+    // more); each answers with found(), its source being the resolver's id
+    Q_INVOKABLE void search(const QString &query);
+    // The Atlassian sites to search: those with an account of their own,
+    // and for an every-site account the sites links have been read from
+    QStringList atlassianSites() const;
+
     // A link that may be read with an account: https, or http on loopback
     static bool secure(const QUrl &url);
     // GET `path` of `site` with the account's token, its answer as JSON.
@@ -220,6 +237,7 @@ public:
 signals:
     void revisionChanged();
     void accountAdded(bool ok, const QString &message);
+    void found(const QString &query, const QString &source, const QVariantList &results);
 
 private:
     struct Entry

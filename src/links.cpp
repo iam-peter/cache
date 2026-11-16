@@ -87,7 +87,8 @@ Accounts::Accounts(bool persistent, QObject *parent)
         Account account{settings.value(QStringLiteral("provider")).toString(),
                         settings.value(QStringLiteral("host")).toString(),
                         settings.value(QStringLiteral("user")).toString(),
-                        settings.value(QStringLiteral("aliases")).toStringList()};
+                        settings.value(QStringLiteral("aliases")).toStringList(),
+                        settings.value(QStringLiteral("teams")).toStringList()};
         if (!account.provider.isEmpty() && !account.host.isEmpty())
             m_accounts.append(account);
     }
@@ -101,7 +102,8 @@ QVariantList Accounts::list() const
         list << QVariantMap{{QStringLiteral("provider"), a.provider},
                             {QStringLiteral("host"), a.host},
                             {QStringLiteral("user"), a.user},
-                            {QStringLiteral("aliases"), a.aliases}};
+                            {QStringLiteral("aliases"), a.aliases},
+                            {QStringLiteral("teams"), a.teams}};
     return list;
 }
 
@@ -130,6 +132,26 @@ std::optional<Account> Accounts::find(const QString &provider, const QString &ho
             return a;
     }
     return std::nullopt;
+}
+
+void Accounts::setTeams(const QString &provider, const QString &host, const QString &teams)
+{
+    // An id alone, or the team's address: figma.com/files/team/123/Name
+    static const QRegularExpression id(QStringLiteral(R"((?:team/)?(\d{6,}))"));
+    QStringList ids;
+    for (auto it = id.globalMatch(teams); it.hasNext();) {
+        const QString team = it.next().captured(1);
+        if (!ids.contains(team))
+            ids << team;
+    }
+    for (Account &a : m_accounts) {
+        if (a.provider != provider || a.host.compare(host, Qt::CaseInsensitive) != 0 || a.teams == ids)
+            continue;
+        a.teams = ids;
+        if (m_persistent)
+            store();
+        emit changed();
+    }
 }
 
 void Accounts::setAliases(const QString &provider, const QString &host, const QString &aliases)
@@ -261,11 +283,14 @@ void Accounts::add(const Account &account)
     const QString key = keyOf(account);
     for (Account &a : m_accounts) {
         if (keyOf(a) == key) {
-            // Signing in again keeps the aliases
+            // Signing in again keeps the aliases and teams
             const QStringList aliases = a.aliases;
+            const QStringList teams = a.teams;
             a = account;
             if (a.aliases.isEmpty())
                 a.aliases = aliases;
+            if (a.teams.isEmpty())
+                a.teams = teams;
             emit changed();
             return;
         }
@@ -284,6 +309,7 @@ void Accounts::store() const
         settings.setValue(QStringLiteral("host"), m_accounts.at(i).host);
         settings.setValue(QStringLiteral("user"), m_accounts.at(i).user);
         settings.setValue(QStringLiteral("aliases"), m_accounts.at(i).aliases);
+        settings.setValue(QStringLiteral("teams"), m_accounts.at(i).teams);
     }
     settings.endArray();
 }
@@ -670,6 +696,48 @@ void Links::discover(const QString &host)
                         });
                 });
         });
+}
+
+void Links::search(const QString &query)
+{
+    if (query.trimmed().size() < 3)
+        return;
+    load(); // the sites links were read from
+    QPointer<Links> self(this);
+    for (const auto &resolver : m_resolvers) {
+        const QString source = resolver->id();
+        resolver->search(query.trimmed(), [self, query, source](const QVariantList &results) {
+            if (self)
+                emit self->found(query, source, results);
+        });
+    }
+}
+
+QStringList Links::atlassianSites() const
+{
+    QStringList sites;
+    bool everySite = false;
+    for (const Account &a : m_accounts->all()) {
+        if (a.provider != QLatin1String("jira"))
+            continue;
+        if (a.everySite())
+            everySite = true;
+        else if (!sites.contains(a.host))
+            sites << a.host;
+    }
+    if (everySite) {
+        // The sites links have been read from, and those custom domains are of
+        for (auto it = m_entries.cbegin(); it != m_entries.cend(); ++it) {
+            const QString host = authority(QUrl(it.key().section(QLatin1Char(' '), 1)));
+            if (atlassianSite(host) && !sites.contains(host))
+                sites << host;
+        }
+        for (const QString &site : m_moved) {
+            if (atlassianSite(site) && !sites.contains(site))
+                sites << site;
+        }
+    }
+    return sites;
 }
 
 void Links::touch()

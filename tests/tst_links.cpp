@@ -50,6 +50,13 @@ public:
                             "version":{"when":"2026-11-10T09:30:00.000Z","by":{"displayName":"Grace Hopper"}},
                             "history":{"createdBy":{"displayName":"Ada Lovelace"}}})";
                         body = request.startsWith("GET /rest/api/content?") ? "{\"results\":[" + page + "]}" : page;
+                    } else if (request.startsWith("GET /rest/api/2/search?jql=")) {
+                        body = R"({"issues":[{"key":"IDS5-7","fields":{"summary":"Fix the crash on resize",
+                            "status":{"name":"In Progress","statusCategory":{"key":"indeterminate"}}}}]})";
+                    } else if (request.startsWith("GET /rest/api/search?limit=8&cql=text")) {
+                        body = R"({"_links":{"base":"http://wiki.example"},"results":[{"title":"@@@hl@@@Gradient@@@endhl@@@ controls",
+                            "url":"/spaces/DTU/pages/9/Gradient","excerpt":"How the controls work",
+                            "resultGlobalContainer":{"title":"Design Tools"}}]})";
                     } else if (request.startsWith("GET /wiki/rest/api/search?") || request.startsWith("GET /rest/api/search?")) {
                         body = R"({"results":[{"excerpt":"How @@@hl@@@variables@@@endhl@@@ are used &amp; shared"}]})";
                     } else if (request.startsWith("GET /rest/api/2/issue/IDS5-7?")) {
@@ -129,6 +136,11 @@ public:
                         body = R"({"status":403,"err":"Invalid token"})";
                     } else if (request.startsWith("GET /v1/me ")) {
                         body = R"({"handle":"Ada"})";
+                    } else if (request.startsWith("GET /v1/teams/1234567/projects ")) {
+                        body = R"({"projects":[{"id":7,"name":"Web"}]})";
+                    } else if (request.startsWith("GET /v1/projects/7/files ")) {
+                        body = R"({"files":[{"key":"AbCdEf123456","name":"Design System","thumbnail_url":"https://example.org/t.png"},
+                            {"key":"ZyXwVu987654","name":"Marketing site"}]})";
                     } else if (request.startsWith("GET /v1/files/AbCdEf123456/nodes?ids=12%3A34&depth=1 ")) {
                         body = R"({"name":"Design System","lastModified":"2026-11-15T08:00:00Z","editorType":"figma",
                             "thumbnailUrl":"https://example.org/thumb.png",
@@ -650,6 +662,56 @@ private slots:
                  QStringLiteral("Organ des lymphatischen Systems"));
         QCOMPARE(api.requests, 1);
         QVERIFY(links.info(url).isEmpty());
+    }
+
+    void searchingServices()
+    {
+        FakeJira server("Bearer pat");
+        FakeFigma figma;
+        Links links{Links::Detached{}};
+        links.accounts()->remember({QStringLiteral("jira"), server.host(), {}}, "pat");
+        static_cast<FigmaResolver *>(links.resolver(QStringLiteral("figma")))->setApi(figma.base());
+        links.accounts()->remember({QStringLiteral("figma"), QStringLiteral("figma.com"), {}}, "figd_test");
+        links.accounts()->setTeams(QStringLiteral("figma"), QStringLiteral("figma.com"),
+                                   QStringLiteral("https://www.figma.com/files/team/1234567/Team-Name"));
+        QCOMPARE(links.accounts()->find(QStringLiteral("figma"), QStringLiteral("figma.com"))->teams,
+                 QStringList{QStringLiteral("1234567")});
+        QCOMPARE(links.atlassianSites(), QStringList{server.host()});
+
+        QHash<QString, QVariantList> found;
+        connect(&links, &Links::found, this, [&](const QString &query, const QString &source, const QVariantList &r) {
+            QCOMPARE(query, QStringLiteral("gradient"));
+            found.insert(source, r);
+        });
+        links.search(QStringLiteral("gr")); // too short: not asked
+        links.search(QStringLiteral("gradient"));
+        QTRY_COMPARE(found.size(), 3);
+        const QVariantMap issue = found.value("jira").first().toMap();
+        QCOMPARE(issue.value("title").toString(), QStringLiteral("Fix the crash on resize"));
+        QCOMPARE(issue.value("url").toString(), QStringLiteral("https://%1/browse/IDS5-7").arg(server.host()));
+        QCOMPARE(issue.value("status").toString(), QStringLiteral("In Progress"));
+        const QVariantMap page = found.value("confluence").first().toMap();
+        QCOMPARE(page.value("title").toString(), QStringLiteral("Gradient controls"));
+        QCOMPARE(page.value("url").toString(), QStringLiteral("http://wiki.example/spaces/DTU/pages/9/Gradient"));
+        QVERIFY(page.value("detail").toString().startsWith(QStringLiteral("Design Tools")));
+        // Figma by name: no file is called that
+        QVERIFY(found.value("figma").isEmpty());
+
+        found.clear();
+        disconnect(&links, &Links::found, this, nullptr);
+        connect(&links, &Links::found, this, [&](const QString &, const QString &source, const QVariantList &r) {
+            found.insert(source, r);
+        });
+        links.search(QStringLiteral("design sys"));
+        QTRY_COMPARE(found.size(), 3);
+        QCOMPARE(found.value("figma").size(), 1);
+        QCOMPARE(found.value("figma").first().toMap().value("url").toString(),
+                 QStringLiteral("https://www.figma.com/design/AbCdEf123456/Design-System"));
+        // An issue key finds the issue itself
+        found.clear();
+        links.search(QStringLiteral("ids5-7"));
+        QTRY_VERIFY(found.contains("jira"));
+        QCOMPARE(found.value("jira").size(), 1); // once, though asked twice
     }
 };
 

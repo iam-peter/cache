@@ -116,6 +116,16 @@ QVariant Workspace::data(const QModelIndex &index, int role) const
     }
 }
 
+QVariantList Workspace::projects() const
+{
+    QVariantList list;
+    for (int row = 0; row < m_projects.size(); ++row)
+        list << QVariantMap{{QStringLiteral("name"), m_projects.at(row).name},
+                            {QStringLiteral("path"), m_projects.at(row).path},
+                            {QStringLiteral("row"), row}};
+    return list;
+}
+
 QHash<int, QByteArray> Workspace::roleNames() const
 {
     return {{NameRole, "name"}, {PathRole, "path"}, {ModifiedRole, "modified"}};

@@ -191,3 +191,61 @@ LinkInfo ConfluenceResolver::infoOf(const QJsonObject &content, const QString &e
         nameOf(content.value(QLatin1String("history")).toObject().value(QLatin1String("createdBy")), "displayName"));
     return info;
 }
+
+void ConfluenceResolver::search(const QString &query, const Results &done)
+{
+    struct Search {
+        QVariantList results;
+        int pending = 1; // until all are asked
+        Results done;
+    };
+    auto search = std::make_shared<Search>();
+    search->done = done;
+    const auto settle = [search] {
+        if (--search->pending == 0)
+            search->done(search->results);
+    };
+    QString text = query;
+    text.replace(QLatin1Char('\\'), QStringLiteral("\\\\")).replace(QLatin1Char('"'), QStringLiteral("\\\""));
+    const QString cql = QStringLiteral("text ~ \"%1\" and type in (page, blogpost) order by lastmodified desc").arg(text);
+    for (const QString &site : m_links->atlassianSites()) {
+        const auto found = m_links->accountFor(kAccounts, QUrl(QStringLiteral("https://") + site + QLatin1Char('/')));
+        if (!found)
+            continue;
+        const Account account = found->first;
+        const QString host = found->second;
+        const QString path = (Links::atlassianSite(host) ? QStringLiteral("/wiki") : QString())
+                             + QStringLiteral("/rest/api/search?limit=8&cql=")
+                             + QString::fromUtf8(QUrl::toPercentEncoding(cql));
+        ++search->pending;
+        Links *links = m_links;
+        links->accounts()->token(account, [links, account, host, path, search, settle](const QByteArray &token) {
+            if (token.isEmpty()) {
+                settle();
+                return;
+            }
+            links->request(host, account, token, path, [host, search, settle](int status, const QJsonObject &json, const QString &) {
+                if (status == 200) {
+                    // Addresses are relative to the base the answer gives
+                    const QString base = json.value(QLatin1String("_links")).toObject().value(QLatin1String("base")).toString();
+                    for (const QJsonValue &value : json.value(QLatin1String("results")).toArray()) {
+                        const QJsonObject r = value.toObject();
+                        const QString title = plainExcerpt(r.value(QLatin1String("title")).toString());
+                        const QString url = r.value(QLatin1String("url")).toString();
+                        if (title.isEmpty() || url.isEmpty())
+                            continue;
+                        const QString space = r.value(QLatin1String("resultGlobalContainer")).toObject()
+                                                  .value(QLatin1String("title")).toString();
+                        search->results << QVariantMap{
+                            {QStringLiteral("title"), title},
+                            {QStringLiteral("detail"), space.isEmpty() ? host : QStringLiteral("%1 · %2").arg(space, host)},
+                            {QStringLiteral("summary"), plainExcerpt(r.value(QLatin1String("excerpt")).toString())},
+                            {QStringLiteral("url"), url.startsWith(QLatin1String("http")) ? url : base + url}};
+                    }
+                }
+                settle();
+            });
+        });
+    }
+    settle();
+}

@@ -64,6 +64,7 @@ qt_add_qml_module(cache
         qml/LinkBody.qml
         qml/Redacted.qml
         qml/ExportDialog.qml
+        qml/CommandPalette.qml
         qml/Connector.qml
         qml/ToolPalette.qml
         qml/Minimap.qml

@@ -23,6 +23,10 @@ public:
     // Its accounts are for figma.com, whatever the link's host
     QString fixedHost() const override { return QStringLiteral("figma.com"); }
 
+    // Files of the account's teams whose name has `query`'s words (Figma
+    // can't search their insides). The list is read once a quarter hour.
+    void search(const QString &query, const Results &done) override;
+
     // What a link points to: the file (a branch's own key) and the node,
     // as the API names it ("12:34" for the link's node-id=12-34)
     struct Ref
@@ -39,6 +43,12 @@ public:
 private:
     void get(const QByteArray &token, const QString &path, const Links::JsonReply &reply);
 
+    void listFiles(const Account &account, const std::function<void()> &done);
+
     Links *m_links;
     QString m_api = QStringLiteral("https://api.figma.com");
+    QVariantList m_files; // [{key, name, project, thumbnail}] of the teams
+    QDateTime m_filesRead;
+    QStringList m_filesOf; // the teams they are of
+    QList<std::function<void()>> m_listing; // waiting for the list
 };
