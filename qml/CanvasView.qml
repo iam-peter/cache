@@ -279,8 +279,11 @@ Item {
 
     // --- Creating and changing items ----------------------------------------
 
-    function newNoteAt(pt, text) {
-        const row = Board.addNote(pt.x - 170, pt.y - 40, text === undefined ? "" : text)
+    // `area`: the rectangle it was dragged out to; none for the usual size,
+    // around `pt`
+    function newNoteAt(pt, text, area) {
+        const row = area ? Board.addNote(area.x, area.y, text === undefined ? "" : text, area.width, area.height)
+                         : Board.addNote(pt.x - 170, pt.y - 40, text === undefined ? "" : text)
         if (row < 0)
             return
         const id = Board.get(row).id
@@ -290,8 +293,9 @@ Item {
             startEditing(id)
     }
     function newNote() { newNoteAt(insertionPoint()) }
-    function newCodeNoteAt(pt) {
-        const row = Board.addNote(pt.x - 200, pt.y - 60, "```\n\n```\n")
+    function newCodeNoteAt(pt, area) {
+        const row = area ? Board.addNote(area.x, area.y, "```\n\n```\n", area.width, area.height)
+                         : Board.addNote(pt.x - 200, pt.y - 60, "```\n\n```\n")
         if (row < 0)
             return
         editCursor = 3 // after the opening ```: type the language, then Enter
@@ -1011,14 +1015,9 @@ Item {
                 gesture = "stroke"
                 break
             case "note":
-                view.newNoteAt(p)
-                view.tool = "select"
-                gesture = ""
-                break
             case "code":
-                view.newCodeNoteAt(p)
-                view.tool = "select"
-                gesture = ""
+                // Made on release: dragged out to a size, or the usual one
+                gesture = "shape"
                 break
             case "text":
                 view.newItem("text", "", p.x, p.y - 20, 280, 44)
@@ -1073,6 +1072,22 @@ Item {
                 }
                 points = []
                 strokePreview.path = []
+            } else if (g === "shape" && (view.tool === "note" || view.tool === "code")) {
+                const area = Qt.rect(Math.min(startWorld.x, endWorld.x), Math.min(startWorld.y, endWorld.y),
+                                     Math.abs(endWorld.x - startWorld.x), Math.abs(endWorld.y - startWorld.y))
+                // A click: the usual size. Dragged: that size, at least big
+                // enough to write in
+                const dragged = area.width * view.zoom >= 8 || area.height * view.zoom >= 8
+                if (dragged) {
+                    area.width = Math.max(area.width, 120)
+                    area.height = Math.max(area.height, 60)
+                }
+                const code = view.tool === "code"
+                view.tool = "select"
+                if (code)
+                    view.newCodeNoteAt(startWorld, dragged ? area : undefined)
+                else
+                    view.newNoteAt(startWorld, undefined, dragged ? area : undefined)
             } else if (g === "shape") {
                 const section = view.tool === "section"
                 let w = Math.abs(endWorld.x - startWorld.x), h = Math.abs(endWorld.y - startWorld.y)

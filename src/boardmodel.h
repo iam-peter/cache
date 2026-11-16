@@ -155,7 +155,8 @@ public:
     Q_INVOKABLE void save();
 
     // Creating items. Media positions are the centre of the new item.
-    Q_INVOKABLE int addNote(double x, double y, const QString &text = {});
+    // w and h: the size it was dragged out to; 0 for the usual size
+    Q_INVOKABLE int addNote(double x, double y, const QString &text = {}, double w = 0, double h = 0);
     // type: section, shape, text; kind: the shape. Returns the row.
     Q_INVOKABLE int addItem(const QString &type, double x, double y, double w, double h,
                             const QString &kind = {}, const QString &text = {});

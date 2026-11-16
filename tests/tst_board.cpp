@@ -391,6 +391,25 @@ private slots:
         }
     }
 
+    // A note dragged out to a size, and one at the usual size
+    void addNoteWithSize()
+    {
+        BoardModel board;
+        board.load(project("notesize"));
+        const int sized = board.addNote(10, 20, QString(), 500, 150);
+        QCOMPARE(board.get(sized).value("x").toDouble(), 10.0);
+        QCOMPARE(board.get(sized).value("w").toDouble(), 500.0);
+        QCOMPARE(board.get(sized).value("h").toDouble(), 150.0);
+        const int usual = board.addNote(0, 0);
+        QCOMPARE(board.get(usual).value("w").toDouble(), 340.0);
+        QCOMPARE(board.get(usual).value("h").toDouble(), 200.0);
+        // One undo step each
+        board.undo();
+        QCOMPARE(board.count(), 1);
+        board.undo();
+        QCOMPARE(board.count(), 0);
+    }
+
     void matchSize()
     {
         BoardModel board;

@@ -524,12 +524,17 @@ int BoardModel::appendItem(const BoardItem &item)
     return row;
 }
 
-int BoardModel::addNote(double x, double y, const QString &text)
+int BoardModel::addNote(double x, double y, const QString &text, double w, double h)
 {
     if (m_projectPath.isEmpty())
         return -1;
+    BoardItem note = makeNote(x, y, text);
+    if (w > 0 && h > 0) {
+        note.w = w;
+        note.h = h;
+    }
     pushUndo();
-    return appendItem(makeNote(x, y, text));
+    return appendItem(note);
 }
 
 // Markdown that embeds a project file: ![name](assets/name.png). Videos use

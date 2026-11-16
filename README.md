@@ -55,7 +55,9 @@ request; the [website](pages/) is published from `pages/` by the
   are.
 - **Tools, as in FigJam** (along the bottom): select, pan, note, text,
   code snippet, shapes (rectangle, ellipse, diamond, triangle), section,
-  connector, pen and highlighter, each with a one-letter key (`F1`).
+  connector, pen and highlighter, each with a one-letter key (`F1`). A note,
+  code snippet, shape or section takes the size you drag out; a click
+  gives the usual size.
 - **Selecting and arranging**: drag on empty space to select several
   (Shift adds), `Ctrl+A` for all. Move them together with smart guides
   that snap to other items' edges and centres (Alt moves freely); align
