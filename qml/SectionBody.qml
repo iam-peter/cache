@@ -58,6 +58,7 @@ Item {
                 width: Math.min(implicitWidth, Math.max(60, body.width * body.card.canvas.zoom - 20))
                 elide: Text.ElideRight
                 text: body.card.itemText.length > 0 ? body.card.itemText : qsTr("Section")
+                Redacted { cover: tab.color }
                 font.weight: Styles.Primitives.fontWeight.semiBold
                 color: body.card.itemColor ? Styles.TokenInterface.textOn(Theme.swatch(body.card.itemColor)) : Theme.text
             }

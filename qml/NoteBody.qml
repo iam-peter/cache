@@ -372,6 +372,7 @@ Item {
                         id: textSegment
                         Text {
                             id: rich
+                            Redacted { cover: body.card.fillColor }
                             text: piece.modelData.html
                             textFormat: Text.RichText
                             // Distance-field text (the default) crashed Qt

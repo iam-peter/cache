@@ -872,15 +872,39 @@ Item {
     // --- Pictures of the canvas --------------------------------------------------
 
     // mode: "copy" (clipboard), "png" or "pdf" (to fileUrl). No ids: everything.
-    function exportImage(ids, mode, fileUrl) {
-        if (!ids || ids.length === 0) {
-            ids = []
-            for (let i = 0; i < Board.count; ++i) {
-                const it = Board.get(i)
-                if (!it.hidden)
-                    ids.push(it.id)
-            }
+    // What an export covers, in canvas coordinates: around the items (the
+    // whole canvas or the selection), or what is on screen ("view")
+    function visibleIds() {
+        const ids = []
+        for (let i = 0; i < Board.count; ++i) {
+            const it = Board.get(i)
+            if (!it.hidden)
+                ids.push(it.id)
         }
+        return ids
+    }
+    function exportArea(area) {
+        if (area === "view") {
+            const a = toWorld(0, 0), b = toWorld(width, height)
+            return Qt.rect(a.x, a.y, b.x - a.x, b.y - a.y)
+        }
+        const ids = area === "selection" && selection.length > 0 ? selection : visibleIds()
+        const bounds = Board.boundsOf(ids)
+        const margin = 32
+        return Qt.rect(bounds.x - margin, bounds.y - margin, bounds.width + 2 * margin, bounds.height + 2 * margin)
+    }
+    // The scale an export renders at: as asked, unless that would be too
+    // large a picture
+    function exportScale(rect, scale) {
+        return Math.min(scale, 8000 / Math.max(1, rect.width, rect.height))
+    }
+    // `options`: {area: "all", "selection" or "view", scale (2), privacy:
+    // the text as grey bars}
+    function exportImage(ids, mode, fileUrl, options) {
+        options = options || {}
+        const area = options.area || (ids && ids.length > 0 ? "selection" : "all")
+        if (area === "view" || !ids || ids.length === 0)
+            ids = visibleIds()
         if (ids.length === 0) {
             toast.show(qsTr("Nothing to export"))
             return
@@ -896,6 +920,9 @@ Item {
         exporter.ids = Object.keys(set)
         exporter.mode = mode
         exporter.fileUrl = fileUrl || ""
+        exporter.area = area === "view" ? exportArea("view") : Qt.rect(0, 0, 0, 0)
+        exporter.renderScale = options.scale || 2
+        Theme.redacting = options.privacy === true
         exporting = true
         editingId = ""
         exportTimer.start()
@@ -904,6 +931,7 @@ Item {
         const path = Board.tempPath("canvas-export.png")
         const saved = result && result.saveToFile(path)
         exporting = false
+        Theme.redacting = false
         exportSet = ({})
         if (!saved) {
             toast.show(qsTr("Could not render the picture"))
@@ -927,8 +955,9 @@ Item {
         onTriggered: {
             const b = Board.boundsOf(exporter.ids)
             const margin = 32
-            const area = Qt.rect(b.x - margin, b.y - margin, b.width + 2 * margin, b.height + 2 * margin)
-            const scale = Math.min(2, 8000 / Math.max(area.width, area.height))
+            const area = exporter.area.width > 0 ? exporter.area
+                       : Qt.rect(b.x - margin, b.y - margin, b.width + 2 * margin, b.height + 2 * margin)
+            const scale = view.exportScale(area, exporter.renderScale)
             exporter.width = Math.round(area.width * scale)
             exporter.height = Math.round(area.height * scale)
             exportSource.sourceRect = area
@@ -1072,6 +1101,8 @@ Item {
         property var ids: []
         property string mode
         property url fileUrl
+        property rect area // what is on screen; empty: around the items
+        property real renderScale: 2
         visible: view.exporting
         z: -10
         Rectangle {

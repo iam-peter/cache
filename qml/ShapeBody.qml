@@ -64,6 +64,7 @@ Item {
         visible: !body.editing
         text: body.card.itemText
         horizontalAlignment: Text.AlignHCenter
+        Redacted { cover: Theme.shapeColor(body.card.itemColor) }
         wrapMode: Text.Wrap
         maximumLineCount: Math.max(1, Math.floor(body.height * 0.8 / 18))
         elide: Text.ElideRight

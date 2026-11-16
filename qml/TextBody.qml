@@ -34,6 +34,7 @@ Item {
         anchors.topMargin: 4
         visible: !body.editing
         text: body.card.itemText.length > 0 ? body.card.itemText : qsTr("Text")
+        Redacted { cover: Theme.canvas }
         wrapMode: Text.Wrap
         color: body.card.itemText.length > 0 ? Theme.penColor(body.card.itemColor) : Theme.textMuted
         font.pixelSize: body.fontSize

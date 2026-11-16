@@ -62,6 +62,8 @@ qt_add_qml_module(cache
         qml/SectionBody.qml
         qml/StrokeBody.qml
         qml/LinkBody.qml
+        qml/Redacted.qml
+        qml/ExportDialog.qml
         qml/Connector.qml
         qml/ToolPalette.qml
         qml/Minimap.qml

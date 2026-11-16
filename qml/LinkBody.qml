@@ -79,6 +79,7 @@ Item {
             Label {
                 Layout.fillWidth: true
                 text: body.info.site || (body.url === "" ? qsTr("No address yet: double-click to add one") : body.url)
+                Redacted { cover: body.card.fillColor }
                 color: Theme.textMuted
                 font.pixelSize: Styles.Primitives.fontSize.small
                 elide: Text.ElideRight
@@ -114,6 +115,7 @@ Item {
             Layout.fillWidth: true
             visible: body.url !== ""
             text: body.info.title || body.url
+            Redacted { cover: body.card.fillColor }
             font.weight: Styles.Primitives.fontWeight.semiBold
             color: Theme.link
             wrapMode: Text.Wrap
@@ -136,6 +138,7 @@ Item {
             Layout.maximumHeight: implicitHeight
             visible: text !== ""
             text: body.info.error ? qsTr("Couldn't read this link. %1").arg(body.info.error) : body.info.summary || ""
+            Redacted { cover: body.card.fillColor }
             color: body.info.error ? Theme.s.danger_default
                  : (body.info.status || "") !== "" ? Theme.text : Theme.textMuted
             wrapMode: Text.Wrap
@@ -157,6 +160,7 @@ Item {
                     readonly property var field: body.info.fields[Math.floor(index / 2)]
                     Layout.fillWidth: index % 2 === 1
                     text: index % 2 === 0 ? field.name : field.value
+                    Redacted { cover: body.card.fillColor }
                     color: index % 2 === 0 ? Theme.textMuted : Theme.text
                     font.pixelSize: Styles.Primitives.fontSize.small
                     elide: Text.ElideRight

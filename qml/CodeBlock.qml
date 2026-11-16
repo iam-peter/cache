@@ -28,6 +28,7 @@ Rectangle {
             height: Math.max(language.implicitHeight, copy.implicitHeight)
             Label {
                 id: language
+                Redacted { cover: Theme.codeBackground }
                 anchors.verticalCenter: parent.verticalCenter
                 text: block.segment.language || qsTr("code")
                 color: Theme.textMuted
@@ -51,6 +52,7 @@ Rectangle {
         Text {
             width: parent.width
             text: block.segment.html
+            Redacted { cover: Theme.codeBackground }
             textFormat: Text.RichText
             // See NoteBody.qml
             renderType: Text.CurveRendering

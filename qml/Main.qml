@@ -215,12 +215,11 @@ ApplicationWindow {
                     }
                     MenuItem { text: qsTr("Copy canvas as picture"); onTriggered: canvasView.exportImage([], "copy") }
                     MenuItem {
-                        text: qsTr("Export canvas as PNG…")
-                        onTriggered: { exportDialog.mode = "png"; exportDialog.open() }
-                    }
-                    MenuItem {
-                        text: qsTr("Export canvas as PDF…")
-                        onTriggered: { exportDialog.mode = "pdf"; exportDialog.open() }
+                        text: qsTr("Export a picture…")
+                        onTriggered: {
+                            exportDialog.area = canvasView.selection.length > 1 ? "selection" : "all"
+                            exportDialog.open()
+                        }
                     }
                     MenuSeparator {}
                     KeyedMenuItem { text: qsTr("Templates…"); shortcut: "Ctrl+Shift+T"; onTriggered: templates.open() }
@@ -271,17 +270,7 @@ ApplicationWindow {
     HistoryDialog { id: historyDialog; canvas: canvasView }
     TemplateDialog { id: templates; canvas: canvasView }
 
-    FileDialog {
-        id: exportDialog
-        property string mode: "png"
-        title: mode === "pdf" ? qsTr("Export the canvas as PDF") : qsTr("Export the canvas as PNG")
-        fileMode: FileDialog.SaveFile
-        defaultSuffix: mode
-        currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
-        selectedFile: currentFolder + "/" + Workspace.currentName + "." + mode
-        nameFilters: mode === "pdf" ? [qsTr("PDF (*.pdf)")] : [qsTr("PNG image (*.png)")]
-        onAccepted: canvasView.exportImage(canvasView.selection.length > 1 ? canvasView.selection : [], mode, selectedFile)
-    }
+    ExportDialog { id: exportDialog; canvas: canvasView }
 
     Dialog {
         id: helpDialog

@@ -10,6 +10,9 @@ QtObject {
     id: theme
 
     readonly property var s: Styles.TokenInterface.semantics
+    // While a picture is exported without its text: what text there is
+    // shows as grey bars (Redacted)
+    property bool redacting: false
     readonly property bool dark: Styles.TokenInterface.dark
 
     // A shortcut as menus show it: the symbols printed on the keys where

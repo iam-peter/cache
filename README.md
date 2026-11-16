@@ -193,9 +193,11 @@ request; the [website](pages/) is published from `pages/` by the
     `![screenshot123](assets/paste-….png)`). Paste one, then the other.
   - `Ctrl+Shift+C` (or the selection toolbar) copies the selection as a
     picture, at twice the screen's resolution, without selection marks.
-  - **⋯ → Export canvas as PNG / PDF** saves the whole canvas (or the
-    selection) as a picture or a one-page PDF; **Copy canvas as picture**
-    puts it on the clipboard.
+  - **⋯ → Export a picture…** copies or saves (PNG or one-page PDF) the
+    whole canvas, the selection or what's on screen, at 1×, 2× or 3×, and
+    if wanted without its text: grey bars instead, to share how a board
+    is laid out but not what it says. **Copy canvas as picture** puts the
+    whole canvas on the clipboard at once.
 - **History**: the workspace folder becomes a git repository of its own (also
   when it lies inside another one), and a little while after changes a
   version of the project is committed. **⋯ → History** (`Ctrl+Shift+H`)
@@ -340,6 +342,7 @@ ctest --test-dir build --output-on-failure
 | `qml/*Body.qml` | Shapes, text, sections and pen lines |
 | `qml/CodeBlock.qml`, `EmbedBlock.qml`, `VideoBlock.qml`, `FileBlock.qml` | Code, link previews, videos and attached files in notes |
 | `qml/LinkBody.qml` | A link card: a web page or an issue |
+| `qml/ExportDialog.qml`, `Redacted.qml` | Exporting pictures; text as grey bars for privacy |
 | `qml/Connector.qml` | A connector, its route and arrows |
 | `qml/ToolPalette.qml`, `Minimap.qml`, `SelectionBar.qml`, `LinkBar.qml` | Tools, map, toolbars for selections and connectors |
 | `qml/TemplateDialog.qml`, `HistoryDialog.qml` | Templates and versions |

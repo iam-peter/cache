@@ -242,6 +242,7 @@ Item {
         border.color: connector.selected ? Theme.accent : "transparent"
         Label {
             id: label
+            Redacted { cover: Theme.canvas }
             anchors.centerIn: parent
             text: connector.link.label || ""
             color: Theme.textMuted

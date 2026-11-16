@@ -55,6 +55,7 @@ Rectangle {
             }
             Label {
                 id: title
+                Redacted { cover: Qt.tint(block.card.fillColor, block.color) }
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width - 80
                 elide: Text.ElideRight
@@ -82,6 +83,7 @@ Rectangle {
 
             Text {
                 id: preview
+                Redacted { cover: Qt.tint(block.card.fillColor, block.color) }
                 width: parent.width
                 textFormat: Text.RichText
                 // See NoteBody.qml

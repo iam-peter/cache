@@ -46,6 +46,7 @@ Rectangle {
             Label {
                 width: parent.width
                 text: block.segment.name
+                Redacted { cover: Theme.s.background_secondary }
                 elide: Text.ElideMiddle
                 font.weight: Styles.Primitives.fontWeight.medium
             }
