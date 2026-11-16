@@ -55,6 +55,7 @@ Item {
     readonly property bool chrome: !canvas.exporting
     // The four handles to drag a connector out of
     readonly property bool handles: chrome && soleSelection && connectable && !editing && canvas.tool === "select"
+                                    && !canvas.moving
 
     x: posX
     y: posY

@@ -593,6 +593,106 @@ Item {
         }
         return best
     }
+    // Spacing on one axis ("x" or "y") for box `b` where it is being moved
+    // to: the same gap on both sides between its two nearest neighbours in
+    // its row (or column), a gap other items keep from each other, or the
+    // padding other items keep inside the section it lies in (24 at
+    // least). {delta, lines} with measurement lines, or null when none is
+    // within reach.
+    function snapGaps(b, axis, items, sections) {
+        const horizontal = axis === "x"
+        const lo = r => horizontal ? r.x : r.y
+        const hi = r => horizontal ? r.x + r.width : r.y + r.height
+        const crossLo = r => horizontal ? r.y : r.x
+        const crossHi = r => horizontal ? r.y + r.height : r.x + r.width
+        const across = (r, t) => crossLo(r) < crossHi(t) && crossLo(t) < crossHi(r)
+        const tolerance = 6 / zoom
+        const size = hi(b) - lo(b)
+
+        // Its nearest neighbours, before and after it
+        let before = null, after = null
+        for (const r of items) {
+            if (!across(r, b))
+                continue
+            if (hi(r) <= lo(b) + tolerance && (before === null || hi(r) > hi(before)))
+                before = r
+            if (lo(r) >= hi(b) - tolerance && (after === null || lo(r) < lo(after)))
+                after = r
+        }
+        // The gaps others keep: each item to its nearest neighbour after it
+        const gaps = []
+        for (let i = 0; i < items.length; ++i) {
+            let next = -1
+            for (let j = 0; j < items.length; ++j) {
+                if (j !== i && across(items[i], items[j]) && lo(items[j]) >= hi(items[i])
+                        && (next < 0 || lo(items[j]) < lo(items[next])))
+                    next = j
+            }
+            const gap = next < 0 ? 0 : Math.round(lo(items[next]) - hi(items[i]))
+            if (gap > 0 && gap < 400 && gaps.indexOf(gap) < 0)
+                gaps.push(gap)
+        }
+
+        // Where it may go, and the gaps that measure it there
+        const candidates = []
+        if (before !== null && after !== null) {
+            const to = (hi(before) + lo(after) - size) / 2
+            if (to > hi(before))
+                candidates.push({ to: to, gaps: [{ from: hi(before), size: to - hi(before), other: before },
+                                                  { from: to + size, size: to - hi(before), other: after }] })
+        }
+        for (const gap of gaps) {
+            if (before !== null)
+                candidates.push({ to: hi(before) + gap, gaps: [{ from: hi(before), size: gap, other: before }] })
+            if (after !== null)
+                candidates.push({ to: lo(after) - gap - size, gaps: [{ from: lo(after) - gap, size: gap, other: after }] })
+        }
+        // In a section: the padding the others in it keep from its sides
+        const cx = b.x + b.width / 2, cy = b.y + b.height / 2
+        let parent = null
+        for (const sec of sections) {
+            if (cx > sec.x && cx < sec.x + sec.width && cy > sec.y && cy < sec.y + sec.height
+                    && (parent === null || sec.width * sec.height < parent.width * parent.height))
+                parent = sec
+        }
+        if (parent !== null) {
+            const pads = [24]
+            for (const r of items) {
+                const inside = r.x >= parent.x && r.y >= parent.y && r.x + r.width <= parent.x + parent.width
+                               && r.y + r.height <= parent.y + parent.height
+                if (!inside)
+                    continue
+                for (const pad of [Math.round(lo(r) - lo(parent)), Math.round(hi(parent) - hi(r))]) {
+                    if (pad > 0 && pad < 200 && pads.indexOf(pad) < 0)
+                        pads.push(pad)
+                }
+            }
+            for (const pad of pads) {
+                candidates.push({ to: lo(parent) + pad, gaps: [{ from: lo(parent), size: pad, other: null }] })
+                candidates.push({ to: hi(parent) - pad - size, gaps: [{ from: hi(parent) - pad, size: pad, other: null }] })
+            }
+        }
+
+        let best = null
+        for (const c of candidates) {
+            const d = Math.abs(c.to - lo(b))
+            if (d < tolerance && (best === null || d < best.d))
+                best = { d: d, c: c }
+        }
+        if (best === null)
+            return null
+        const delta = best.c.to - lo(b)
+        const moved = horizontal ? Qt.rect(b.x + delta, b.y, b.width, b.height) : Qt.rect(b.x, b.y + delta, b.width, b.height)
+        // Across each gap, in the middle of where the two face each other
+        const lines = best.c.gaps.map(g => {
+            const at = g.other === null ? (crossLo(moved) + crossHi(moved)) / 2
+                     : (Math.max(crossLo(moved), crossLo(g.other)) + Math.min(crossHi(moved), crossHi(g.other))) / 2
+            const label = String(Math.round(g.size))
+            return horizontal ? { x1: g.from, y1: at, x2: g.from + g.size, y2: at, label: label }
+                              : { x1: at, y1: g.from, x2: at, y2: g.from + g.size, label: label }
+        })
+        return { delta: delta, lines: lines }
+    }
     // A guide along `at`, over the box and what it lines up with
     function guideAlong(vertical, at, box, rects) {
         let lo = vertical ? box.y : box.x
@@ -666,7 +766,16 @@ Item {
         const moved = {}
         for (const mid of ids)
             moved[mid] = true
+        // For spacing: the items it may line up with, and the sections it may lie in
+        const items = [], sections = []
+        for (const key in cards) {
+            const c = cards[key]
+            if (moved[key] || !c.visible || c.isStroke)
+                continue
+            ;(c.isSection ? sections : items).push(Qt.rect(c.x, c.y, c.width, c.height))
+        }
         moveState = { ids: ids, starts: starts, origin: p, others: snapRects(moved), copied: false,
+                      items: items, sections: sections,
                       box: Board.boundsOf(selection.indexOf(id) >= 0 ? selection : [id]), moved: false }
     }
     // Alt as the move starts: copies go where it is dragged, the originals
@@ -718,14 +827,29 @@ Item {
                      : snapEdges([b.x + dx, b.x + b.width / 2 + dx, b.x + b.width + dx], true, st.others)
             const sy = axis === "x" ? { index: -1 }
                      : snapEdges([b.y + dy, b.y + b.height / 2 + dy, b.y + b.height + dy], false, st.others)
-            if (sx.index >= 0)
+            // Spacing, where no edge lines up as closely (the grid only
+            // when neither does)
+            const at = Qt.rect(b.x + dx, b.y + dy, b.width, b.height)
+            const gx = axis === "y" || !Theme.prefs.snap ? null : snapGaps(at, "x", st.items, st.sections)
+            const gy = axis === "x" || !Theme.prefs.snap ? null : snapGaps(at, "y", st.items, st.sections)
+            const useGx = gx !== null && (sx.index < 0 || sx.at === null || Math.abs(gx.delta) < Math.abs(sx.delta) - 0.01)
+            const useGy = gy !== null && (sy.index < 0 || sy.at === null || Math.abs(gy.delta) < Math.abs(sy.delta) - 0.01)
+            if (useGx)
+                dx += gx.delta
+            else if (sx.index >= 0)
                 dx += sx.delta
-            if (sy.index >= 0)
+            if (useGy)
+                dy += gy.delta
+            else if (sy.index >= 0)
                 dy += sy.delta
             const moved = Qt.rect(b.x + dx, b.y + dy, b.width, b.height)
-            if (sx.index >= 0 && sx.at !== null)
+            if (useGx)
+                lines.push(...gx.lines)
+            else if (sx.index >= 0 && sx.at !== null)
                 lines.push(guideAlong(true, sx.at, moved, st.others))
-            if (sy.index >= 0 && sy.at !== null)
+            if (useGy)
+                lines.push(...gy.lines)
+            else if (sy.index >= 0 && sy.at !== null)
                 lines.push(guideAlong(false, sy.at, moved, st.others))
         }
         guides = lines
@@ -1463,13 +1587,45 @@ Item {
             Repeater {
                 model: view.guides
                 delegate: Rectangle {
+                    id: guide
                     required property var modelData
+                    readonly property bool measure: modelData.label !== undefined
+                    readonly property bool upright: modelData.x1 === modelData.x2
                     z: 2000000
                     color: Theme.s.danger_default
-                    x: Math.min(modelData.x1, modelData.x2) - (modelData.x1 === modelData.x2 ? 0.5 / view.zoom : 0)
-                    y: Math.min(modelData.y1, modelData.y2) - (modelData.y1 === modelData.y2 ? 0.5 / view.zoom : 0)
-                    width: modelData.x1 === modelData.x2 ? 1 / view.zoom : Math.abs(modelData.x2 - modelData.x1)
-                    height: modelData.y1 === modelData.y2 ? 1 / view.zoom : Math.abs(modelData.y2 - modelData.y1)
+                    x: Math.min(modelData.x1, modelData.x2) - (upright ? 0.5 / view.zoom : 0)
+                    y: Math.min(modelData.y1, modelData.y2) - (!upright ? 0.5 / view.zoom : 0)
+                    width: upright ? 1 / view.zoom : Math.abs(modelData.x2 - modelData.x1)
+                    height: !upright ? 1 / view.zoom : Math.abs(modelData.y2 - modelData.y1)
+                    // A measurement: ticks at its ends and the distance
+                    Repeater {
+                        model: guide.measure ? 2 : 0
+                        delegate: Rectangle {
+                            required property int index
+                            color: guide.color
+                            width: guide.upright ? 9 / view.zoom : 1 / view.zoom
+                            height: guide.upright ? 1 / view.zoom : 9 / view.zoom
+                            x: guide.upright ? (guide.width - width) / 2 : (index === 0 ? 0 : guide.width - width)
+                            y: guide.upright ? (index === 0 ? 0 : guide.height - height) : (guide.height - height) / 2
+                        }
+                    }
+                    Rectangle {
+                        visible: guide.measure
+                        anchors.centerIn: parent
+                        scale: 1 / view.zoom
+                        width: distance.implicitWidth + 8
+                        height: distance.implicitHeight + 2
+                        radius: 3
+                        color: guide.color
+                        Label {
+                            id: distance
+                            anchors.centerIn: parent
+                            text: guide.modelData.label || ""
+                            color: "#ffffff"
+                            font.pixelSize: 11
+                            font.weight: Styles.Primitives.fontWeight.semiBold
+                        }
+                    }
                 }
             }
 

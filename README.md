@@ -65,7 +65,9 @@ request; the [website](pages/) is published from `pages/` by the
   gives the usual size.
 - **Selecting and arranging**: drag on empty space to select several
   (Shift adds), `Ctrl+A` for all. Move them together with smart guides
-  that snap to other items' edges and centres (`Space` while moving turns
+  that snap to other items' edges and centres, and to spacing: the middle
+  between two neighbours, the gaps other items keep, and the padding
+  inside a section, each shown with its distance (`Space` while moving turns
   snapping off, `Shift` keeps to one direction, `Alt` drags a copy);
   align and space them evenly, arrange them in a row, a column or a grid,
   make them fill the selection's width or height, colour, copy, duplicate
