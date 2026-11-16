@@ -6,6 +6,7 @@
 #include "keychain.h"
 #include "markdown.h"
 #include "pageresolver.h"
+#include "wikipediaresolver.h"
 
 #include <QDir>
 #include <QFile>
@@ -318,6 +319,7 @@ Links::Links(QObject *parent)
     addResolver(std::make_unique<JiraResolver>(this));
     addResolver(std::make_unique<ConfluenceResolver>(this));
     addResolver(std::make_unique<FigmaResolver>(this));
+    addOpenResolver(std::make_unique<WikipediaResolver>(this));
     m_page = std::make_unique<PageResolver>(this);
 }
 
@@ -358,6 +360,7 @@ Links::Links(Detached, QObject *parent)
     addResolver(std::make_unique<JiraResolver>(this));
     addResolver(std::make_unique<ConfluenceResolver>(this));
     addResolver(std::make_unique<FigmaResolver>(this));
+    addOpenResolver(std::make_unique<WikipediaResolver>(this));
     m_page = std::make_unique<PageResolver>(this);
 }
 
@@ -391,9 +394,18 @@ void Links::addResolver(std::unique_ptr<LinkResolver> resolver)
     m_resolvers.push_back(std::move(resolver));
 }
 
+void Links::addOpenResolver(std::unique_ptr<LinkResolver> resolver)
+{
+    m_open.push_back(std::move(resolver));
+}
+
 LinkResolver *Links::resolver(const QString &id) const
 {
     for (const auto &r : m_resolvers) {
+        if (r->id() == id)
+            return r.get();
+    }
+    for (const auto &r : m_open) {
         if (r->id() == id)
             return r.get();
     }
@@ -445,6 +457,14 @@ QVariantMap Links::card(const QString &url)
         if (!m_moved.contains(host) && !m_accounts->list().isEmpty()) {
             discover(host);
             return {};
+        }
+    }
+    if (!resolver) {
+        for (const auto &open : m_open) {
+            if (open->handles(QUrl(url))) {
+                resolver = open.get();
+                break;
+            }
         }
     }
     return lookUp(url, resolver ? resolver : m_page.get());

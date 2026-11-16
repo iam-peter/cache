@@ -3,6 +3,7 @@
 #include "jiraresolver.h"
 #include "links.h"
 #include "pageresolver.h"
+#include "wikipediaresolver.h"
 
 #include <QJsonDocument>
 #include <QSignalSpy>
@@ -612,6 +613,43 @@ private slots:
         // The token went to the API only, as Figma wants it
         for (const QByteArray &request : std::as_const(api.requests))
             QVERIFY(!request.contains("Authorization"));
+    }
+
+    void wikipediaArticles()
+    {
+        using W = WikipediaResolver;
+        W::Article a = W::articleOf(QUrl(QStringLiteral("https://de.wikipedia.org/wiki/Milz")));
+        QCOMPARE(a.host, QStringLiteral("de.wikipedia.org"));
+        QCOMPARE(a.title, QStringLiteral("Milz"));
+        // The mobile site, a section, an encoded title
+        a = W::articleOf(QUrl(QStringLiteral("https://en.m.wikipedia.org/wiki/Caf%C3%A9_au_lait#History")));
+        QCOMPARE(a.host, QStringLiteral("en.wikipedia.org"));
+        QCOMPARE(a.title, QStringLiteral("Caf%C3%A9_au_lait"));
+        QVERIFY(!W::articleOf(QUrl(QStringLiteral("https://de.wikipedia.org/w/index.php?title=Milz"))).valid());
+        QVERIFY(!W::articleOf(QUrl(QStringLiteral("https://de.wikipedia.org.example.com/wiki/Milz"))).valid());
+        QVERIFY(!W::articleOf(QUrl(QStringLiteral("https://wikipedia.org/wiki/Milz"))).valid());
+
+        // (Plain strings: a raw string spanning lines here threw moc off)
+        PageServer api("application/json",
+                       "{\"type\":\"standard\",\"title\":\"Milz\","
+                       "\"description\":\"Organ des lymphatischen Systems\","
+                       "\"extract\":\"Die Milz ist ein in den Blutkreislauf eingeschaltetes Organ.\","
+                       "\"thumbnail\":{\"source\":\"https://upload.example.org/milz.png\",\"width\":330}}");
+        Links links{Links::Detached{}};
+        static_cast<W *>(links.resolver(QStringLiteral("wikipedia")))->setApi(api.url(""));
+        const QString url = QStringLiteral("https://de.wikipedia.org/wiki/Milz");
+        // Notes don't read it; cards and hover cards do
+        QVERIFY(links.info(url).isEmpty());
+        links.card(url);
+        QTRY_COMPARE(links.card(url).value("title").toString(), QStringLiteral("Milz"));
+        const QVariantMap info = links.card(url);
+        QCOMPARE(info.value("summary").toString(), QStringLiteral("Die Milz ist ein in den Blutkreislauf eingeschaltetes Organ."));
+        QCOMPARE(info.value("image").toString(), QStringLiteral("https://upload.example.org/milz.png"));
+        QCOMPARE(info.value("site").toString(), QStringLiteral("Wikipedia · de"));
+        QCOMPARE(info.value("fields").toList().first().toMap().value("value").toString(),
+                 QStringLiteral("Organ des lymphatischen Systems"));
+        QCOMPARE(api.requests, 1);
+        QVERIFY(links.info(url).isEmpty());
     }
 };
 

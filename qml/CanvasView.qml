@@ -814,18 +814,22 @@ Item {
     }
     // A web link that Jira or the like knows: its details, a moment after
     // the pointer came onto it
+    // Any web link in a note: its details, a moment after the pointer came
+    // to rest on it. Only then is it read: passing over links fetches none.
     function showLinkCard(url, scenePos) {
-        if (linkCard.url === url && (linkCard.opened || linkCardTimer.running))
+        if ((linkCard.url === url || linkCard.pending === url) && (linkCard.opened || linkCardTimer.running))
             return
-        linkCard.url = url
-        linkCard.anchor = view.mapFromItem(null, scenePos.x, scenePos.y)
         linkCard.close()
+        linkCard.url = ""
+        linkCard.pending = url
+        linkCard.anchor = view.mapFromItem(null, scenePos.x, scenePos.y)
         linkCardTimer.restart()
     }
     function hideLinkCard() {
         linkCardTimer.stop()
         linkCard.close()
         linkCard.url = ""
+        linkCard.pending = ""
     }
     // A medium named in a note's text, shown while the pointer is on its name
     function showMediaPreview(url, scenePos) {
@@ -1675,19 +1679,27 @@ Item {
         id: linkCardTimer
         interval: 350
         onTriggered: {
-            if (Object.keys(linkCard.info).length === 0)
-                return // nothing known (yet), or no account for its host
-            linkCard.x = Math.max(8, Math.min(linkCard.anchor.x + 12, view.width - linkCard.width - 8))
-            linkCard.y = Math.max(8, Math.min(linkCard.anchor.y + 18, view.height - linkCard.implicitHeight - 8))
-            linkCard.open()
+            linkCard.url = linkCard.pending
+            linkCard.showIfKnown()
         }
     }
-    // A linked issue: its key and status, summary and fields
+    // A link's details: a page's title, description and picture, an issue's
+    // key, status and fields, a design's picture
     Popup {
         id: linkCard
-        property string url
+        property string url     // read: the pointer rested on it
+        property string pending // the pointer is on it
         property point anchor
-        readonly property var info: url !== "" && Links.revision >= 0 ? Links.info(url) : ({})
+        readonly property var info: url !== "" && Links.revision >= 0 ? Links.card(url) : ({})
+        // Opens once something is known: at once, or when it comes in
+        function showIfKnown() {
+            if (opened || url === "" || Object.keys(info).length === 0)
+                return
+            x = Math.max(8, Math.min(anchor.x + 12, view.width - width - 8))
+            y = Math.max(8, Math.min(anchor.y + 18, view.height - implicitHeight - 8))
+            open()
+        }
+        onInfoChanged: showIfKnown()
         readonly property color tone: info.tone === "done" ? Theme.s.success_default
                                     : info.tone === "progress" ? Theme.s.info_default : Theme.textMuted
         width: 360
@@ -1709,15 +1721,27 @@ Item {
                 asynchronous: true
                 sourceSize.width: 720
             }
+            Label {
+                Layout.fillWidth: true
+                visible: text !== ""
+                text: linkCard.info.site || ""
+                color: Theme.textMuted
+                font.pixelSize: Styles.Primitives.fontSize.small
+                elide: Text.ElideRight
+            }
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Styles.Primitives.spacing.sp100
                 Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
                     text: linkCard.info.title || ""
                     font.weight: Styles.Primitives.fontWeight.semiBold
                 }
-                Item { Layout.fillWidth: true }
                 Rectangle {
+                    Layout.alignment: Qt.AlignTop
                     visible: (linkCard.info.status || "") !== ""
                     implicitWidth: statusLabel.implicitWidth + 2 * Styles.Primitives.spacing.sp075
                     implicitHeight: statusLabel.implicitHeight + 4

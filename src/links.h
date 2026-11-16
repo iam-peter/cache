@@ -165,6 +165,9 @@ public:
 
     // Asked before the resolvers there are
     void addResolver(std::unique_ptr<LinkResolver> resolver);
+    // One that needs no account (Wikipedia): asked for cards and hover
+    // cards, never for what a note shows, before any page is read as is
+    void addOpenResolver(std::unique_ptr<LinkResolver> resolver);
     LinkResolver *resolver(const QString &id) const;
 
     // What is known about `url`: {title, summary, status, tone,
@@ -173,7 +176,8 @@ public:
     // in the background when nothing is known yet, or only something old.
     // Only services with an account: notes ask this for every web link.
     Q_INVOKABLE QVariantMap info(const QString &url);
-    // The same for a link card: any web page, read as it is
+    // The same for a link card or a hover card: any web page, read as it
+    // is. Asked only when someone means it (a card, a pointer resting).
     Q_INVOKABLE QVariantMap card(const QString &url);
     // Asks again now (a card's Reload)
     Q_INVOKABLE void reload(const QString &url);
@@ -242,6 +246,7 @@ private:
     Accounts *m_accounts;
     QNetworkAccessManager *m_network = nullptr;
     std::vector<std::unique_ptr<LinkResolver>> m_resolvers;
+    std::vector<std::unique_ptr<LinkResolver>> m_open; // no account, for cards
     std::unique_ptr<LinkResolver> m_page; // for cards, when no other knows the link
     QHash<QString, Entry> m_entries; // by resolver and URL: "jira https://…"
     QHash<QString, QString> m_moved;  // host -> its Atlassian site ("" for none)

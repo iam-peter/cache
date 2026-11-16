@@ -92,6 +92,7 @@ qt_add_qml_module(cache
         src/links.h src/links.cpp src/jiraresolver.h src/jiraresolver.cpp src/pageresolver.h src/pageresolver.cpp
         src/confluenceresolver.h src/confluenceresolver.cpp
         src/figmaresolver.h src/figmaresolver.cpp
+        src/wikipediaresolver.h src/wikipediaresolver.cpp
         src/keychain.h src/keychain.cpp
         src/gridbackground.h src/gridbackground.cpp
         src/Fonts.h src/Fonts.cpp
@@ -179,6 +180,7 @@ if(BUILD_TESTING)
         src/links.h src/links.cpp src/jiraresolver.h src/jiraresolver.cpp src/pageresolver.h src/pageresolver.cpp
         src/confluenceresolver.h src/confluenceresolver.cpp
         src/figmaresolver.h src/figmaresolver.cpp
+        src/wikipediaresolver.h src/wikipediaresolver.cpp
         src/keychain.h src/keychain.cpp
         src/markdown.h src/markdown.cpp src/highlight.h src/highlight.cpp)
     target_include_directories(tst_links PRIVATE src)

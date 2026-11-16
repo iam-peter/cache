@@ -144,6 +144,10 @@ request; the [website](pages/) is published from `pages/` by the
     a link)
   - Markdown and text files become notes of their own, and notes copied
     from Cache paste back exactly
+- **Previews of web links**: resting the pointer on a link in a note
+  shows the page's title, description and picture; a Wikipedia article's
+  opening lines and lead picture. Pages are read only then, never just
+  because a note shows a link.
 - **Link cards**: a web address pasted or dropped on empty canvas (or
   **New link card here** in the canvas menu) becomes a card with the
   page's picture, title, description and site; a Jira issue's card shows
@@ -312,7 +316,8 @@ ctest --test-dir build --output-on-failure
 | `src/jiraresolver.*` | Jira issues, through Jira's REST API; signs in the Atlassian accounts |
 | `src/confluenceresolver.*` | Confluence pages, through Confluence's REST API, with the same accounts |
 | `src/figmaresolver.*` | Figma frames and files, through Figma's REST API, rendered as pictures |
-| `src/pageresolver.*` | Any web page's title, description and picture, for link cards |
+| `src/pageresolver.*` | Any web page's title, description and picture, for link and hover cards |
+| `src/wikipediaresolver.*` | Wikipedia articles' opening lines and pictures |
 | `src/keychain.*` | Tokens in the system's keychain: libsecret, macOS Keychain, Windows Credential Manager |
 | `logo/` | The icon (SVG, PNG, ICO, ICNS) and the desktop entry |
 | `packaging/` | Debian package, Windows installer, QML imports for the deploy tools |
