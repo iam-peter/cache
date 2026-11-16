@@ -11,6 +11,7 @@
 #include <QSignalSpy>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QTemporaryDir>
 #include <QTest>
 
 // A stand-in for Jira on localhost: one issue, /myself, and the requests
@@ -133,7 +134,8 @@ public:
                     const QByteArray request = socket->readAll();
                     requests << request;
                     QByteArray status = "200 OK", body;
-                    if (!request.contains("\r\nX-Figma-Token: figd_test\r\n")) {
+                    // Renders are on image servers: no token there
+                    if (!request.startsWith("GET /render-") && !request.contains("\r\nX-Figma-Token: figd_test\r\n")) {
                         status = "403 Forbidden";
                         body = R"({"status":403,"err":"Invalid token"})";
                     } else if (request.startsWith("GET /v1/me ")) {
@@ -145,13 +147,16 @@ public:
                             {"key":"ZyXwVu987654","name":"Marketing site"}]})";
                     } else if (request.startsWith("GET /v1/files/AbCdEf123456/nodes?ids=12%3A34&depth=1 ")) {
                         body = R"({"name":"Design System","lastModified":"2026-11-15T08:00:00Z","editorType":"figma",
-                            "thumbnailUrl":"https://example.org/thumb.png",
+                            "thumbnailUrl":"https://example.org/thumb.png","version":")" + version + R"(",
                             "nodes":{"12:34":{"document":{"id":"12:34","name":"Button / Primary","type":"COMPONENT",
                             "absoluteBoundingBox":{"x":0,"y":0,"width":320,"height":80}}}}})";
                     } else if (request.startsWith("GET /v1/files/AbCdEf123456/nodes?ids=99%3A1&depth=1 ")) {
                         body = R"({"name":"Design System","nodes":{"99:1":null}})";
                     } else if (request.startsWith("GET /v1/images/AbCdEf123456?ids=12%3A34&format=png&scale=2 ")) {
-                        body = R"({"err":null,"images":{"12:34":"https://example.org/render.png"}})";
+                        ++renders;
+                        body = R"({"err":null,"images":{"12:34":")" + renderBase + "/render-" + version + R"(.png"}})";
+                    } else if (request.startsWith("GET /render-")) {
+                        body = "PNG-of-" + request.mid(12, request.indexOf(' ', 4) - 12);
                     } else if (request.startsWith("GET /v1/files/AbCdEf123456?depth=1 ")) {
                         body = R"({"name":"Design System","lastModified":"2026-11-15T08:00:00Z","editorType":"figjam",
                             "thumbnailUrl":"https://example.org/thumb.png",
@@ -169,6 +174,9 @@ public:
     }
     QString base() const { return QStringLiteral("http://127.0.0.1:%1").arg(serverPort()); }
     QList<QByteArray> requests;
+    QByteArray version = "1";                      // the file's, as Figma counts
+    QByteArray renderBase = "https://example.org"; // where its renders are
+    int renders = 0;
 };
 
 // A stand-in for GitLab's API: one project, group/app, with one of each
@@ -763,7 +771,7 @@ private slots:
         // A frame: its name, its file, and its picture rendered by Figma
         const QString frame = QStringLiteral("https://www.figma.com/design/AbCdEf123456/Design-System?node-id=12-34");
         links.card(frame);
-        QTRY_COMPARE(links.card(frame).value("image").toString(), QStringLiteral("https://example.org/render.png"));
+        QTRY_COMPARE(links.card(frame).value("image").toString(), QStringLiteral("https://example.org/render-1.png"));
         QVariantMap info = links.card(frame);
         QCOMPARE(info.value("title").toString(), QStringLiteral("Button / Primary"));
         QCOMPARE(info.value("summary").toString(), QStringLiteral("Component in Design System"));
@@ -1116,6 +1124,47 @@ private slots:
         // The token went to this host's API only
         for (const QByteArray &request : std::as_const(server.requests))
             QVERIFY(request.startsWith("GET /api/v3/"));
+    }
+
+    void figmaRendersAreKept()
+    {
+        FakeFigma api;
+        api.renderBase = api.base().toUtf8();
+        QTemporaryDir folder;
+        Links links{Links::Detached{}};
+        links.setImageFolder(folder.path());
+        static_cast<FigmaResolver *>(links.resolver(QStringLiteral("figma")))->setApi(api.base());
+        links.accounts()->remember({QStringLiteral("figma"), QStringLiteral("figma.com"), {}}, "figd_test");
+        const QString frame = QStringLiteral("https://www.figma.com/design/AbCdEf123456/DS?node-id=12-34");
+        const auto image = [&] { return links.card(frame).value("image").toString(); };
+
+        // Shown from disk once it is there
+        links.card(frame);
+        QTRY_VERIFY(image().startsWith(QStringLiteral("file:")));
+        const QString kept = QUrl(image()).toLocalFile();
+        QVERIFY(kept.startsWith(folder.path()));
+        QFile file(kept);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), QByteArray("PNG-of-1.png"));
+        QCOMPARE(api.renders, 1);
+
+        // Asked again, the file unchanged: no new render, the same picture
+        const qsizetype asked = api.requests.size();
+        links.reload(frame);
+        links.card(frame);
+        QTRY_VERIFY(api.requests.size() > asked);
+        QTest::qWait(200);
+        QCOMPARE(api.renders, 1);
+        QCOMPARE(QUrl(image()).toLocalFile(), kept);
+
+        // The file changed: a new render, which takes the old one's place
+        api.version = "2";
+        links.reload(frame);
+        links.card(frame);
+        QTRY_VERIFY(QUrl(image()).toLocalFile() != kept && image().startsWith(QStringLiteral("file:")));
+        QCOMPARE(api.renders, 2);
+        QVERIFY(!QFile::exists(kept));
+        QCOMPARE(links.known(QStringLiteral("figma"), frame)->version, QStringLiteral("2"));
     }
 };
 

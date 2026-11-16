@@ -146,7 +146,7 @@ void FigmaResolver::resolve(const QUrl &url, const Done &done)
         done(std::nullopt, {});
         return;
     }
-    m_links->accounts()->token(*account, [this, ref, done](const QByteArray &token) {
+    m_links->accounts()->token(*account, [this, url, ref, done](const QByteArray &token) {
         if (token.isEmpty()) {
             done(std::nullopt, QObject::tr("The keychain has no Figma token: sign in again in Settings, Accounts."));
             return;
@@ -156,7 +156,7 @@ void FigmaResolver::resolve(const QUrl &url, const Done &done)
         // Just the file's top (its pages), or the node: never all of it
         const QString path = ref.node.isEmpty() ? QStringLiteral("/v1/files/%1?depth=1").arg(file)
                                                 : QStringLiteral("/v1/files/%1/nodes?ids=%2&depth=1").arg(file, node);
-        get(token, path, [this, ref, token, file, node, done](int status, const QJsonObject &json, const QString &error) {
+        get(token, path, [this, url, ref, token, file, node, done](int status, const QJsonObject &json, const QString &error) {
             if (status != 200) {
                 done(std::nullopt, QStringLiteral("Figma: %1").arg(error));
                 return;
@@ -164,6 +164,7 @@ void FigmaResolver::resolve(const QUrl &url, const Done &done)
             LinkInfo info;
             info.kind = QStringLiteral("design");
             const QString fileName = json.value(QLatin1String("name")).toString();
+            info.version = json.value(QLatin1String("version")).toString();
             const QString edited = when(json.value(QLatin1String("lastModified")).toString());
             const QString editor = json.value(QLatin1String("editorType")).toString();
             info.site = editorName(editor);
@@ -185,6 +186,12 @@ void FigmaResolver::resolve(const QUrl &url, const Done &done)
                                                                 + (pages.size() > 6 ? QStringLiteral(", …") : QString()));
                 add(QObject::tr("Pages"), pages.isEmpty() ? QString() : QString::number(pages.size()));
                 add(QObject::tr("Edited"), edited);
+                // The file as it was: its thumbnail there is still right
+                const std::optional<LinkInfo> before = m_links->known(id(), url.toString());
+                if (before && !info.version.isEmpty() && before->version == info.version && !before->image.isEmpty()) {
+                    info.image = before->image;
+                    info.remoteImage = before->remoteImage;
+                }
                 done(info, {});
                 return;
             }
@@ -206,6 +213,14 @@ void FigmaResolver::resolve(const QUrl &url, const Done &done)
             if (w > 0 && h > 0)
                 add(QObject::tr("Size"), QStringLiteral("%1 × %2").arg(std::round(w)).arg(std::round(h)));
             add(QObject::tr("Edited"), edited);
+            // The file as it was: the render there is still right, no new one
+            const std::optional<LinkInfo> before = m_links->known(id(), url.toString());
+            if (before && !info.version.isEmpty() && before->version == info.version && !before->image.isEmpty()) {
+                info.image = before->image;
+                info.remoteImage = before->remoteImage;
+                done(info, {});
+                return;
+            }
             // A page has no box: rendered at 1:1; else sharp, not huge
             const double longest = std::max(w, h);
             const double scale = longest > 0 ? std::clamp(kPictureSide / longest, 0.01, 2.0) : 1.0;

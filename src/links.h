@@ -31,6 +31,8 @@ struct LinkInfo
     QString image;   // a picture of it, from the web (a page's og:image)
     QString site;    // where it is: "github.com", "Jira · example.atlassian.net"
     QString kind;    // "design" for a Figma frame or file: its picture is the point
+    QString version;     // of what it shows, as its service counts (a Figma file's)
+    QString remoteImage; // where `image` came from, when it is kept on disk
     QString code;    // lines of a file (GitLab), shown highlighted
     QString language;
     int firstLine = 1;
@@ -211,6 +213,13 @@ public:
     // Asks bindings that call info() again (once the board can ask)
     void touch();
 
+    // What `resolver` last found for `url`, if anything: to reuse what
+    // hasn't changed (a Figma render while the file's version is the same)
+    std::optional<LinkInfo> known(const QString &resolver, const QString &url) const;
+    // Where pictures of links are kept, so they show at once next time;
+    // empty: not kept (the default when detached, for tests)
+    void setImageFolder(const QString &folder) { m_imageFolder = folder; }
+
     // The account for a link, and the site to ask: by the link's host, or
     // by the Atlassian site that host turned out to be an address of
     std::optional<std::pair<Account, QString>> accountFor(const QString &provider, const QUrl &url) const;
@@ -281,6 +290,9 @@ private:
     QVariantMap lookUp(const QString &url, LinkResolver *resolver);
     void load();
     void save();
+    // A picture from the web into the image folder; the entry shows it
+    // once it is there
+    void keepImage(const QString &key, const QString &remote);
     void bump();
 
     const bool m_persistent;
@@ -293,6 +305,8 @@ private:
     QHash<QString, QString> m_moved;  // host -> its Atlassian site ("" for none)
     QSet<QString> m_discovering;
     QVariantList m_reviews;
+    QString m_imageFolder;
+    QSet<QString> m_downloading; // pictures being fetched, by their address
     bool m_loaded = false;
     QTimer m_bump; // answers come in batches: one revision for each
     QTimer m_save;

@@ -14,6 +14,8 @@
 #include <algorithm>
 
 #include <QDir>
+#include <QFileInfo>
+#include <QCryptographicHash>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -43,6 +45,8 @@ QVariantMap LinkInfo::toVariant() const
             {QStringLiteral("image"), image},
             {QStringLiteral("site"), site},
             {QStringLiteral("kind"), kind},
+            {QStringLiteral("version"), version},
+            {QStringLiteral("remoteImage"), remoteImage},
             {QStringLiteral("code"), code},
             {QStringLiteral("language"), language},
             {QStringLiteral("firstLine"), firstLine}};
@@ -58,6 +62,8 @@ LinkInfo LinkInfo::fromVariant(const QVariantMap &map)
     info.image = map.value(QStringLiteral("image")).toString();
     info.site = map.value(QStringLiteral("site")).toString();
     info.kind = map.value(QStringLiteral("kind")).toString();
+    info.version = map.value(QStringLiteral("version")).toString();
+    info.remoteImage = map.value(QStringLiteral("remoteImage")).toString();
     info.code = map.value(QStringLiteral("code")).toString();
     info.language = map.value(QStringLiteral("language")).toString();
     info.firstLine = map.value(QStringLiteral("firstLine"), 1).toInt();
@@ -356,6 +362,7 @@ Links::Links(QObject *parent)
     m_save.setSingleShot(true);
     m_save.setInterval(2000);
     connect(&m_save, &QTimer::timeout, this, &Links::save);
+    m_imageFolder = QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/link-images");
     // Another account or alias: links may be read differently now
     connect(m_accounts, &Accounts::changed, this, &Links::touch);
     addResolver(std::make_unique<JiraResolver>(this));
@@ -547,7 +554,23 @@ QVariantMap Links::lookUp(const QString &url, LinkResolver *resolver)
             Entry &entry = self->m_entries[key];
             entry.pending = false;
             if (info) {
-                entry.info = info;
+                LinkInfo got = *info;
+                // A picture from the web: shown from disk from now on. Until
+                // a new one is there, the one there was stays.
+                const bool web = got.image.startsWith(QLatin1String("http"));
+                if (web && !self->m_imageFolder.isEmpty()) {
+                    const QString remote = got.image;
+                    got.remoteImage = remote;
+                    const bool kept = entry.info && entry.info->remoteImage == remote
+                                      && QFileInfo::exists(QUrl(entry.info->image).toLocalFile());
+                    if (kept)
+                        got.image = entry.info->image;
+                    else if (entry.info && entry.info->image.startsWith(QLatin1String("file:")))
+                        got.image = entry.info->image;
+                    if (!kept)
+                        self->keepImage(key, remote);
+                }
+                entry.info = got;
                 entry.fetched = QDateTime::currentDateTimeUtc();
                 entry.failed = {};
                 entry.error.clear();
@@ -806,6 +829,57 @@ QStringList Links::atlassianSites() const
         }
     }
     return sites;
+}
+
+std::optional<LinkInfo> Links::known(const QString &resolver, const QString &url) const
+{
+    const auto it = m_entries.constFind(resolver + QLatin1Char(' ') + url);
+    return it != m_entries.cend() ? it->info : std::nullopt;
+}
+
+void Links::keepImage(const QString &key, const QString &remote)
+{
+    if (m_downloading.contains(remote))
+        return;
+    m_downloading.insert(remote);
+    QNetworkRequest request{QUrl(remote)};
+    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Cache"));
+    request.setTransferTimeout(30000);
+    QNetworkReply *reply = network()->get(request);
+    QObject::connect(reply, &QNetworkReply::downloadProgress, reply, [reply](qint64 received, qint64) {
+        if (received > 20 * 1024 * 1024)
+            reply->abort(); // not a picture for a card
+    });
+    QPointer<Links> self(this);
+    QObject::connect(reply, &QNetworkReply::finished, reply, [self, reply, key, remote] {
+        reply->deleteLater();
+        if (!self)
+            return;
+        self->m_downloading.remove(remote);
+        const QByteArray data = reply->readAll();
+        auto it = self->m_entries.find(key);
+        // Still the picture it shows, and one at all
+        if (reply->error() != QNetworkReply::NoError || data.isEmpty() || it == self->m_entries.end() || !it->info
+            || it->info->remoteImage != remote)
+            return;
+        // Named after the link and the picture: a new one is a new file, so
+        // nothing shows a stale copy of the old
+        const QByteArray name = QCryptographicHash::hash((key + QLatin1Char('\n') + remote).toUtf8(),
+                                                         QCryptographicHash::Sha1).toHex();
+        QDir().mkpath(self->m_imageFolder);
+        const QString file = QDir(self->m_imageFolder).filePath(QString::fromLatin1(name));
+        QSaveFile out(file);
+        if (!out.open(QIODevice::WriteOnly) || out.write(data) != data.size() || !out.commit())
+            return;
+        // The one it showed before goes
+        const QString old = QUrl(it->info->image).toLocalFile();
+        if (!old.isEmpty() && old != file && old.startsWith(self->m_imageFolder))
+            QFile::remove(old);
+        it->info->image = QUrl::fromLocalFile(file).toString();
+        if (self->m_persistent)
+            self->m_save.start();
+        self->m_bump.start();
+    });
 }
 
 void Links::touch()
