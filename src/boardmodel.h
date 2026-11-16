@@ -45,6 +45,7 @@ struct BoardItem
     QList<QPointF> points;
     double size = 0;
     bool collapsed = false; // a mindmap branch folded into its root
+    QString task;           // a note that is a task itself: "open" or "done"
 };
 
 // A connector from one item to another, or from an item back to itself.
@@ -118,6 +119,7 @@ public:
         PointsRole,
         SizeRole,
         CollapsedRole,
+        TaskRole,        // a note that is a task: "", "open" or "done"
         HiddenRole,      // inside a folded mindmap branch
         DescendantsRole, // how many items a fold hides
         ChildCountRole,
@@ -202,6 +204,8 @@ public:
     Q_INVOKABLE void redo();
     // Ticks or unticks the n-th "- [ ]" task of a note
     Q_INVOKABLE void toggleTask(int row, int task);
+    // The note at `row` as a task of its own: "open", "done", or "" for none
+    Q_INVOKABLE void setNoteTask(int row, const QString &state);
 
     // Editing several items at once, each one undo step
     Q_INVOKABLE void moveItems(const QVariantList &positions); // [{id, x, y}]

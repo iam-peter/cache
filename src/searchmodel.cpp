@@ -6,11 +6,14 @@
 
 #include <QDateTime>
 #include <QDir>
-#include <QSaveFile>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QQmlEngine>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QSet>
 
 #include <algorithm>
@@ -226,7 +229,7 @@ void SearchModel::connectSources()
         connect(m_board, &QAbstractItemModel::dataChanged, this,
                 [this](const QModelIndex &, const QModelIndex &, const QList<int> &roles) {
                     // Only text matters; moving notes around doesn't
-                    if (roles.isEmpty() || roles.contains(BoardModel::TextRole))
+                    if (roles.isEmpty() || roles.contains(BoardModel::TextRole) || roles.contains(BoardModel::TaskRole))
                         touch();
                 });
         connect(m_board, &QAbstractItemModel::rowsInserted, this, &SearchModel::touch);
@@ -278,6 +281,7 @@ void SearchModel::scanDisk()
         if (project.fileName().startsWith(QLatin1Char('.')))
             continue;
         DiskProject dp{project.fileName(), project.absoluteFilePath(), {}};
+        const QHash<QString, QString> &noteTasks = noteTasksOn(dp.path);
         if (dp.path != m_diskOpenPath) {
             const QFileInfoList notes = QDir(QDir(dp.path).filePath(QStringLiteral("notes")))
                                             .entryInfoList({QStringLiteral("*.md")}, QDir::Files);
@@ -290,7 +294,8 @@ void SearchModel::scanDisk()
                     cached.setText(f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString());
                     cached.modified = note.lastModified();
                 }
-                dp.entries.append({dp.name, dp.path, note.completeBaseName(), false, nullptr});
+                dp.entries.append({dp.name, dp.path, note.completeBaseName(), false, nullptr,
+                                   noteTasks.value(note.completeBaseName())});
             }
         }
         m_disk.append(dp);
@@ -339,7 +344,7 @@ const QList<SearchModel::Entry> &SearchModel::index()
         const QString name = QFileInfo(open).fileName();
         for (const BoardItem &it : m_board->items()) {
             if (it.type == QLatin1String("note"))
-                openEntries.append({name, open, it.id, true, &m_openCache[it.id]});
+                openEntries.append({name, open, it.id, true, &m_openCache[it.id], it.task});
         }
     }
 
@@ -495,12 +500,33 @@ int SearchModel::backlinkCount(const QString &projectPath, const QString &noteId
     return int(m_backlinks.value(QDir(projectPath).absolutePath() + QLatin1Char('\n') + noteId).size());
 }
 
-QVariantList SearchModel::openTasks()
+const QHash<QString, QString> &SearchModel::noteTasksOn(const QString &projectPath)
+{
+    const QFileInfo canvas(QDir(projectPath).filePath(QStringLiteral("canvas.json")));
+    CanvasTasks &cached = m_canvasTasks[projectPath];
+    if (cached.modified != canvas.lastModified()) {
+        cached.modified = canvas.lastModified();
+        cached.taskOf.clear();
+        QFile f(canvas.absoluteFilePath());
+        if (f.open(QIODevice::ReadOnly)) {
+            const QJsonArray items = QJsonDocument::fromJson(f.readAll()).object().value(QStringLiteral("items")).toArray();
+            for (const QJsonValue &v : items) {
+                const QJsonObject o = v.toObject();
+                const QString task = o.value(QStringLiteral("task")).toString();
+                if (task == QLatin1String("open") || task == QLatin1String("done"))
+                    cached.taskOf.insert(o.value(QStringLiteral("id")).toString(), task);
+            }
+        }
+    }
+    return cached.taskOf;
+}
+
+QVariantList SearchModel::tasks()
 {
     currentIndex();
     // The same list for every binding that asks before the next change
-    if (m_openTasksGeneration == m_generation)
-        return m_openTasks;
+    if (m_tasksGeneration == m_generation)
+        return m_tasks;
     QList<Entry> entries = m_entries;
     std::stable_sort(entries.begin(), entries.end(), [](const Entry &a, const Entry &b) {
         if (a.current != b.current)
@@ -508,24 +534,27 @@ QVariantList SearchModel::openTasks()
         return a.projectName.compare(b.projectName, Qt::CaseInsensitive) < 0;
     });
     QVariantList list;
+    const auto add = [&list](const Entry &e, int task, const QString &text, bool done) {
+        list.append(QVariantMap{
+            {QStringLiteral("projectName"), e.projectName},
+            {QStringLiteral("projectPath"), e.projectPath},
+            {QStringLiteral("noteId"), e.id},
+            {QStringLiteral("noteTitle"), e.note->title},
+            {QStringLiteral("task"), task},
+            {QStringLiteral("text"), text},
+            {QStringLiteral("done"), done},
+            {QStringLiteral("current"), e.current},
+        });
+    };
     for (const Entry &e : std::as_const(entries)) {
+        if (!e.noteTask.isEmpty())
+            add(e, -1, plainText(e.note->title), e.noteTask == QLatin1String("done"));
         const QList<Markdown::Task> &tasks = e.note->tasks;
-        for (int n = 0; n < tasks.size(); ++n) {
-            if (tasks.at(n).done)
-                continue;
-            list.append(QVariantMap{
-                {QStringLiteral("projectName"), e.projectName},
-                {QStringLiteral("projectPath"), e.projectPath},
-                {QStringLiteral("noteId"), e.id},
-                {QStringLiteral("noteTitle"), e.note->title},
-                {QStringLiteral("task"), n},
-                {QStringLiteral("text"), plainText(tasks.at(n).text)},
-                {QStringLiteral("current"), e.current},
-            });
-        }
+        for (int n = 0; n < tasks.size(); ++n)
+            add(e, n, plainText(tasks.at(n).text), tasks.at(n).done);
     }
-    m_openTasks = list;
-    m_openTasksGeneration = m_generation;
+    m_tasks = list;
+    m_tasksGeneration = m_generation;
     return list;
 }
 
@@ -533,7 +562,41 @@ void SearchModel::toggleTask(const QString &projectPath, const QString &noteId, 
 {
     connectSources();
     if (m_board && QDir(m_board->projectPath()).absolutePath() == QDir(projectPath).absolutePath()) {
-        m_board->toggleTask(m_board->indexOf(noteId), task);
+        const int row = m_board->indexOf(noteId);
+        if (task < 0)
+            m_board->setNoteTask(row, m_board->get(row).value(QStringLiteral("task")).toString() == QLatin1String("done")
+                                          ? QStringLiteral("open") : QStringLiteral("done"));
+        else
+            m_board->toggleTask(row, task);
+        return;
+    }
+    if (task < 0) { // a note of a project that isn't open: its canvas.json
+        const QString path = QDir(projectPath).filePath(QStringLiteral("canvas.json"));
+        QFile in(path);
+        if (!in.open(QIODevice::ReadOnly))
+            return;
+        QJsonObject root = QJsonDocument::fromJson(in.readAll()).object();
+        in.close();
+        QJsonArray items = root.value(QStringLiteral("items")).toArray();
+        bool changed = false;
+        for (qsizetype i = 0; i < items.size(); ++i) {
+            QJsonObject o = items.at(i).toObject();
+            if (o.value(QStringLiteral("id")).toString() != noteId || !o.contains(QStringLiteral("task")))
+                continue;
+            o.insert(QStringLiteral("task"), o.value(QStringLiteral("task")).toString() == QLatin1String("done")
+                                                 ? QStringLiteral("open") : QStringLiteral("done"));
+            items[i] = o;
+            changed = true;
+        }
+        if (!changed)
+            return;
+        root.insert(QStringLiteral("items"), items);
+        QSaveFile out(path);
+        if (out.open(QIODevice::WriteOnly)) {
+            out.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+            out.commit();
+        }
+        touchDisk();
         return;
     }
     // A note of a project that isn't open: change its file

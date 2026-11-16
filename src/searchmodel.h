@@ -82,7 +82,13 @@ public:
     Q_INVOKABLE int backlinkCount(const QString &projectPath, const QString &noteId);
     // Every unticked task in every project: projectName, projectPath,
     // noteId, noteTitle, task (its number in the note), text, current
-    Q_INVOKABLE QVariantList openTasks();
+    // Every task of every project, the open one first: the checklist items
+    // of the notes, and the notes that are tasks themselves. Each:
+    // projectName, projectPath, noteId, noteTitle, task (its number in the
+    // note, -1 for the note itself), text, done, current.
+    Q_INVOKABLE QVariantList tasks();
+    // Ticks or unticks a checklist item (task >= 0) or a note that is a
+    // task (task -1), in the open project or on disk
     Q_INVOKABLE void toggleTask(const QString &projectPath, const QString &noteId, int task);
 
     static QStringList parseTerms(const QString &query);
@@ -126,7 +132,15 @@ private:
         QString id;
         bool current = false;
         const CachedNote *note = nullptr;
+        QString noteTask; // the note as a task: "", "open" or "done"
     };
+    // Which notes of a project not open are tasks, from its canvas.json
+    struct CanvasTasks {
+        QDateTime modified;
+        QHash<QString, QString> taskOf; // note id -> "open" or "done"
+    };
+    QHash<QString, CanvasTasks> m_canvasTasks; // project path -> its note tasks
+    const QHash<QString, QString> &noteTasksOn(const QString &projectPath);
 
     void connectSources();
     void run();
@@ -169,8 +183,8 @@ private:
     bool m_diskDirty = true;
     qint64 m_diskScannedAt = 0;
     int m_generation = 0; // counts rebuilds of the index
-    QVariantList m_openTasks;
-    int m_openTasksGeneration = -1;
+    QVariantList m_tasks;
+    int m_tasksGeneration = -1;
     int m_revision = 0;
     BoardModel *m_board = nullptr;
     Workspace *m_workspace = nullptr;

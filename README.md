@@ -66,9 +66,11 @@ request; the [website](pages/) is published from `pages/` by the
   Notes render headings, lists, tables, links, images, videos and code,
   and grow to fit when you finish editing. Each note is a plain `.md`
   file.
-- **Checklists**: `- [ ]` tasks are boxes to tick right in the note. The
-  sidebar's **Open tasks** tab lists every unticked task of every project
-  and ticks them there too.
+- **Checklists and tasks**: `- [ ]` tasks are boxes to tick right in the
+  note, and a whole note can be a task too (the box in its toolbar): it
+  gets a box in its corner and fades once done. The sidebar's **Tasks**
+  tab lists them all, of every project: open ones first, then the done
+  ones, which fold away; ticking or unticking there works too.
 - **Code snippets**: fenced code blocks (`K` for a new snippet,
   `Ctrl+Shift+K` while editing) are syntax-highlighted in the theme's
   colours, with a button to copy the code. The language comes from the

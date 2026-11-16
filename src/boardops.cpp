@@ -77,6 +77,8 @@ QJsonObject BoardModel::toJson(const BoardItem &it, bool inlineText)
         o.insert(QStringLiteral("size"), rounded(it.size));
     if (it.collapsed)
         o.insert(QStringLiteral("collapsed"), true);
+    if (!it.task.isEmpty())
+        o.insert(QStringLiteral("task"), it.task);
     if (!it.source.isEmpty())
         o.insert(QStringLiteral("source"), it.source);
     if (!it.points.isEmpty()) {
@@ -108,6 +110,9 @@ BoardItem BoardModel::itemFromJson(const QJsonObject &o)
     it.shape = o.value(QStringLiteral("shape")).toString();
     it.size = o.value(QStringLiteral("size")).toDouble();
     it.collapsed = o.value(QStringLiteral("collapsed")).toBool();
+    it.task = o.value(QStringLiteral("task")).toString();
+    if (it.task != QLatin1String("open") && it.task != QLatin1String("done"))
+        it.task.clear();
     const QJsonArray points = o.value(QStringLiteral("points")).toArray();
     for (qsizetype i = 0; i + 1 < points.size(); i += 2)
         it.points.append(QPointF(points.at(i).toDouble(), points.at(i + 1).toDouble()));
@@ -921,6 +926,17 @@ QString BoardModel::addSibling(const QString &id)
     }
     updateDerived();
     return added;
+}
+
+void BoardModel::setNoteTask(int row, const QString &state)
+{
+    const QString task = state == QLatin1String("open") || state == QLatin1String("done") ? state : QString();
+    if (!valid(row) || m_items.at(row).type != QLatin1String("note") || m_items.at(row).task == task)
+        return;
+    pushUndo();
+    m_items[row].task = task;
+    emitRow(row, {TaskRole});
+    markDirty();
 }
 
 void BoardModel::toggleCollapsed(const QString &id)

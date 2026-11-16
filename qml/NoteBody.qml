@@ -317,6 +317,8 @@ Item {
         anchors.fill: parent
         anchors.margins: Styles.Primitives.spacing.sp200
         anchors.topMargin: Styles.Primitives.spacing.sp150
+        // Clear of the box to tick when the note is a task
+        anchors.rightMargin: body.card.itemTask !== "" ? 40 : Styles.Primitives.spacing.sp200
         visible: !body.editing
         interactive: false
         clip: true

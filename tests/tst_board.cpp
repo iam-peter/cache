@@ -392,6 +392,36 @@ private slots:
     }
 
     // A note dragged out to a size, and one at the usual size
+    // A whole note as a task: open, done, or none; kept with the project
+    void noteAsTask()
+    {
+        const QString path = project("notetask");
+        QString id;
+        {
+            BoardModel board;
+            board.load(path);
+            const int row = board.addNote(0, 0, QStringLiteral("# Write the report"));
+            id = board.get(row).value("id").toString();
+            QCOMPARE(board.get(row).value("task").toString(), QString());
+            board.setNoteTask(row, QStringLiteral("open"));
+            board.setNoteTask(row, QStringLiteral("done"));
+            QCOMPARE(board.get(row).value("task").toString(), QStringLiteral("done"));
+            board.undo(); // one step each
+            QCOMPARE(board.get(row).value("task").toString(), QStringLiteral("open"));
+            board.setNoteTask(row, QStringLiteral("nonsense")); // none
+            QCOMPARE(board.get(row).value("task").toString(), QString());
+            board.setNoteTask(row, QStringLiteral("done"));
+            board.save();
+        }
+        BoardModel board;
+        board.load(path);
+        QCOMPARE(board.getById(id).value("task").toString(), QStringLiteral("done"));
+        // Only notes are tasks
+        const int shape = board.addItem(QStringLiteral("shape"), 0, 300, 100, 60, QStringLiteral("rect"), QStringLiteral("x"));
+        board.setNoteTask(shape, QStringLiteral("open"));
+        QCOMPARE(board.get(shape).value("task").toString(), QString());
+    }
+
     void addNoteWithSize()
     {
         BoardModel board;

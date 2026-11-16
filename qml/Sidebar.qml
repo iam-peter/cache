@@ -151,8 +151,8 @@ Pane {
             visible: !Search.active
             TabButton { text: qsTr("Notes (%1)").arg(documentList.count) }
             TabButton {
-                readonly property int open: (Search.revision, Search.openTasks().length)
-                text: open > 0 ? qsTr("Open tasks (%1)").arg(open) : qsTr("Open tasks")
+                readonly property int open: (Search.revision, Search.tasks().filter(t => !t.done).length)
+                text: open > 0 ? qsTr("Tasks (%1)").arg(open) : qsTr("Tasks")
             }
         }
 
@@ -205,18 +205,33 @@ Pane {
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             ScrollIndicator.vertical: ScrollIndicator { }
+            // Open, then done (foldable), each by project
+            property bool doneFolded: false
             model: {
                 if (!visible)
                     return []
                 Search.revision
+                const all = Search.tasks()
+                if (all.length === 0)
+                    return []
                 const rows = []
-                let project = ""
-                for (const task of Search.openTasks()) {
-                    if (task.projectPath !== project) {
-                        project = task.projectPath
-                        rows.push({ header: true, projectName: task.projectName })
+                const addGroup = (tasks) => {
+                    let project = ""
+                    for (const task of tasks) {
+                        if (task.projectPath !== project) {
+                            project = task.projectPath
+                            rows.push({ header: true, projectName: task.projectName })
+                        }
+                        rows.push(task)
                     }
-                    rows.push(task)
+                }
+                const open = all.filter(t => !t.done), done = all.filter(t => t.done)
+                rows.push({ section: "open", count: open.length })
+                addGroup(open)
+                if (done.length > 0) {
+                    rows.push({ section: "done", count: done.length })
+                    if (!doneFolded)
+                        addGroup(done)
                 }
                 return rows
             }
@@ -224,7 +239,34 @@ Pane {
                 id: entry
                 required property var modelData
                 width: ListView.view.width
-                sourceComponent: modelData.header ? taskHeader : taskRow
+                sourceComponent: modelData.section ? taskSection : modelData.header ? taskHeader : taskRow
+                // "Open" and "Done (12)", which folds
+                Component {
+                    id: taskSection
+                    ItemDelegate {
+                        leftPadding: Styles.Primitives.spacing.sp100
+                        // Both headings look alike; only Done folds
+                        hoverEnabled: entry.modelData.section === "done"
+                        onClicked: if (entry.modelData.section === "done") taskList.doneFolded = !taskList.doneFolded
+                        contentItem: Row {
+                            spacing: Styles.Primitives.spacing.sp050
+                            Icon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: entry.modelData.section === "done"
+                                name: taskList.doneFolded ? "chevron-right" : "chevron-down"
+                                size: 14
+                                color: Theme.textMuted
+                            }
+                            Label {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: entry.modelData.section === "done" ? qsTr("Done (%1)").arg(entry.modelData.count)
+                                                                         : qsTr("Open (%1)").arg(entry.modelData.count)
+                                font.weight: Styles.Primitives.fontWeight.semiBold
+                                color: Theme.text
+                            }
+                        }
+                    }
+                }
                 Component {
                     id: taskHeader
                     Label {
@@ -246,22 +288,38 @@ Pane {
                             spacing: Styles.Primitives.spacing.sp075
                             CheckBox {
                                 anchors.verticalCenter: parent.verticalCenter
-                                checked: false
+                                checked: entry.modelData.done
                                 onClicked: Search.toggleTask(entry.modelData.projectPath, entry.modelData.noteId,
                                                              entry.modelData.task)
                             }
                             Column {
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: taskList.width - 64
-                                Label {
+                                Row {
                                     width: parent.width
-                                    text: entry.modelData.text
-                                    wrapMode: Text.Wrap
-                                    maximumLineCount: 2
-                                    elide: Text.ElideRight
+                                    spacing: Styles.Primitives.spacing.sp050
+                                    // A note that is a task itself
+                                    Icon {
+                                        id: noteIcon
+                                        visible: entry.modelData.task < 0
+                                        name: "sticky-note"
+                                        size: 14
+                                        color: Theme.textMuted
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Label {
+                                        width: parent.width - (noteIcon.visible ? noteIcon.width + parent.spacing : 0)
+                                        text: entry.modelData.text
+                                        wrapMode: Text.Wrap
+                                        maximumLineCount: 2
+                                        elide: Text.ElideRight
+                                        font.strikeout: entry.modelData.done
+                                        color: entry.modelData.done ? Theme.textMuted : Theme.text
+                                    }
                                 }
                                 Label {
                                     width: parent.width
+                                    visible: entry.modelData.task >= 0
                                     text: entry.modelData.noteTitle
                                     elide: Text.ElideRight
                                     font.pixelSize: Styles.Primitives.fontSize.small
@@ -279,7 +337,7 @@ Pane {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 visible: taskList.count === 0
-                text: qsTr("No open tasks. Write “- [ ] something” in a note to add one.")
+                text: qsTr("No tasks. Write “- [ ] something” in a note, or make a whole note a task with its toolbar.")
                 color: Theme.textMuted
             }
         }

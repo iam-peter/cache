@@ -23,6 +23,7 @@ Item {
     required property var itemPoints
     required property real itemSize
     required property bool itemCollapsed
+    required property string itemTask // a note that is a task: "", "open" or "done"
     required property bool itemHidden
     required property int descendants
     required property int childCount
@@ -179,8 +180,42 @@ Item {
     Loader {
         id: body
         anchors.fill: parent
+        // A note whose task is done: faded, its tick still clear
+        opacity: root.isNote && root.itemTask === "done" && !root.editing ? 0.5 : 1
         sourceComponent: root.isNote ? noteBody : root.isShape ? shapeBody : root.isText ? textBody
                        : root.isSection ? sectionBody : strokeBody
+    }
+
+    // A note that is a task: its box to tick, in the corner
+    Rectangle {
+        visible: root.isNote && root.itemTask !== "" && !root.editing
+        z: 5
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 10
+        width: 20
+        height: 20
+        radius: 4
+        color: root.itemTask === "done" ? Theme.accent : Theme.s.background_elevated
+        border.color: root.itemTask === "done" ? Theme.accent : Theme.s.stroke_field
+        border.width: 1.5
+        Icon {
+            anchors.centerIn: parent
+            visible: root.itemTask === "done"
+            name: "check"
+            size: 14
+            color: Theme.s.text_on_primary
+        }
+        MouseArea {
+            anchors.fill: parent
+            anchors.margins: -4
+            cursorShape: Qt.PointingHandCursor
+            onClicked: Board.setNoteTask(root.index, root.itemTask === "done" ? "open" : "done")
+            ToolTip.visible: containsMouse
+            ToolTip.delay: 600
+            ToolTip.text: root.itemTask === "done" ? qsTr("Done; click to open it again") : qsTr("Mark as done")
+            hoverEnabled: true
+        }
     }
     Component { id: noteBody; NoteBody { card: root } }
     Component { id: shapeBody; ShapeBody { card: root } }
@@ -473,6 +508,14 @@ Item {
                         iconName: root.editing ? "check" : "pencil"
                         tip: root.editing ? qsTr("Done (Esc)") : root.isSection ? qsTr("Rename") : qsTr("Edit (Enter)")
                         onClicked: root.editing ? root.canvas.finishEditing() : root.canvas.startEditing(root.itemId)
+                    }
+                    Tip {
+                        visible: root.isNote && !root.formatting
+                        iconName: "square-check"
+                        checkable: true
+                        checked: root.itemTask !== ""
+                        tip: root.itemTask !== "" ? qsTr("No longer a task") : qsTr("Make this note a task, with a box to tick")
+                        onClicked: Board.setNoteTask(root.index, root.itemTask !== "" ? "" : "open")
                     }
                     Tip {
                         visible: root.isNote

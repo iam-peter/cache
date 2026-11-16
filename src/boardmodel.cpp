@@ -132,6 +132,7 @@ QVariant BoardModel::data(const QModelIndex &index, int role) const
     }
     case SizeRole: return it.size;
     case CollapsedRole: return it.collapsed;
+    case TaskRole: return it.task;
     case HiddenRole: return m_hidden.contains(it.id);
     case DescendantsRole: return m_descendants.value(it.id);
     case ChildCountRole: return m_childCount.value(it.id);
@@ -167,6 +168,7 @@ QHash<int, QByteArray> BoardModel::roleNames() const
         {PointsRole, "itemPoints"},
         {SizeRole, "itemSize"},
         {CollapsedRole, "itemCollapsed"},
+        {TaskRole, "itemTask"},
         {HiddenRole, "itemHidden"},
         {DescendantsRole, "descendants"},
         {ChildCountRole, "childCount"},
@@ -798,6 +800,7 @@ QVariantMap BoardModel::get(int row) const
         {QStringLiteral("shape"), it.shape},
         {QStringLiteral("size"), it.size},
         {QStringLiteral("collapsed"), it.collapsed},
+        {QStringLiteral("task"), it.task},
         {QStringLiteral("hidden"), m_hidden.contains(it.id)},
         {QStringLiteral("childCount"), m_childCount.value(it.id)},
     };

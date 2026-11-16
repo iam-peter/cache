@@ -40,7 +40,7 @@ const char kLinks[] = R"(## Links and mindmaps
 - Drag a note's side handle onto another note to connect them, or onto empty space for a new one
 - `Tab` adds a child, `Enter` a sibling: a mindmap in seconds
 
-- [ ] Try ticking this task; open tasks of all projects are in the sidebar
+- [ ] Try ticking this task; the tasks of all projects are in the sidebar
 )";
 
 const char kShortcuts[] = R"(## Shortcuts
