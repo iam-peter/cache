@@ -259,7 +259,7 @@ Item {
     // --- Notes linking here ------------------------------------------------
     Rectangle {
         id: backlinks
-        readonly property int count: root.isNote ? (Search.revision, Search.backlinkCount(Board.projectPath, root.itemId)) : 0
+        readonly property int count: root.isNote && Search.revision >= 0 ? Search.backlinkCount(Board.projectPath, root.itemId) : 0
         visible: root.chrome && count > 0
         scale: root.inv
         transformOrigin: Item.TopLeft

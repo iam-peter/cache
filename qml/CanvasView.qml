@@ -1598,7 +1598,7 @@ Item {
         id: linkCard
         property string url
         property point anchor
-        readonly property var info: url === "" ? ({}) : (Links.revision, Links.info(url))
+        readonly property var info: url !== "" && Links.revision >= 0 ? Links.info(url) : ({})
         readonly property color tone: info.tone === "done" ? Theme.s.success_default
                                     : info.tone === "progress" ? Theme.s.info_default : Theme.textMuted
         width: 360
@@ -1677,7 +1677,8 @@ Item {
             fillMode: Image.PreserveAspectFit
             asynchronous: true
             sourceSize.width: 720
-            source: mediaPreview.video ? (Posters.revision, Posters.poster(mediaPreview.source)) : mediaPreview.source
+            source: !mediaPreview.video ? mediaPreview.source
+                    : Posters.revision >= 0 ? Posters.poster(mediaPreview.source) : ""
         }
         Label {
             anchors.centerIn: parent

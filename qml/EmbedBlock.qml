@@ -12,7 +12,7 @@ Rectangle {
     required property var segment
     required property Item card
     // The linked note, from any project
-    readonly property var note: (Search.revision, Search.findNote(segment.target))
+    readonly property var note: Search.revision >= 0 ? Search.findNote(segment.target) : ({})
     readonly property bool expanded: segment.expanded && note.found
 
     implicitHeight: column.implicitHeight + 2 * Styles.Primitives.spacing.sp075

@@ -151,7 +151,7 @@ Pane {
             visible: !Search.active
             TabButton { text: qsTr("Notes (%1)").arg(documentList.count) }
             TabButton {
-                readonly property int open: (Search.revision, Search.tasks().filter(t => !t.done).length)
+                readonly property int open: Search.revision >= 0 ? Search.tasks().filter(t => !t.done).length : 0
                 text: open > 0 ? qsTr("Tasks (%1)").arg(open) : qsTr("Tasks")
             }
         }

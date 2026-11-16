@@ -341,10 +341,12 @@ Item {
                 // while editing: the editor covers it, and laying the text out
                 // again at every autosave made typing stutter
                 // Again when Jira and the like tell more about a web link
-                model: body.editing || body.card.itemText.trim().length === 0 ? []
-                       : (body.card.itemText.indexOf("://") >= 0 ? Links.revision : 0,
-                          Board.renderSegments(body.card.itemText, Math.max(40, flick.width - 2), body.textSize,
-                                               Theme.renderColors, Search.highlightWords))
+                // (the revision is read in the condition: the left side of
+                // a comma expression is dropped when compiled)
+                model: body.editing || body.card.itemText.trim().length === 0
+                       || (body.card.itemText.indexOf("://") >= 0 && Links.revision < 0) ? []
+                       : Board.renderSegments(body.card.itemText, Math.max(40, flick.width - 2), body.textSize,
+                                              Theme.renderColors, Search.highlightWords)
 
                 delegate: Loader {
                     id: piece
@@ -700,7 +702,8 @@ Item {
                             asynchronous: true
                             sourceSize: Qt.size(112, 72)
                             source: mediaEntry.modelData.kind === "image" ? mediaEntry.modelData.url
-                                  : mediaEntry.modelData.kind === "video" ? (Posters.revision, Posters.poster(mediaEntry.modelData.url))
+                                  : mediaEntry.modelData.kind === "video" && Posters.revision >= 0
+                                    ? Posters.poster(mediaEntry.modelData.url)
                                   : ""
                         }
                         Icon {

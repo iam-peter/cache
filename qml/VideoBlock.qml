@@ -16,7 +16,7 @@ Rectangle {
     required property string name
     signal expandRequested()
 
-    readonly property url poster: (Posters.revision, Posters.poster(block.source))
+    readonly property url poster: Posters.revision >= 0 ? Posters.poster(block.source) : ""
     readonly property Item live: liveLoader.item
     readonly property bool playing: live !== null && live.playing
     // Play was pressed before the player was there (a touch screen, no hover)
