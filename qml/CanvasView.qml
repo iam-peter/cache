@@ -1948,8 +1948,7 @@ Item {
             open()
         }
         onInfoChanged: showIfKnown()
-        readonly property color tone: info.tone === "done" ? Theme.s.success_default
-                                    : info.tone === "progress" ? Theme.s.info_default : Theme.textMuted
+        readonly property color tone: Theme.toneColor(info.tone)
         width: 360
         padding: Styles.Primitives.spacing.sp150
         closePolicy: Popup.CloseOnPressOutside | Popup.CloseOnEscape
@@ -2010,6 +2009,26 @@ Item {
                 visible: text !== ""
                 text: linkCard.info.summary || ""
                 wrapMode: Text.Wrap
+            }
+            // Lines of a file
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(hoverCode.implicitHeight + 12, 260)
+                visible: (linkCard.info.code || "") !== ""
+                radius: Theme.radius
+                color: Theme.codeBackground
+                clip: true
+                Text {
+                    id: hoverCode
+                    x: 8
+                    y: 6
+                    textFormat: Text.RichText
+                    renderType: Text.CurveRendering
+                    text: (linkCard.info.code || "") === "" ? "" : Links.highlight(linkCard.info.code, linkCard.info.language || "", Theme.renderColors)
+                    color: Theme.text
+                    font.family: Theme.monoFont.family
+                    font.pixelSize: 11
+                }
             }
             // Couldn't be read: why, and where it was asked
             Label {

@@ -167,6 +167,16 @@ request; the [website](pages/) is published from `pages/` by the
   the pointer is on it; a link to a Confluence page shows its space, an
   excerpt, and who changed it last and when. A bare address in a note
   shows the issue's key or the page's title instead.
+- **GitLab** (gitlab.com or your own, with a personal access token with
+  the read_api scope): a link to a merge request shows its state, branches,
+  author, reviewers and who approved, its pipeline and labels; a pipeline,
+  its stages and how their jobs went; a file with lines (`#L40-60`), those
+  lines as highlighted code; issues, commits, repositories (their default
+  branch's pipeline, languages, latest release), releases, tags, compares,
+  milestones (how many issues are closed), wiki pages and snippets too.
+  The command palette searches projects, merge requests and issues, and
+  lists your open merge requests and those waiting for your review; the
+  latter are also at the top of the Tasks tab.
 - **Figma designs**: with a Figma personal access token (Settings,
   Accounts), a link to a frame or component shows it as Figma renders it,
   on its link card and in its hover card, with its name, size and file;
@@ -344,6 +354,7 @@ ctest --test-dir build --output-on-failure
 | `src/jiraresolver.*` | Jira issues, through Jira's REST API; signs in the Atlassian accounts |
 | `src/confluenceresolver.*` | Confluence pages, through Confluence's REST API, with the same accounts |
 | `src/figmaresolver.*` | Figma frames and files, through Figma's REST API, rendered as pictures |
+| `src/gitlabresolver.*` | GitLab merge requests, pipelines, files, issues, commits and more, through its REST API |
 | `src/pageresolver.*` | Any web page's title, description and picture, for link and hover cards |
 | `src/wikipediaresolver.*` | Wikipedia articles' opening lines and pictures |
 | `src/keychain.*` | Tokens in the system's keychain: libsecret, macOS Keychain, Windows Credential Manager |

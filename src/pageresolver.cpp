@@ -2,6 +2,7 @@
 
 #include "confluenceresolver.h"
 #include "figmaresolver.h"
+#include "gitlabresolver.h"
 #include "markdown.h"
 
 #include <QHash>
@@ -73,6 +74,19 @@ void PageResolver::resolve(const QUrl &url, const Done &done)
         info.summary = !key.isEmpty()
             ? QObject::tr("Add an account for %1 in Settings to see this issue.").arg(Links::authority(url))
             : QObject::tr("Add an account for %1 in Settings to see this page.").arg(Links::authority(url));
+        done(info, {});
+        return;
+    }
+    // Something of a GitLab project's (/-/merge_requests/…) on a host
+    // without an account: its page would ask to sign in
+    if (url.path().contains(QLatin1String("/-/")) && GitLabResolver::refOf(url).valid()) {
+        const GitLabResolver::Ref ref = GitLabResolver::refOf(url);
+        LinkInfo info;
+        info.title = ref.kind == QLatin1String("mr") ? QStringLiteral("!") + ref.id
+                   : ref.kind == QLatin1String("issue") ? QStringLiteral("#") + ref.id
+                                                        : ref.project;
+        info.site = QStringLiteral("GitLab · %1").arg(ref.project);
+        info.summary = QObject::tr("Add a GitLab account for %1 in Settings to see this.").arg(Links::authority(url));
         done(info, {});
         return;
     }

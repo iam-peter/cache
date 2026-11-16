@@ -309,6 +309,10 @@ ApplicationWindow {
               run: () => canvasView.followLink(canvasView.selectedLinkId, false) },
             { name: qsTr("Go to where the connector points"), enabled: canvasView.selectedLinkId !== "",
               run: () => canvasView.followLink(canvasView.selectedLinkId, true) },
+            { name: qsTr("My open merge requests (GitLab)"), query: "mr:mine",
+              enabled: Links.accounts.list.some(a => a.provider === "gitlab") },
+            { name: qsTr("Merge requests waiting for my review (GitLab)"), query: "mr:review",
+              enabled: Links.accounts.list.some(a => a.provider === "gitlab") },
             { name: qsTr("Export a picture…"), run: () => exportDialog.open() },
             { name: qsTr("Copy canvas as picture"), run: () => canvasView.exportImage([], "copy") },
             { name: qsTr("Export canvas as Markdown"), run: () => {

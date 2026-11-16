@@ -31,6 +31,9 @@ struct LinkInfo
     QString image;   // a picture of it, from the web (a page's og:image)
     QString site;    // where it is: "github.com", "Jira · example.atlassian.net"
     QString kind;    // "design" for a Figma frame or file: its picture is the point
+    QString code;    // lines of a file (GitLab), shown highlighted
+    QString language;
+    int firstLine = 1;
 
     QVariantMap toVariant() const;
     static LinkInfo fromVariant(const QVariantMap &map);
@@ -139,6 +142,9 @@ public:
     // The one host its accounts are for, whatever people type (Figma's);
     // empty when they name the host
     virtual QString fixedHost() const { return {}; }
+    // Whether its accounts name a user besides the token (Atlassian Cloud's
+    // email)
+    virtual bool needsUser() const { return false; }
     // What it finds for `query` with its accounts, for the command palette:
     // [{title, detail, url, status, tone, image}]. Called back once.
     using Results = std::function<void(const QVariantList &results)>;
@@ -158,8 +164,11 @@ class Links : public QObject
     // info() ask again
     Q_PROPERTY(int revision READ revision NOTIFY revisionChanged)
     Q_PROPERTY(Accounts *accounts READ accounts CONSTANT)
-    // [{id, name, fixedHost}] of the resolvers that sign in
+    // [{id, name, fixedHost, needsUser}] of the resolvers that sign in
     Q_PROPERTY(QVariantList providers READ providers CONSTANT)
+    // GitLab merge requests waiting for the user's review, for the Tasks
+    // tab: [{title, detail, url, status, tone}]; see refreshReviews()
+    Q_PROPERTY(QVariantList reviews READ reviews NOTIFY reviewsChanged)
 
 public:
     explicit Links(QObject *parent = nullptr);
@@ -204,6 +213,9 @@ public:
     // Searches every service with an account for `query` (three letters or
     // more); each answers with found(), its source being the resolver's id
     Q_INVOKABLE void search(const QString &query);
+    QVariantList reviews() const { return m_reviews; }
+    // Asks GitLab again which merge requests wait for the user's review
+    Q_INVOKABLE void refreshReviews();
     // The Atlassian sites to search: those with an account of their own,
     // and for an every-site account the sites links have been read from
     QStringList atlassianSites() const;
@@ -216,6 +228,12 @@ public:
     using JsonReply = std::function<void(int status, const QJsonObject &json, const QString &error)>;
     void request(const QString &site, const Account &account, const QByteArray &token, const QString &path,
                  const JsonReply &reply);
+    // The same, the answer as it came (a JSON array, a file's text)
+    using BytesReply = std::function<void(int status, const QByteArray &body, const QString &error)>;
+    void requestBytes(const QString &site, const Account &account, const QByteArray &token, const QString &path,
+                      const BytesReply &reply);
+    // Code as HTML for a card: escaped, coloured as notes colour it
+    Q_INVOKABLE QString highlight(const QString &code, const QString &language, const QVariantMap &colors) const;
 
     // The Atlassian site `host` is another address of, found out by asking
     // it (see discover()); empty when not known (yet) or when it is none
@@ -238,6 +256,7 @@ signals:
     void revisionChanged();
     void accountAdded(bool ok, const QString &message);
     void found(const QString &query, const QString &source, const QVariantList &results);
+    void reviewsChanged();
 
 private:
     struct Entry
@@ -269,6 +288,7 @@ private:
     QHash<QString, Entry> m_entries; // by resolver and URL: "jira https://…"
     QHash<QString, QString> m_moved;  // host -> its Atlassian site ("" for none)
     QSet<QString> m_discovering;
+    QVariantList m_reviews;
     bool m_loaded = false;
     QTimer m_bump; // answers come in batches: one revision for each
     QTimer m_save;

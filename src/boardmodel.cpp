@@ -1358,6 +1358,7 @@ void BoardModel::decorateLinks(QTextDocument &doc, const QVariantMap &colors, in
         const QString tone = info.value(QStringLiteral("tone")).toString();
         QColor color = colors.value(tone == QLatin1String("done")       ? QStringLiteral("toneDone")
                                     : tone == QLatin1String("progress") ? QStringLiteral("toneProgress")
+                                    : tone == QLatin1String("failed")   ? QStringLiteral("toneFailed")
                                                                         : QStringLiteral("toneTodo"))
                            .value<QColor>();
         if (!color.isValid())

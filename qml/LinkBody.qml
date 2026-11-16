@@ -17,8 +17,7 @@ Item {
     // Asked again whenever an answer comes in (revision)
     readonly property var info: url !== "" && Links.revision >= 0 ? Links.card(url) : ({})
     readonly property bool known: info.title !== undefined
-    readonly property color tone: info.tone === "done" ? Theme.s.success_default
-                                : info.tone === "progress" ? Theme.s.info_default : Theme.textMuted
+    readonly property color tone: Theme.toneColor(info.tone)
     readonly property real pad: Styles.Primitives.spacing.sp150
 
     function commit() {
@@ -146,6 +145,44 @@ Item {
             verticalAlignment: Text.AlignTop
             clip: true
         }
+        // Lines of a file: highlighted, numbered from where they start
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: (body.info.code || "") !== ""
+            radius: Theme.radius
+            color: Theme.codeBackground
+            clip: true
+            Row {
+                x: Styles.Primitives.spacing.sp075
+                y: Styles.Primitives.spacing.sp050
+                spacing: Styles.Primitives.spacing.sp100
+                Text {
+                    text: {
+                        const n = (body.info.code || "").split("\n").length
+                        const first = body.info.firstLine || 1
+                        let numbers = []
+                        for (let i = 0; i < n; ++i)
+                            numbers.push(first + i)
+                        return numbers.join("\n")
+                    }
+                    color: Theme.textMuted
+                    horizontalAlignment: Text.AlignRight
+                    font.family: Theme.monoFont.family
+                    font.pixelSize: 12
+                    lineHeight: 1.0
+                }
+                Text {
+                    textFormat: Text.RichText
+                    renderType: Text.CurveRendering
+                    text: (body.info.code || "") === "" ? "" : Links.highlight(body.info.code, body.info.language || "", Theme.renderColors)
+                    color: Theme.text
+                    font.family: Theme.monoFont.family
+                    font.pixelSize: 12
+                    Redacted { cover: Theme.codeBackground }
+                }
+            }
+        }
         // An issue's fields, as many as fit
         GridLayout {
             Layout.fillWidth: true
@@ -167,7 +204,10 @@ Item {
                 }
             }
         }
-        Item { Layout.fillHeight: true }
+        Item {
+            visible: (body.info.code || "") === ""
+            Layout.fillHeight: true
+        }
     }
 
     // Changing the address

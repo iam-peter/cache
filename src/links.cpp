@@ -2,11 +2,15 @@
 
 #include "confluenceresolver.h"
 #include "figmaresolver.h"
+#include "gitlabresolver.h"
 #include "jiraresolver.h"
+#include "highlight.h"
 #include "keychain.h"
 #include "markdown.h"
 #include "pageresolver.h"
 #include "wikipediaresolver.h"
+
+#include <algorithm>
 
 #include <QDir>
 #include <QFile>
@@ -37,7 +41,10 @@ QVariantMap LinkInfo::toVariant() const
             {QStringLiteral("fields"), rows},
             {QStringLiteral("image"), image},
             {QStringLiteral("site"), site},
-            {QStringLiteral("kind"), kind}};
+            {QStringLiteral("kind"), kind},
+            {QStringLiteral("code"), code},
+            {QStringLiteral("language"), language},
+            {QStringLiteral("firstLine"), firstLine}};
 }
 
 LinkInfo LinkInfo::fromVariant(const QVariantMap &map)
@@ -50,6 +57,9 @@ LinkInfo LinkInfo::fromVariant(const QVariantMap &map)
     info.image = map.value(QStringLiteral("image")).toString();
     info.site = map.value(QStringLiteral("site")).toString();
     info.kind = map.value(QStringLiteral("kind")).toString();
+    info.code = map.value(QStringLiteral("code")).toString();
+    info.language = map.value(QStringLiteral("language")).toString();
+    info.firstLine = map.value(QStringLiteral("firstLine"), 1).toInt();
     for (const QVariant &row : map.value(QStringLiteral("fields")).toList()) {
         const QVariantMap r = row.toMap();
         info.fields.append({r.value(QStringLiteral("name")).toString(), r.value(QStringLiteral("value")).toString()});
@@ -345,6 +355,7 @@ Links::Links(QObject *parent)
     addResolver(std::make_unique<JiraResolver>(this));
     addResolver(std::make_unique<ConfluenceResolver>(this));
     addResolver(std::make_unique<FigmaResolver>(this));
+    addResolver(std::make_unique<GitLabResolver>(this));
     addOpenResolver(std::make_unique<WikipediaResolver>(this));
     m_page = std::make_unique<PageResolver>(this);
 }
@@ -386,6 +397,7 @@ Links::Links(Detached, QObject *parent)
     addResolver(std::make_unique<JiraResolver>(this));
     addResolver(std::make_unique<ConfluenceResolver>(this));
     addResolver(std::make_unique<FigmaResolver>(this));
+    addResolver(std::make_unique<GitLabResolver>(this));
     addOpenResolver(std::make_unique<WikipediaResolver>(this));
     m_page = std::make_unique<PageResolver>(this);
 }
@@ -403,7 +415,8 @@ QVariantList Links::providers() const
         if (resolver->signsIn())
             list << QVariantMap{{QStringLiteral("id"), resolver->id()},
                                 {QStringLiteral("name"), resolver->name()},
-                                {QStringLiteral("fixedHost"), resolver->fixedHost()}};
+                                {QStringLiteral("fixedHost"), resolver->fixedHost()},
+                                {QStringLiteral("needsUser"), resolver->needsUser()}};
     }
     return list;
 }
@@ -616,6 +629,14 @@ bool Links::secure(const QUrl &url)
 void Links::request(const QString &site, const Account &account, const QByteArray &token, const QString &path,
                     const JsonReply &reply)
 {
+    requestBytes(site, account, token, path, [reply](int status, const QByteArray &body, const QString &error) {
+        reply(status, QJsonDocument::fromJson(body).object(), error);
+    });
+}
+
+void Links::requestBytes(const QString &site, const Account &account, const QByteArray &token, const QString &path,
+                         const BytesReply &reply)
+{
     QNetworkRequest request(QUrl(QStringLiteral("%1://%2%3")
                                      .arg(loopback(site) ? QStringLiteral("http") : QStringLiteral("https"), site, path)));
     request.setRawHeader("Accept", "application/json");
@@ -629,16 +650,25 @@ void Links::request(const QString &site, const Account &account, const QByteArra
     QObject::connect(r, &QNetworkReply::finished, r, [r, reply] {
         r->deleteLater();
         const int status = r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        const QJsonObject json = QJsonDocument::fromJson(r->readAll()).object();
-        // Jira's errorMessages, Confluence's message, or the network's
+        const QByteArray body = r->readAll();
+        const QJsonObject json = QJsonDocument::fromJson(body).object();
+        // Jira's errorMessages, Confluence's and GitLab's message, or the network's
         QString error = r->errorString();
         const QJsonArray messages = json.value(QLatin1String("errorMessages")).toArray();
         if (!messages.isEmpty())
             error = messages.first().toString();
         else if (json.value(QLatin1String("message")).isString())
             error = json.value(QLatin1String("message")).toString();
-        reply(status, json, error);
+        else if (json.value(QLatin1String("error")).isString())
+            error = json.value(QLatin1String("error")).toString();
+        reply(status, body, error);
     });
+}
+
+QString Links::highlight(const QString &code, const QString &language, const QVariantMap &colors) const
+{
+    return QStringLiteral("<pre style=\"margin:0; white-space:pre;\">")
+           + Highlight::toHtml(code, Highlight::language(language, code), colors) + QStringLiteral("</pre>");
 }
 
 void Links::discover(const QString &host)
@@ -711,6 +741,27 @@ void Links::search(const QString &query)
                 emit self->found(query, source, results);
         });
     }
+}
+
+void Links::refreshReviews()
+{
+    auto *gitlab = static_cast<GitLabResolver *>(resolver(QStringLiteral("gitlab")));
+    const bool any = std::any_of(m_accounts->all().cbegin(), m_accounts->all().cend(),
+                                 [](const Account &a) { return a.provider == QLatin1String("gitlab"); });
+    if (!gitlab || !any) {
+        if (!m_reviews.isEmpty()) {
+            m_reviews.clear();
+            emit reviewsChanged();
+        }
+        return;
+    }
+    QPointer<Links> self(this);
+    gitlab->reviews([self](const QVariantList &results) {
+        if (!self || self->m_reviews == results)
+            return;
+        self->m_reviews = results;
+        emit self->reviewsChanged();
+    });
 }
 
 QStringList Links::atlassianSites() const

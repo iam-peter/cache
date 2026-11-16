@@ -37,7 +37,7 @@ Popup {
         const list = []
         for (const c of commands) {
             if ((c.enabled === undefined || c.enabled) && fits(c.name, ws))
-                list.push({ section: qsTr("Commands"), title: c.name, keys: c.keys || "", run: c.run })
+                list.push({ section: qsTr("Commands"), title: c.name, keys: c.keys || "", run: c.run, query: c.query })
         }
         if (ws.length > 0) {
             for (const n of Search.suggestNotes(query, 6))
@@ -57,8 +57,8 @@ Popup {
                 }
             }
         }
-        const names = { jira: "Jira", confluence: "Confluence", figma: "Figma" }
-        for (const source of ["jira", "confluence", "figma"]) {
+        const names = { jira: "Jira", confluence: "Confluence", gitlab: "GitLab", figma: "Figma" }
+        for (const source of ["jira", "confluence", "gitlab", "figma"]) {
             for (const r of (remote[source] || []))
                 list.push({ section: names[source], title: r.title, detail: r.detail, status: r.status || "",
                             tone: r.tone || "", url: r.url })
@@ -69,6 +69,11 @@ Popup {
     function activate(entry, browser) {
         if (!entry)
             return
+        if (entry.query) {
+            // A search to show here: the palette stays
+            field.text = entry.query
+            return
+        }
         close()
         if (entry.run) {
             entry.run()
@@ -136,7 +141,7 @@ Popup {
         TextField {
             id: field
             Layout.fillWidth: true
-            placeholderText: qsTr("A command, a note, a section, a project, or what to find in Jira, Confluence, Figma")
+            placeholderText: qsTr("A command, a note, a section, a project, or what to find in Jira, Confluence, GitLab, Figma")
             onTextChanged: {
                 palette.query = text
                 palette.remote = ({})
@@ -195,9 +200,7 @@ Popup {
                     }
                     Rectangle {
                         visible: row.modelData.status !== undefined && row.modelData.status !== ""
-                        readonly property color tone: row.modelData.tone === "done" ? Theme.s.success_default
-                                                    : row.modelData.tone === "progress" ? Theme.s.info_default
-                                                    : Theme.textMuted
+                        readonly property color tone: Theme.toneColor(row.modelData.tone)
                         implicitWidth: status.implicitWidth + 2 * Styles.Primitives.spacing.sp075
                         implicitHeight: status.implicitHeight + 4
                         radius: Theme.radius
@@ -233,7 +236,7 @@ Popup {
             Layout.fillWidth: true
             visible: palette.query.trim().length >= 3 && Object.keys(palette.remote).length === 0
                      && Links.accounts.list.length > 0
-            text: qsTr("Asking Jira, Confluence and Figma…")
+            text: qsTr("Asking Jira, Confluence, GitLab and Figma…")
             color: Theme.textMuted
             font.pixelSize: Styles.Primitives.fontSize.small
             leftPadding: Styles.Primitives.spacing.sp075

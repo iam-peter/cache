@@ -20,6 +20,7 @@ public:
 
     QString id() const override { return QStringLiteral("jira"); }
     QString name() const override { return QStringLiteral("Atlassian"); }
+    bool needsUser() const override { return true; }
     bool handles(const QUrl &url) const override;
     void resolve(const QUrl &url, const Done &done) override;
     void signIn(const Account &account, const QByteArray &token, const SignedIn &done) override;

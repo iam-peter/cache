@@ -196,7 +196,7 @@ Dialog {
                     wrapMode: Text.Wrap
                     color: Theme.textMuted
                     font.pixelSize: Styles.Primitives.fontSize.small
-                    text: qsTr("Links to Jira issues, Confluence pages and Figma designs show their title, an issue's summary and status, and their details and pictures while the pointer is on them. The token is kept in your system's keychain and is only ever sent to the sites it is for.")
+                    text: qsTr("Links to Jira issues, Confluence pages, GitLab merge requests and pipelines, and Figma designs show their title, status and details while the pointer is on them. The token is kept in your system's keychain and is only ever sent to the sites it is for.")
                 }
                 Label {
                     Layout.fillWidth: true
@@ -308,6 +308,9 @@ Dialog {
                         // Figma's accounts are for figma.com: no host, no email
                         readonly property bool fixed: (Links.providers[currentIndex] || {}).fixedHost !== undefined
                                                       && Links.providers[currentIndex].fixedHost !== ""
+                        // Atlassian Cloud's email; GitLab and Figma need only the token
+                        readonly property bool needsUser: (Links.providers[currentIndex] || {}).needsUser === true
+                        readonly property bool gitlab: currentValue === "gitlab"
                         Layout.fillWidth: true
                         textRole: "name"
                         valueRole: "id"
@@ -323,7 +326,8 @@ Dialog {
                         visible: !providerBox.fixed
                         Layout.fillWidth: true
                         Layout.preferredWidth: 100 // fills the row; its text doesn't widen the dialog
-                        placeholderText: qsTr("example.atlassian.net, or an issue's address")
+                        placeholderText: providerBox.gitlab ? qsTr("gitlab.com, or your GitLab's address")
+                                                            : qsTr("example.atlassian.net, or an issue's address")
                     }
 
                     Item {
@@ -341,12 +345,12 @@ Dialog {
                     }
 
                     Label {
-                        visible: !providerBox.fixed
+                        visible: providerBox.needsUser
                         text: qsTr("Email")
                     }
                     TextField {
                         id: userField
-                        visible: !providerBox.fixed
+                        visible: providerBox.needsUser
                         Layout.fillWidth: true
                         placeholderText: qsTr("Atlassian Cloud only; empty for a personal access token")
                     }
@@ -372,6 +376,8 @@ Dialog {
                         linkColor: Theme.s.text_link
                         text: providerBox.fixed
                               ? qsTr("Figma: a personal access token, made in Figma under Settings, Security, with read access to file content.")
+                              : providerBox.gitlab
+                              ? qsTr("GitLab: a personal access token with the read_api scope, made under your avatar, Edit profile, Access tokens.")
                               : qsTr("Atlassian Cloud (Jira and Confluence): your email and an <a href=\"https://id.atlassian.com/manage-profile/security/api-tokens\">API token</a>. Data Center: a personal access token from your profile, without an email.")
                         onLinkActivated: (link) => Qt.openUrlExternally(link)
                         HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
@@ -390,7 +396,7 @@ Dialog {
                                 accounts.busy = true
                                 accounts.message = ""
                                 Links.addAccount(providerBox.currentValue, providerBox.fixed ? "" : hostField.text,
-                                                 providerBox.fixed ? "" : userField.text, tokenField.text,
+                                                 providerBox.needsUser ? userField.text : "", tokenField.text,
                                                  everySiteBox.visible && everySiteBox.checked)
                             }
                         }

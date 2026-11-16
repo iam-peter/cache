@@ -61,6 +61,11 @@ QtObject {
     // Note colours are the theme's status colours over the card surface
     readonly property var noteKeys: ["", "yellow", "green", "blue", "pink", "purple"]
 
+    // A status's colour by its tone: to do, in progress, done, failed
+    function toneColor(tone) {
+        return tone === "done" ? s.success_default : tone === "progress" ? s.info_default
+             : tone === "failed" ? s.danger_default : textMuted
+    }
     function swatch(key) {
         switch (key) {
         case "yellow": return s.warning_default
@@ -106,6 +111,7 @@ QtObject {
         toneTodo: s.text_muted,
         toneProgress: s.info_default,
         toneDone: s.success_default,
+        toneFailed: s.danger_default,
     })
     readonly property color codeBackground: s.background_secondary
 }

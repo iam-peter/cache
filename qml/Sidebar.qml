@@ -200,6 +200,15 @@ Pane {
             id: taskList
             Layout.fillWidth: true
             Layout.fillHeight: true
+            // What waits for review on GitLab: asked when the tab shows, and
+            // every quarter hour while it does
+            Timer {
+                running: taskList.visible
+                repeat: true
+                triggeredOnStart: true
+                interval: 15 * 60 * 1000
+                onTriggered: Links.refreshReviews()
+            }
             Layout.topMargin: Styles.Primitives.spacing.sp050
             visible: !Search.active && tabs.currentIndex === 1
             clip: true
@@ -212,9 +221,16 @@ Pane {
                     return []
                 Search.revision
                 const all = Search.tasks()
-                if (all.length === 0)
+                const reviews = Links.reviews
+                if (all.length === 0 && reviews.length === 0)
                     return []
                 const rows = []
+                // GitLab's merge requests waiting for the user's review, first
+                if (reviews.length > 0) {
+                    rows.push({ section: "review", count: reviews.length })
+                    for (const r of reviews)
+                        rows.push(Object.assign({ review: true }, r))
+                }
                 const addGroup = (tasks) => {
                     let project = ""
                     for (const task of tasks) {
@@ -239,7 +255,8 @@ Pane {
                 id: entry
                 required property var modelData
                 width: ListView.view.width
-                sourceComponent: modelData.section ? taskSection : modelData.header ? taskHeader : taskRow
+                sourceComponent: modelData.section ? taskSection : modelData.header ? taskHeader
+                               : modelData.review ? reviewRow : taskRow
                 // "Open" and "Done (12)", which folds
                 Component {
                     id: taskSection
@@ -260,7 +277,8 @@ Pane {
                             Label {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: entry.modelData.section === "done" ? qsTr("Done (%1)").arg(entry.modelData.count)
-                                                                         : qsTr("Open (%1)").arg(entry.modelData.count)
+                                    : entry.modelData.section === "review" ? qsTr("To review (%1)").arg(entry.modelData.count)
+                                                                           : qsTr("Open (%1)").arg(entry.modelData.count)
                                 font.weight: Styles.Primitives.fontWeight.semiBold
                                 color: Theme.text
                             }
@@ -277,6 +295,49 @@ Pane {
                         font.pixelSize: Styles.Primitives.fontSize.small
                         font.weight: Styles.Primitives.fontWeight.semiBold
                         color: Theme.textMuted
+                    }
+                }
+                // A merge request to review: opens in the browser; + puts
+                // it on the canvas
+                Component {
+                    id: reviewRow
+                    ItemDelegate {
+                        leftPadding: Styles.Primitives.spacing.sp100
+                        onClicked: Qt.openUrlExternally(entry.modelData.url)
+                        contentItem: RowLayout {
+                            spacing: Styles.Primitives.spacing.sp075
+                            Icon {
+                                name: "git-pull-request"
+                                size: 14
+                                color: Theme.toneColor(entry.modelData.tone)
+                            }
+                            Column {
+                                Layout.fillWidth: true
+                                Label {
+                                    width: parent.width
+                                    text: entry.modelData.title
+                                    wrapMode: Text.Wrap
+                                    maximumLineCount: 2
+                                    elide: Text.ElideRight
+                                }
+                                Label {
+                                    width: parent.width
+                                    text: entry.modelData.detail
+                                    elide: Text.ElideRight
+                                    font.pixelSize: Styles.Primitives.fontSize.small
+                                    color: Theme.textMuted
+                                }
+                            }
+                            IconButton {
+                                iconName: "plus"
+                                Layout.preferredWidth: 22
+                                Layout.preferredHeight: 22
+                                ToolTip.visible: hovered
+                                ToolTip.delay: 500
+                                ToolTip.text: qsTr("Put it on the canvas")
+                                onClicked: sidebar.canvas.addLinkCard(entry.modelData.url)
+                            }
+                        }
                     }
                 }
                 Component {
