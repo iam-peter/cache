@@ -53,6 +53,8 @@ Item {
     readonly property real minH: isNote ? 70 : isLink ? 60 : isBoard ? 100 : 20
     readonly property color fillColor: Theme.noteColor(itemColor)
     readonly property bool chrome: !canvas.exporting
+    // The four handles to drag a connector out of
+    readonly property bool handles: chrome && soleSelection && connectable && !editing && canvas.tool === "select"
 
     x: posX
     y: posY
@@ -269,7 +271,9 @@ Item {
         z: 11 // over the side's resize handle
         scale: root.inv
         x: root.width + 4 * root.inv - width / 2
-        y: root.height / 2 - height / 2
+        // Below the right connection handle while that shows, which would
+        // cover it; else in the middle of the side, where the branch leaves
+        y: root.height / 2 - height / 2 + (root.handles ? 24 * root.inv : 0)
         width: Math.max(20, foldLabel.implicitWidth + 10)
         height: 20
         radius: 10
@@ -327,8 +331,7 @@ Item {
 
     // --- Connection handles: drag one out to connect ------------------------
     Repeater {
-        model: root.chrome && root.soleSelection && root.connectable && !root.editing
-               && root.canvas.tool === "select" ? 4 : 0
+        model: root.handles ? 4 : 0
         delegate: Rectangle {
             required property int index
             readonly property real gap: 14 * root.inv
