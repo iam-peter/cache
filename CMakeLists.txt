@@ -54,6 +54,7 @@ qt_add_qml_module(cache
         qml/CanvasCard.qml
         qml/NoteBody.qml
         qml/VideoBlock.qml
+        qml/AudioBlock.qml
         qml/CodeBlock.qml
         qml/EmbedBlock.qml
         qml/FileBlock.qml

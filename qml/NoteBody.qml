@@ -363,6 +363,7 @@ Item {
                     required property var modelData
                     width: content.width
                     sourceComponent: modelData.kind === "video" ? videoSegment
+                                   : modelData.kind === "audio" ? audioSegment
                                    : modelData.kind === "code" ? codeSegment
                                    : modelData.kind === "embed" ? embedSegment
                                    : modelData.kind === "file" ? fileSegment
@@ -408,6 +409,12 @@ Item {
                                 id: linkHover
                                 cursorShape: rich.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor
                             }
+                        }
+                    }
+                    Component {
+                        id: audioSegment
+                        AudioBlock {
+                            segment: piece.modelData
                         }
                     }
                     Component {

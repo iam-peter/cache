@@ -40,6 +40,8 @@ namespace {
 
 const QStringList kImageExt = {"png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "tif", "tiff"};
 const QStringList kVideoExt = {"mp4", "webm", "mkv", "mov", "avi", "m4v", "ogv"};
+// Attached like any file, but played in the note
+const QStringList kAudioExt = {"mp3", "wav", "ogg", "oga", "opus", "m4a", "aac", "flac"};
 const QStringList kTextExt = {"md", "markdown", "txt", "text"};
 constexpr int kUndoLimit = 200;
 // A line holding only ![name](target): embedded media
@@ -1679,7 +1681,8 @@ QVariantList BoardModel::renderSegments(const QString &markdown, double maxWidth
         case Piece::File: {
             const QFileInfo fi(piece.target);
             segments.append(QVariantMap{
-                {QStringLiteral("kind"), QStringLiteral("file")},
+                {QStringLiteral("kind"), kAudioExt.contains(fi.suffix().toLower()) ? QStringLiteral("audio")
+                                                                                    : QStringLiteral("file")},
                 {QStringLiteral("name"), piece.name},
                 {QStringLiteral("url"), QUrl::fromLocalFile(piece.target)},
                 {QStringLiteral("folder"), QUrl::fromLocalFile(fi.absolutePath())},
