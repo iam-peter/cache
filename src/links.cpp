@@ -147,12 +147,17 @@ std::optional<Account> Accounts::find(const QString &provider, const QString &ho
 
 void Accounts::setTeams(const QString &provider, const QString &host, const QString &teams)
 {
-    // An id alone, or the team's address: figma.com/files/team/123/Name
-    static const QRegularExpression id(QStringLiteral(R"((?:team/)?(\d{6,}))"));
+    // The team's address, figma.com/files/<organisation>/team/<team>/…: the
+    // number after team/ (the others are the organisation's and the user's).
+    // Or ids alone.
+    static const QRegularExpression inAddress(QStringLiteral(R"(team/(\d{6,}))"));
+    static const QRegularExpression alone(QStringLiteral(R"((?:^|[\s,;])(\d{6,})(?=$|[\s,;]))"));
     QStringList ids;
-    for (auto it = id.globalMatch(teams); it.hasNext();) {
-        const QString team = it.next().captured(1);
-        if (!ids.contains(team))
+    for (const QString &entry : teams.split(QRegularExpression(QStringLiteral("[\\s,;]+")), Qt::SkipEmptyParts)) {
+        const QRegularExpressionMatch inside = inAddress.match(entry);
+        const QRegularExpressionMatch bare = alone.match(entry);
+        const QString team = inside.hasMatch() ? inside.captured(1) : bare.hasMatch() ? bare.captured(1) : QString();
+        if (!team.isEmpty() && !ids.contains(team))
             ids << team;
     }
     for (Account &a : m_accounts) {

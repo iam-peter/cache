@@ -61,13 +61,13 @@ Popup {
         for (const source of ["jira", "confluence", "gitlab", "github", "figma"]) {
             for (const r of (remote[source] || []))
                 list.push({ section: names[source], title: r.title, detail: r.detail, status: r.status || "",
-                            tone: r.tone || "", url: r.url })
+                            tone: r.tone || "", url: r.url, error: r.error === true })
         }
         entries = list
         results.currentIndex = list.length > 0 ? 0 : -1
     }
     function activate(entry, browser) {
-        if (!entry)
+        if (!entry || entry.error)
             return
         if (entry.query) {
             // A search to show here: the palette stays
@@ -196,6 +196,9 @@ Popup {
                     Label {
                         Layout.fillWidth: true
                         text: row.modelData.title
+                        // Why a service found nothing: to read, not to pick
+                        color: row.modelData.error ? Theme.s.danger_default : Theme.text
+                        wrapMode: row.modelData.error ? Text.Wrap : Text.NoWrap
                         elide: Text.ElideRight
                     }
                     Rectangle {

@@ -230,6 +230,7 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
         return; // already being read
     struct Listing {
         QVariantList files;
+        QStringList errors;
         int pending = 1;
     };
     auto listing = std::make_shared<Listing>();
@@ -238,6 +239,7 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
         if (--listing->pending > 0)
             return;
         m_files = listing->files;
+        m_listErrors = listing->errors;
         m_filesRead = QDateTime::currentDateTimeUtc();
         m_filesOf = teams;
         const auto waiting = std::exchange(m_listing, {});
@@ -246,13 +248,22 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
     };
     m_links->accounts()->token(account, [this, teams, listing, settle](const QByteArray &token) {
         if (token.isEmpty()) {
+            listing->errors << QObject::tr("the keychain has no Figma token: sign in again in Settings, Accounts");
             settle();
             return;
         }
         for (const QString &team : teams) {
             ++listing->pending;
             get(token, QStringLiteral("/v1/teams/%1/projects").arg(team),
-                [this, token, listing, settle](int status, const QJsonObject &json, const QString &) {
+                [this, token, team, listing, settle](int status, const QJsonObject &json, const QString &error) {
+                    if (status != 200) {
+                        // Said in the palette: a wrong id, or a token
+                        // without the projects:read scope
+                        listing->errors << (status == 403
+                            ? QObject::tr("team %1: %2 (a token needs the projects:read scope to list a team's files)")
+                                  .arg(team, error)
+                            : QObject::tr("team %1: %2").arg(team, error));
+                    }
                     if (status == 200) {
                         for (const QJsonValue &value : json.value(QLatin1String("projects")).toArray()) {
                             const QJsonObject project = value.toObject();
@@ -307,6 +318,12 @@ void FigmaResolver::search(const QString &query, const Results &done)
                                                  QString::fromUtf8(QUrl::toPercentEncoding(QString(name).replace(QLatin1Char(' '), QLatin1Char('-')))))}};
             if (results.size() >= 8)
                 break;
+        }
+        // Nothing found, and a team couldn't be listed: why
+        if (results.isEmpty()) {
+            for (const QString &error : std::as_const(m_listErrors))
+                results << QVariantMap{{QStringLiteral("title"), QObject::tr("Figma couldn't list %1").arg(error)},
+                                       {QStringLiteral("error"), true}};
         }
         done(results);
     };

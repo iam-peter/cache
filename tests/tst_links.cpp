@@ -840,6 +840,15 @@ private slots:
                                    QStringLiteral("https://www.figma.com/files/team/1234567/Team-Name"));
         QCOMPARE(links.accounts()->find(QStringLiteral("figma"), QStringLiteral("figma.com"))->teams,
                  QStringList{QStringLiteral("1234567")});
+        // A team's address as Figma gives it: the organisation's and the
+        // user's numbers aren't teams
+        links.accounts()->setTeams(QStringLiteral("figma"), QStringLiteral("figma.com"),
+                                   QStringLiteral("https://www.figma.com/files/1068536443537812145/team/1497176694688331779"
+                                                  "?fuid=1019188949571396138, 7654321"));
+        QCOMPARE(links.accounts()->find(QStringLiteral("figma"), QStringLiteral("figma.com"))->teams,
+                 QStringList({QStringLiteral("1497176694688331779"), QStringLiteral("7654321")}));
+        links.accounts()->setTeams(QStringLiteral("figma"), QStringLiteral("figma.com"),
+                                   QStringLiteral("https://www.figma.com/files/team/1234567/Team-Name"));
         QCOMPARE(links.atlassianSites(), QStringList{server.host()});
 
         QHash<QString, QVariantList> found;
@@ -871,6 +880,14 @@ private slots:
         QCOMPARE(found.value("figma").size(), 1);
         QCOMPARE(found.value("figma").first().toMap().value("url").toString(),
                  QStringLiteral("https://www.figma.com/design/AbCdEf123456/Design-System"));
+        // A team Figma won't list: why, where the files would be
+        links.accounts()->setTeams(QStringLiteral("figma"), QStringLiteral("figma.com"), QStringLiteral("9999999"));
+        found.clear();
+        links.search(QStringLiteral("design"));
+        QTRY_VERIFY(found.contains("figma"));
+        QCOMPARE(found.value("figma").size(), 1);
+        QVERIFY(found.value("figma").first().toMap().value("error").toBool());
+        QVERIFY(found.value("figma").first().toMap().value("title").toString().contains(QStringLiteral("9999999")));
         // An issue key finds the issue itself
         found.clear();
         links.search(QStringLiteral("ids5-7"));

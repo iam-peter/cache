@@ -50,5 +50,6 @@ private:
     QVariantList m_files; // [{key, name, project, thumbnail}] of the teams
     QDateTime m_filesRead;
     QStringList m_filesOf; // the teams they are of
+    QStringList m_listErrors; // what Figma said when a team couldn't be listed
     QList<std::function<void()>> m_listing; // waiting for the list
 };
