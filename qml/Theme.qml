@@ -98,6 +98,10 @@ QtObject {
         comment: s.syntax_comment,
         preprocessor: s.syntax_preprocessor,
         function: s.syntax_function,
+        // A linked issue's status: to do, in progress, done
+        toneTodo: s.text_muted,
+        toneProgress: s.info_default,
+        toneDone: s.success_default,
     })
     readonly property color codeBackground: s.background_secondary
 }

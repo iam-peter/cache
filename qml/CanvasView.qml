@@ -717,6 +717,21 @@ Item {
         previewTimer.stop()
         linkPreview.close()
     }
+    // A web link that Jira or the like knows: its details, a moment after
+    // the pointer came onto it
+    function showLinkCard(url, scenePos) {
+        if (linkCard.url === url && (linkCard.opened || linkCardTimer.running))
+            return
+        linkCard.url = url
+        linkCard.anchor = view.mapFromItem(null, scenePos.x, scenePos.y)
+        linkCard.close()
+        linkCardTimer.restart()
+    }
+    function hideLinkCard() {
+        linkCardTimer.stop()
+        linkCard.close()
+        linkCard.url = ""
+    }
     // A medium named in a note's text, shown while the pointer is on its name
     function showMediaPreview(url, scenePos) {
         mediaPreview.source = url
@@ -982,6 +997,7 @@ Item {
         onPressed: (mouse) => {
             view.forceActiveFocus()
             view.hideLinkPreview()
+            view.hideLinkCard()
             viewAnim.stop()
             if (mouse.button === Qt.RightButton)
                 return
@@ -1128,6 +1144,7 @@ Item {
         onWheel: (wheel) => {
             view.lastPointerWorld = view.toWorld(wheel.x, wheel.y)
             view.hideLinkPreview()
+            view.hideLinkCard()
             const ctrl = wheel.modifiers & Qt.ControlModifier
             const shift = wheel.modifiers & Qt.ShiftModifier
             const touchpad = wheel.pixelDelta.x !== 0 || wheel.pixelDelta.y !== 0
@@ -1551,6 +1568,84 @@ Item {
                 required property var modelData
                 text: modelData.current ? modelData.title : modelData.projectName + " / " + modelData.title
                 onTriggered: view.openNote(modelData.projectPath, modelData.noteId)
+            }
+        }
+    }
+
+    Timer {
+        id: linkCardTimer
+        interval: 350
+        onTriggered: {
+            if (Object.keys(linkCard.info).length === 0)
+                return // nothing known (yet), or no account for its host
+            linkCard.x = Math.max(8, Math.min(linkCard.anchor.x + 12, view.width - linkCard.width - 8))
+            linkCard.y = Math.max(8, Math.min(linkCard.anchor.y + 18, view.height - linkCard.implicitHeight - 8))
+            linkCard.open()
+        }
+    }
+    // A linked issue: its key and status, summary and fields
+    Popup {
+        id: linkCard
+        property string url
+        property point anchor
+        readonly property var info: url === "" ? ({}) : (Links.revision, Links.info(url))
+        readonly property color tone: info.tone === "done" ? Theme.s.success_default
+                                    : info.tone === "progress" ? Theme.s.info_default : Theme.textMuted
+        width: 360
+        padding: Styles.Primitives.spacing.sp150
+        closePolicy: Popup.CloseOnPressOutside | Popup.CloseOnEscape
+        focus: false
+
+        contentItem: ColumnLayout {
+            spacing: Styles.Primitives.spacing.sp075
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Styles.Primitives.spacing.sp100
+                Label {
+                    text: linkCard.info.title || ""
+                    font.weight: Styles.Primitives.fontWeight.semiBold
+                }
+                Item { Layout.fillWidth: true }
+                Rectangle {
+                    visible: (linkCard.info.status || "") !== ""
+                    implicitWidth: statusLabel.implicitWidth + 2 * Styles.Primitives.spacing.sp075
+                    implicitHeight: statusLabel.implicitHeight + 4
+                    radius: Theme.radius
+                    color: Qt.alpha(linkCard.tone, 0.16)
+                    Label {
+                        id: statusLabel
+                        anchors.centerIn: parent
+                        text: (linkCard.info.status || "").toUpperCase()
+                        color: linkCard.tone
+                        font.pixelSize: Styles.Primitives.fontSize.small
+                        font.weight: Styles.Primitives.fontWeight.semiBold
+                    }
+                }
+            }
+            Label {
+                Layout.fillWidth: true
+                visible: text !== ""
+                text: linkCard.info.summary || ""
+                wrapMode: Text.Wrap
+            }
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: Styles.Primitives.spacing.sp050
+                columns: 2
+                columnSpacing: Styles.Primitives.spacing.sp150
+                rowSpacing: Styles.Primitives.spacing.sp025
+                Repeater {
+                    model: (linkCard.info.fields || []).length * 2
+                    delegate: Label {
+                        required property int index
+                        readonly property var field: linkCard.info.fields[Math.floor(index / 2)]
+                        Layout.fillWidth: index % 2 === 1
+                        text: index % 2 === 0 ? field.name : field.value
+                        color: index % 2 === 0 ? Theme.textMuted : Theme.text
+                        font.pixelSize: Styles.Primitives.fontSize.small
+                        elide: Text.ElideRight
+                    }
+                }
             }
         }
     }

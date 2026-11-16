@@ -19,6 +19,7 @@
 class QImage;
 class QJsonObject;
 class QMimeData;
+class QTextDocument;
 class QNetworkAccessManager;
 
 // One thing on the canvas.
@@ -335,6 +336,9 @@ public:
                                      const std::function<QString(const QString &, const Media &)> &replace);
     Q_INVOKABLE QVariantList renderSegments(const QString &markdown, double maxWidth, int pixelSize,
                                             const QVariantMap &colors, const QStringList &highlight = {}) const;
+    // What another service knows about a web link (Links::info): a rendered
+    // note shows its summary and status after it
+    void setLinkInfo(std::function<QVariantMap(const QString &url)> lookup) { m_linkInfo = std::move(lookup); }
     // Shows or hides the preview of the [[link]] on `line` of a note
     Q_INVOKABLE void setEmbed(int row, int line, bool embedded);
     Q_INVOKABLE QString toLocalPath(const QString &pathOrUrl) const;
@@ -405,6 +409,7 @@ private:
     QString renderHtml(const QString &markdown, double maxWidth, int pixelSize, const QVariantMap &colors,
                        bool forClipboard, const QStringList &highlight = {}, int firstTask = 0) const;
     QString dataUri(const QString &path) const;
+    void decorateLinks(QTextDocument &doc, const QVariantMap &colors, int pixelSize) const;
     QString clipboardHtml(const QString &markdown) const;
     BoardItem makeNote(double x, double y, const QString &text) const;
     QStringList insertState(const BoardState &state, double dx, double dy);
@@ -452,6 +457,7 @@ private:
     void saveInBackground();
     mutable QHash<QString, QSizeF> m_imageSizes;
     QNetworkAccessManager *m_network = nullptr;
+    std::function<QVariantMap(const QString &)> m_linkInfo;
 
     // Derived from items and links, rebuilt by updateDerived()
     QSet<QString> m_hidden;

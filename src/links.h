@@ -1,0 +1,187 @@
+#pragma once
+
+#include <QDateTime>
+#include <QHash>
+#include <QList>
+#include <QObject>
+#include <QPair>
+#include <QTimer>
+#include <QUrl>
+#include <QVariant>
+#include <QtQml/qqmlregistration.h>
+
+#include <functional>
+#include <memory>
+#include <optional>
+#include <vector>
+
+class QNetworkAccessManager;
+
+// What a resolver found out about a link: shown after it in a note, and in
+// the card over it
+struct LinkInfo
+{
+    QString title;   // short: an issue's key
+    QString summary; // a line about it: the issue's summary
+    QString status;  // "In Progress"
+    QString tone;    // the status as "todo", "progress" or "done"
+    QList<QPair<QString, QString>> fields; // the card's rows, in order
+
+    QVariantMap toVariant() const;
+    static LinkInfo fromVariant(const QVariantMap &map);
+};
+
+// An account on a host that a resolver reads from. Its token is in the
+// system's keychain, never in the settings.
+struct Account
+{
+    QString provider; // the resolver's id: "jira"
+    QString host;     // "example.atlassian.net", with ":port" if it has one
+    QString user;     // Jira Cloud: the email the token is of; empty for a bearer token
+};
+
+// The accounts, kept in the settings, and their tokens, read from the
+// keychain once and then held for the session
+class Accounts : public QObject
+{
+    Q_OBJECT
+    QML_ANONYMOUS
+
+    // [{provider, host, user}]
+    Q_PROPERTY(QVariantList list READ list NOTIFY changed)
+    // Whether tokens can be kept (Linux builds need libsecret)
+    Q_PROPERTY(bool keychain READ keychain CONSTANT)
+
+public:
+    // `persistent`: read from and saved to the settings (not in tests)
+    explicit Accounts(bool persistent, QObject *parent = nullptr);
+
+    QVariantList list() const;
+    bool keychain() const;
+
+    std::optional<Account> find(const QString &provider, const QString &host) const;
+    // The account's token, or empty when there is none. From the keychain
+    // the first time, in the background: unlocking it may ask the user.
+    void token(const Account &account, const std::function<void(const QByteArray &)> &done);
+    // The account, its token held for this session (tests; and once
+    // signed in, so the keychain needn't be asked again)
+    void remember(const Account &account, const QByteArray &token);
+    // Kept: the account in the settings, its token in the keychain
+    void save(const Account &account, const QByteArray &token,
+              const std::function<void(bool ok, const QString &error)> &done);
+    Q_INVOKABLE void remove(const QString &provider, const QString &host);
+
+    // "jira/example.atlassian.net": the token's key in the keychain
+    static QString keyOf(const Account &account);
+
+signals:
+    void changed();
+
+private:
+    void add(const Account &account);
+    void store() const;
+
+    const bool m_persistent;
+    QList<Account> m_accounts;
+    QHash<QString, QByteArray> m_tokens; // by keyOf
+    QHash<QString, QList<std::function<void(const QByteArray &)>>> m_waiting;
+};
+
+// Reads what a link points to, for the links it knows: Jira issues, say.
+// Each provider is one of these, given to Links in the order to ask them.
+class LinkResolver
+{
+public:
+    using Done = std::function<void(const std::optional<LinkInfo> &info, const QString &error)>;
+    using SignedIn = std::function<void(bool ok, const QString &message)>;
+
+    virtual ~LinkResolver() = default;
+    virtual QString id() const = 0;   // "jira", as accounts name it
+    virtual QString name() const = 0; // "Jira", as people do
+    virtual bool handles(const QUrl &url) const = 0;
+    virtual void resolve(const QUrl &url, const Done &done) = 0;
+    // Tries an account before it is kept: `message` says who it signed in
+    // as, or what went wrong
+    virtual void signIn(const Account &account, const QByteArray &token, const SignedIn &done) = 0;
+};
+
+// Links to what other services hold, read through their resolvers. What
+// they found is kept in the cache folder (not in the project, which may be
+// shared), shown at once and read again once it is a while old.
+class Links : public QObject
+{
+    Q_OBJECT
+    QML_NAMED_ELEMENT(Links)
+    QML_SINGLETON
+
+    // Goes up whenever something about a link came in: bindings that call
+    // info() ask again
+    Q_PROPERTY(int revision READ revision NOTIFY revisionChanged)
+    Q_PROPERTY(Accounts *accounts READ accounts CONSTANT)
+    // [{id, name}] of the resolvers that sign in
+    Q_PROPERTY(QVariantList providers READ providers CONSTANT)
+
+public:
+    explicit Links(QObject *parent = nullptr);
+    // Tests: nothing read from or kept in the settings or the cache folder
+    struct Detached {};
+    Links(Detached, QObject *parent = nullptr);
+    ~Links() override;
+
+    int revision() const { return m_revision; }
+    Accounts *accounts() const { return m_accounts; }
+    QVariantList providers() const;
+    QNetworkAccessManager *network();
+
+    // Asked before the resolvers there are
+    void addResolver(std::unique_ptr<LinkResolver> resolver);
+
+    // What is known about `url`: {title, summary, status, tone,
+    // fields: [{name, value}]}, or nothing. Asks its resolver in the
+    // background when nothing is known yet, or only something old.
+    Q_INVOKABLE QVariantMap info(const QString &url);
+    // Signs in, then keeps the account: accountAdded says how it went
+    Q_INVOKABLE void addAccount(const QString &provider, const QString &host, const QString &user,
+                                const QString &token);
+    // Asks bindings that call info() again (once the board can ask)
+    void touch();
+
+    // "example.atlassian.net" from what people paste: a whole address, or
+    // the host with or without a scheme
+    static QString hostOf(const QString &text);
+    // The host and port of `url`, as accounts name it
+    static QString authority(const QUrl &url);
+    // Only loopback hosts (tests, a local proxy) may be spoken to without TLS
+    static bool loopback(const QString &host);
+
+    static constexpr int kFreshSeconds = 15 * 60;
+    static constexpr int kRetrySeconds = 5 * 60;
+
+signals:
+    void revisionChanged();
+    void accountAdded(bool ok, const QString &message);
+
+private:
+    struct Entry
+    {
+        std::optional<LinkInfo> info;
+        QDateTime fetched;
+        QDateTime failed;
+        bool pending = false;
+    };
+
+    LinkResolver *resolverFor(const QUrl &url) const;
+    void load();
+    void save();
+    void bump();
+
+    const bool m_persistent;
+    Accounts *m_accounts;
+    QNetworkAccessManager *m_network = nullptr;
+    std::vector<std::unique_ptr<LinkResolver>> m_resolvers;
+    QHash<QString, Entry> m_entries; // by URL
+    bool m_loaded = false;
+    QTimer m_bump; // answers come in batches: one revision for each
+    QTimer m_save;
+    int m_revision = 0;
+};

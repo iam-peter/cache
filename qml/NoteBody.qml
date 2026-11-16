@@ -340,9 +340,11 @@ Item {
                 // Search matches are highlighted while a search is on. Not
                 // while editing: the editor covers it, and laying the text out
                 // again at every autosave made typing stutter
-                model: body.editing || body.card.itemText.trim().length === 0 ? [] : Board.renderSegments(
-                           body.card.itemText, Math.max(40, flick.width - 2), body.textSize, Theme.renderColors,
-                           Search.highlightWords)
+                // Again when Jira and the like tell more about a web link
+                model: body.editing || body.card.itemText.trim().length === 0 ? []
+                       : (body.card.itemText.indexOf("://") >= 0 ? Links.revision : 0,
+                          Board.renderSegments(body.card.itemText, Math.max(40, flick.width - 2), body.textSize,
+                                               Theme.renderColors, Search.highlightWords))
 
                 delegate: Loader {
                     id: piece
@@ -383,6 +385,11 @@ Item {
                                         linkHover.point.scenePosition)
                                 else
                                     body.card.canvas.hideMediaPreview()
+                                // A web link a service knows: its details
+                                if (link.startsWith("http"))
+                                    body.card.canvas.showLinkCard(link, linkHover.point.scenePosition)
+                                else
+                                    body.card.canvas.hideLinkCard()
                             }
                             HoverHandler {
                                 id: linkHover

@@ -14,6 +14,7 @@
 #include <QImage>
 #include <QSignalSpy>
 #include <QTest>
+#include <QTextDocumentFragment>
 
 // Serves /page (an HTML page with a title) and /pic.png on localhost
 class TinyServer : public QTcpServer
@@ -244,6 +245,40 @@ private slots:
         ids = board.dropData({{"text/plain", "http://127.0.0.1:1/gone.png"}}, 0, 0);
         QTRY_COMPARE(board.getById(ids.first()).value("text").toString().trimmed(),
                      QStringLiteral("[gone.png](http://127.0.0.1:1/gone.png)"));
+    }
+
+    void linksShowWhatTheirServiceKnows()
+    {
+        BoardModel board;
+        board.load(project("linkinfo"));
+        const QString issue = QStringLiteral("https://example.atlassian.net/browse/IDS5-7");
+        QStringList asked;
+        board.setLinkInfo([&](const QString &url) -> QVariantMap {
+            asked << url;
+            if (url != issue)
+                return {};
+            return {{"title", "IDS5-7"}, {"summary", "Fix the crash"}, {"status", "In Progress"}, {"tone", "progress"}};
+        });
+        const auto html = [&](const QString &md) {
+            QString all;
+            for (const QVariant &v : board.renderSegments(md, 400, 14, {}))
+                all += v.toMap().value("html").toString();
+            return QTextDocumentFragment::fromHtml(all).toPlainText();
+        };
+        // Named by its key: the summary and status after it (the label's
+        // no-break spaces read as spaces)
+        QCOMPARE(html(QStringLiteral("See [IDS5-7](%1).").arg(issue)),
+                 QStringLiteral("See IDS5-7 Fix the crash  IN PROGRESS ."));
+        // Named otherwise: its status only
+        QCOMPARE(html(QStringLiteral("[the crash](%1) **[IDS5-8](https://example.org/x)**").arg(issue)),
+                 QStringLiteral("the crash  IN PROGRESS  IDS5-8"));
+        QVERIFY(asked.contains(QStringLiteral("https://example.org/x")));
+        // Copies stay as written
+        asked.clear();
+        const int row = board.addNote(0, 0, QStringLiteral("[IDS5-7](%1)").arg(issue));
+        board.copyToClipboard(row);
+        QVERIFY(!QGuiApplication::clipboard()->mimeData()->html().contains(QStringLiteral("Fix the crash")));
+        QVERIFY(asked.isEmpty());
     }
 
     void ownNotesPasteBackAsTheyAre()

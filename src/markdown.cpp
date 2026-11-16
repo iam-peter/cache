@@ -258,6 +258,14 @@ QString tableFromCells(const QString &text, QChar separator)
     return out.join(QLatin1Char('\n'));
 }
 
+QString issueKey(const QString &url)
+{
+    static const QRegularExpression issue(
+        QStringLiteral(R"((?:/browse/|[?&]selectedIssue=)([A-Z][A-Z0-9_]*-\d+)\b)"));
+    const QRegularExpressionMatch m = issue.match(url);
+    return m.hasMatch() ? m.captured(1) : QString();
+}
+
 bool isWebUrl(const QString &text)
 {
     const QString t = text.trimmed();

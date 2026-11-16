@@ -16,6 +16,8 @@
 #include <QtQml/qqmlextensionplugin.h>
 
 #include "Fonts.h"
+#include "boardmodel.h"
+#include "links.h"
 #include "workspace.h"
 
 Q_IMPORT_QML_PLUGIN(IgittStylePlugin)
@@ -143,6 +145,13 @@ int main(int argc, char *argv[])
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
         [] { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
     engine.loadFromModule("Cache", "Main");
+
+    // Notes show what Jira and the like know about their links
+    if (auto *links = engine.singletonInstance<Links *>("Cache", "Links")) {
+        engine.singletonInstance<BoardModel *>("Cache", "Board")->setLinkInfo(
+            [links](const QString &url) { return links->info(url); });
+        links->touch(); // the notes already shown ask again
+    }
 
     if (qEnvironmentVariableIsSet("CACHE_TRACE_LATENCY")) {
         const auto roots = engine.rootObjects();

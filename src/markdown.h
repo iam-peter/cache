@@ -57,6 +57,9 @@ QString tableFromCells(const QString &text, QChar separator = QLatin1Char('\t'))
 // A single http(s) URL and nothing else, as one is when copied or dragged
 // from a browser's address bar
 bool isWebUrl(const QString &text);
+// The issue a tracker's address names: KEY-123 from Jira's /browse/KEY-123
+// or a board's ?selectedIssue=KEY-123; empty for any other address
+QString issueKey(const QString &url);
 
 // [text](url), the brackets in the text made safe
 QString link(const QString &text, const QString &url);

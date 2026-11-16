@@ -88,6 +88,8 @@ qt_add_qml_module(cache
         src/history.h src/history.cpp
         src/workspace.h src/workspace.cpp
         src/videoposters.h src/videoposters.cpp
+        src/links.h src/links.cpp src/jiraresolver.h src/jiraresolver.cpp
+        src/keychain.h src/keychain.cpp
         src/gridbackground.h src/gridbackground.cpp
         src/Fonts.h src/Fonts.cpp
     RESOURCES
@@ -119,6 +121,27 @@ target_link_libraries(cache PRIVATE
     Qt6::Svg
 )
 
+# Accounts' tokens live in the system's keychain: libsecret on Linux (the
+# Secret Service), the Keychain on macOS, the Credential Manager on Windows
+set(keychain_libraries)
+set(keychain_definitions)
+if(APPLE)
+    list(APPEND keychain_libraries "-framework Security")
+elseif(UNIX)
+    find_package(PkgConfig)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(LIBSECRET IMPORTED_TARGET libsecret-1)
+    endif()
+    if(LIBSECRET_FOUND)
+        list(APPEND keychain_libraries PkgConfig::LIBSECRET)
+        list(APPEND keychain_definitions CACHE_HAVE_LIBSECRET)
+    else()
+        message(WARNING "libsecret-1 not found (libsecret-1-dev): accounts can't be kept")
+    endif()
+endif()
+target_link_libraries(cache PRIVATE ${keychain_libraries})
+target_compile_definitions(cache PRIVATE ${keychain_definitions})
+
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
@@ -148,6 +171,16 @@ if(BUILD_TESTING)
     add_test(NAME tst_board COMMAND tst_board -platform offscreen
         -o ${test_output_dir}/tst_board.txt,txt -o -,txt)
 
+    # Links' details, from a stand-in for Jira on localhost
+    qt_add_executable(tst_links tests/tst_links.cpp
+        src/links.h src/links.cpp src/jiraresolver.h src/jiraresolver.cpp src/keychain.h src/keychain.cpp
+        src/markdown.h src/markdown.cpp src/highlight.h src/highlight.cpp)
+    target_include_directories(tst_links PRIVATE src)
+    target_compile_definitions(tst_links PRIVATE ${keychain_definitions})
+    target_link_libraries(tst_links PRIVATE Qt6::Gui Qt6::Qml Qt6::Network Qt6::Test ${keychain_libraries})
+    add_test(NAME tst_links COMMAND tst_links -platform offscreen
+        -o ${test_output_dir}/tst_links.txt,txt -o -,txt)
+
     qt_add_executable(tst_history tests/tst_history.cpp src/history.h src/history.cpp)
     target_include_directories(tst_history PRIVATE src)
     target_link_libraries(tst_history PRIVATE Qt6::Core Qt6::Qml Qt6::Test)
@@ -163,7 +196,7 @@ if(BUILD_TESTING)
 
     # Console programs: qt_standard_project_setup makes GUI programs on
     # Windows, which print nothing, so a failing test would leave an empty log
-    set_target_properties(tst_fuzzy tst_markdown tst_board tst_history tst_posters PROPERTIES
+    set_target_properties(tst_fuzzy tst_markdown tst_board tst_links tst_history tst_posters PROPERTIES
         WIN32_EXECUTABLE FALSE MACOSX_BUNDLE FALSE)
 endif()
 

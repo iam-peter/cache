@@ -134,6 +134,13 @@ request; the [website](pages/) is published from `pages/` by the
     a link)
   - Markdown and text files become notes of their own, and notes copied
     from Cache paste back exactly
+- **Linked issues**: with an account for a Jira host (Settings, Accounts),
+  a link to one of its issues shows the issue's summary and status after
+  it, and its type, priority, assignee and when it changed while the
+  pointer is on it. Jira Cloud takes your email and an API token, Jira
+  Data Center a personal access token. The token is kept in the system's
+  keychain and sent only to its host; what the issues say is kept in
+  Cache's cache folder, not in the project
 - **For Teams, mail and documents**:
   - **Copy note** (`Ctrl+C`, or `Ctrl+Shift+C` while editing) puts a note on
     the clipboard as rich text with its images embedded, code as coloured
@@ -207,6 +214,8 @@ notes holding that media.
 
 Needs Qt 6.9 or newer (developed against 6.12) with Qt Quick, Quick
 Controls 2, Qt Multimedia, Qt Network and Qt SVG, plus CMake 3.21+ and a C++20 compiler.
+On Linux, accounts keep their tokens through libsecret (`libsecret-1-dev`);
+without it Cache builds, but can't keep accounts.
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=$HOME/Qt/6.12.0/gcc_64
@@ -267,11 +276,14 @@ ctest --test-dir build --output-on-failure
 | `src/documentfilter.*` | Reading-order sort of the sidebar's note list |
 | `src/searchmodel.*` | Search over all projects; links, backlinks and tasks across them (`Search` in QML) |
 | `src/fuzzy.*` | Typo-tolerant matching: accent folding, edit distance |
+| `src/links.*` | Details of web links from their services (`Links` in QML), the resolvers' interface, accounts |
+| `src/jiraresolver.*` | Jira issues, through Jira's REST API |
+| `src/keychain.*` | Tokens in the system's keychain: libsecret, macOS Keychain, Windows Credential Manager |
 | `logo/` | The icon (SVG, PNG, ICO, ICNS) and the desktop entry |
 | `packaging/` | Debian package, Windows installer, QML imports for the deploy tools |
 | `pages/` | The website, published on GitHub Pages |
 | `.github/workflows/` | CI, nightly builds, releases and the website |
-| `tests/` | Tests of the matching, Markdown and code helpers, board model and history |
+| `tests/` | Tests of the matching, Markdown and code helpers, board model, links and history |
 | `templates/` | The built-in templates |
 | `src/gridbackground.*` | Scene-graph dot grid |
 | `src/Fonts.*` | Registers the bundled fonts (from igitt) |
@@ -285,7 +297,7 @@ ctest --test-dir build --output-on-failure
 | `qml/Connector.qml` | A connector, its route and arrows |
 | `qml/ToolPalette.qml`, `Minimap.qml`, `SelectionBar.qml`, `LinkBar.qml` | Tools, map, toolbars for selections and connectors |
 | `qml/TemplateDialog.qml`, `HistoryDialog.qml` | Templates and versions |
-| `qml/Sidebar.qml`, `SettingsDialog.qml` | Projects and notes; theme, fonts, canvas settings |
+| `qml/Sidebar.qml`, `SettingsDialog.qml` | Projects and notes; theme, fonts, canvas settings, accounts |
 | `qml/Icon*.qml`, `SplitterHandle.qml` | Helpers from igitt |
 
 To update the style, copy igitt's `src/style` over `style/`.

@@ -1264,6 +1264,9 @@ QString BoardModel::renderHtml(const QString &markdown, double maxWidth, int pix
         cursor.setCharFormat(run.format);
     }
 
+    if (!forClipboard && m_linkInfo)
+        decorateLinks(doc, colors, pixelSize);
+
     if (highlightColor.isValid()) {
         QTextCharFormat mark;
         mark.setBackground(highlightColor);
@@ -1279,6 +1282,71 @@ QString BoardModel::renderHtml(const QString &markdown, double maxWidth, int pix
     // For the clipboard only the body, without Qt's fonts, so the text takes
     // on the look of wherever it is pasted
     return forClipboard ? bodyOf(html) : html;
+}
+
+// Web links another service knows (an issue): its summary after the link
+// when the link shows just its key, and its status in a label
+void BoardModel::decorateLinks(QTextDocument &doc, const QVariantMap &colors, int pixelSize) const
+{
+    struct Anchor {
+        int end;
+        QString href;
+        QString text;
+    };
+    QList<Anchor> anchors;
+    for (QTextBlock block = doc.begin(); block.isValid(); block = block.next()) {
+        for (auto it = block.begin(); !it.atEnd(); ++it) {
+            const QTextFragment fragment = it.fragment();
+            if (!fragment.isValid() || !fragment.charFormat().isAnchor() || fragment.charFormat().isImageFormat())
+                continue;
+            const QString href = fragment.charFormat().anchorHref();
+            // One link in several pieces (part of it bold, say)
+            if (!anchors.isEmpty() && anchors.last().href == href && anchors.last().end == fragment.position()) {
+                anchors.last().end += fragment.length();
+                anchors.last().text += fragment.text();
+            } else if (href.startsWith(QLatin1String("http"))) {
+                anchors.append({fragment.position() + fragment.length(), href, fragment.text()});
+            }
+        }
+    }
+
+    const QColor muted = colors.value(QStringLiteral("muted")).value<QColor>();
+    // From the end, so the places before stay where they are
+    for (auto a = anchors.crbegin(); a != anchors.crend(); ++a) {
+        const QVariantMap info = m_linkInfo(a->href);
+        if (info.isEmpty())
+            continue;
+        QTextCursor cursor(&doc);
+        cursor.setPosition(a->end);
+        const QString summary = info.value(QStringLiteral("summary")).toString();
+        if (!summary.isEmpty() && a->text.trimmed() == info.value(QStringLiteral("title")).toString()) {
+            QTextCharFormat format;
+            if (muted.isValid())
+                format.setForeground(muted);
+            cursor.insertText(QStringLiteral(" ") + summary, format);
+        }
+        const QString status = info.value(QStringLiteral("status")).toString();
+        if (status.isEmpty())
+            continue;
+        const QString tone = info.value(QStringLiteral("tone")).toString();
+        QColor color = colors.value(tone == QLatin1String("done")       ? QStringLiteral("toneDone")
+                                    : tone == QLatin1String("progress") ? QStringLiteral("toneProgress")
+                                                                        : QStringLiteral("toneTodo"))
+                           .value<QColor>();
+        if (!color.isValid())
+            color = muted;
+        cursor.insertText(QStringLiteral(" "), QTextCharFormat());
+        QTextCharFormat label;
+        label.setFontWeight(QFont::DemiBold);
+        label.setProperty(QTextFormat::FontPixelSize, std::max(8, int(std::round(pixelSize * 0.8))));
+        if (color.isValid()) {
+            label.setForeground(color);
+            QColor background = color;
+            background.setAlphaF(0.16f);
+            label.setBackground(background);
+        }
+        cursor.insertText(QStringLiteral("\u00a0%1\u00a0").arg(status.toUpper()), label);
+    }
 }
 
 QString BoardModel::dataUri(const QString &path) const
