@@ -156,8 +156,11 @@ private slots:
         links.accounts()->remember({QStringLiteral("jira"), server.host(), {}}, "pat");
         links.info(server.issue("IDS5-404"));
         QTRY_COMPARE(server.requests.size(), 1);
-        QTest::qWait(50);
-        QVERIFY(links.info(server.issue("IDS5-404")).isEmpty());
+        // Why, and where it was asked
+        QTRY_VERIFY(!links.info(server.issue("IDS5-404")).value("error").toString().isEmpty());
+        const QString error = links.info(server.issue("IDS5-404")).value("error").toString();
+        QVERIFY2(error.startsWith(server.host() + QStringLiteral(": Issue does not exist")), qPrintable(error));
+        QVERIFY(!links.info(server.issue("IDS5-404")).contains("title"));
         QTest::qWait(50);
         QCOMPARE(server.requests.size(), 1); // not asked again at once
     }

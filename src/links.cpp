@@ -430,12 +430,14 @@ QVariantMap Links::lookUp(const QString &url, LinkResolver *resolver)
                 entry.info = info;
                 entry.fetched = QDateTime::currentDateTimeUtc();
                 entry.failed = {};
+                entry.error.clear();
                 if (self->m_persistent)
                     self->m_save.start();
                 self->m_bump.start();
             } else {
                 // What was known stays shown; asked again in a while
                 entry.failed = QDateTime::currentDateTimeUtc();
+                entry.error = error;
                 if (!error.isEmpty())
                     qWarning("Cache: no details for %s: %s", qPrintable(key.section(QLatin1Char(' '), 1)),
                              qPrintable(error));
@@ -443,7 +445,11 @@ QVariantMap Links::lookUp(const QString &url, LinkResolver *resolver)
             }
         });
     }
-    return entry.info ? entry.info->toVariant() : QVariantMap();
+    if (entry.info)
+        return entry.info->toVariant();
+    if (!entry.error.isEmpty())
+        return {{QStringLiteral("error"), entry.error}};
+    return {};
 }
 
 void Links::addAccount(const QString &provider, const QString &host, const QString &user, const QString &token,

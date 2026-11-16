@@ -53,7 +53,8 @@ void JiraResolver::resolve(const QUrl &url, const Done &done)
     const QString site = a.siteFor(Links::authority(url));
     m_links->accounts()->token(a, [this, a, site, key, done](const QByteArray &token) {
         if (token.isEmpty()) {
-            done(std::nullopt, QStringLiteral("no token for %1").arg(a.host));
+            done(std::nullopt, QObject::tr("The keychain has no token for %1: sign in again in Settings, Accounts.")
+                                   .arg(a.everySite() ? QObject::tr("every atlassian.net site") : a.host));
             return;
         }
         get(site, a, token,
@@ -64,9 +65,11 @@ void JiraResolver::resolve(const QUrl &url, const Done &done)
                     LinkInfo info = infoOf(key, json);
                     info.site = QStringLiteral("Jira · %1").arg(site);
                     done(info, {});
+                } else {
+                    // Said where it was asked: an old address may point to
+                    // the wrong site
+                    done(std::nullopt, QStringLiteral("%1: %2").arg(site, error));
                 }
-                else
-                    done(std::nullopt, error);
             });
     });
 }

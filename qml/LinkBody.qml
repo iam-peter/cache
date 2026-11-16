@@ -132,8 +132,9 @@ Item {
             Layout.minimumHeight: 0
             Layout.maximumHeight: implicitHeight
             visible: text !== ""
-            text: body.info.summary || ""
-            color: (body.info.status || "") !== "" ? Theme.text : Theme.textMuted
+            text: body.info.error ? qsTr("Couldn't read this link. %1").arg(body.info.error) : body.info.summary || ""
+            color: body.info.error ? Theme.s.danger_default
+                 : (body.info.status || "") !== "" ? Theme.text : Theme.textMuted
             wrapMode: Text.Wrap
             elide: Text.ElideRight
             verticalAlignment: Text.AlignTop

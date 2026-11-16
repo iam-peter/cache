@@ -1727,6 +1727,14 @@ Item {
                 text: linkCard.info.summary || ""
                 wrapMode: Text.Wrap
             }
+            // Couldn't be read: why, and where it was asked
+            Label {
+                Layout.fillWidth: true
+                visible: text !== ""
+                text: linkCard.info.error ? qsTr("Couldn't read this link. %1").arg(linkCard.info.error) : ""
+                color: Theme.s.danger_default
+                wrapMode: Text.Wrap
+            }
             GridLayout {
                 Layout.fillWidth: true
                 Layout.topMargin: Styles.Primitives.spacing.sp050

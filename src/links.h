@@ -158,7 +158,8 @@ public:
     void addResolver(std::unique_ptr<LinkResolver> resolver);
 
     // What is known about `url`: {title, summary, status, tone,
-    // fields: [{name, value}], image, site}, or nothing. Asks its resolver
+    // fields: [{name, value}], image, site}, or, when it couldn't be read
+    // and nothing is known, {error}; or nothing. Asks its resolver
     // in the background when nothing is known yet, or only something old.
     // Only services with an account: notes ask this for every web link.
     Q_INVOKABLE QVariantMap info(const QString &url);
@@ -196,6 +197,7 @@ private:
         std::optional<LinkInfo> info;
         QDateTime fetched;
         QDateTime failed;
+        QString error; // why it couldn't be read, last time
         bool pending = false;
     };
 
