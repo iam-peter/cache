@@ -550,6 +550,23 @@ Item {
                         return
                     }
                 }
+                // Up on the first line goes to the very start, Down on the
+                // last line to the very end (as most editors do); with
+                // Shift the selection goes along
+                if ((event.key === Qt.Key_Up || event.key === Qt.Key_Down)
+                        && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) {
+                    const up = event.key === Qt.Key_Up
+                    const edge = up ? 0 : editor.length
+                    const line = editor.positionToRectangle(edge).y
+                    if (editor.cursorRectangle.y === line && editor.cursorPosition !== edge) {
+                        if (event.modifiers & Qt.ShiftModifier)
+                            editor.moveCursorSelection(edge, TextEdit.SelectCharacters)
+                        else
+                            editor.cursorPosition = edge
+                        event.accepted = true
+                        return
+                    }
+                }
                 if (event.key === Qt.Key_Escape) {
                     body.card.canvas.finishEditing()
                     event.accepted = true
