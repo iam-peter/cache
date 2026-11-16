@@ -137,6 +137,9 @@ request; the [website](pages/) is published from `pages/` by the
     and play inside the note (expand for a large player)
   - **audio** (MP3, WAV, Ogg, Opus, M4A, AAC, FLAC) is attached and plays
     in the note: play and pause, where it is, a bar to seek on
+  - **PDFs** are attached and show their pages in the note, one at a time
+    with buttons to page through (built with Qt PDF; without it they are
+    file cards)
   - **any other file** (PDF, Office documents, archives…) is copied into
     `assets/` and attached as a card with its type and size that opens it
   - **cells copied from a spreadsheet**, and CSV files, become a table
@@ -271,6 +274,8 @@ notes holding that media.
 
 Needs Qt 6.9 or newer (developed against 6.12) with Qt Quick, Quick
 Controls 2, Qt Multimedia, Qt Network and Qt SVG, plus CMake 3.21+ and a C++20 compiler.
+Qt PDF (the Maintenance Tool's "Qt PDF" extension) is optional: with it,
+PDFs in notes show their pages.
 On Linux, accounts keep their tokens through libsecret (`libsecret-1-dev`);
 without it Cache builds, but can't keep accounts.
 
@@ -354,7 +359,7 @@ ctest --test-dir build --output-on-failure
 | `qml/CanvasCard.qml` | Any item: frame, move, resize, handles, folding, floating toolbar |
 | `qml/NoteBody.qml` | A rendered note and its editor, with `[[` completion |
 | `qml/*Body.qml` | Shapes, text, sections and pen lines |
-| `qml/CodeBlock.qml`, `EmbedBlock.qml`, `VideoBlock.qml`, `AudioBlock.qml`, `FileBlock.qml` | Code, link previews, videos, audio and attached files in notes |
+| `qml/CodeBlock.qml`, `EmbedBlock.qml`, `VideoBlock.qml`, `AudioBlock.qml`, `PdfBlock.qml`, `FileBlock.qml` | Code, link previews, videos, audio, PDFs and attached files in notes |
 | `qml/LinkBody.qml` | A link card: a web page or an issue |
 | `qml/ExportDialog.qml`, `Redacted.qml` | Exporting pictures; text as grey bars for privacy |
 | `qml/CommandPalette.qml` | Ctrl+P: commands, notes, sections, projects, and Jira, Confluence and Figma |

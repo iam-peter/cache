@@ -364,6 +364,7 @@ Item {
                     width: content.width
                     sourceComponent: modelData.kind === "video" ? videoSegment
                                    : modelData.kind === "audio" ? audioSegment
+                                   : modelData.kind === "pdf" ? pdfSegment
                                    : modelData.kind === "code" ? codeSegment
                                    : modelData.kind === "embed" ? embedSegment
                                    : modelData.kind === "file" ? fileSegment
@@ -409,6 +410,15 @@ Item {
                                 id: linkHover
                                 cursorShape: rich.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor
                             }
+                        }
+                    }
+                    Component {
+                        id: pdfSegment
+                        // Not built in without Qt PDF: by name, so the
+                        // note still loads
+                        Loader {
+                            width: parent ? parent.width : 0
+                            Component.onCompleted: setSource("PdfBlock.qml", { segment: piece.modelData })
                         }
                     }
                     Component {

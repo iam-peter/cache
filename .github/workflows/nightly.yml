@@ -60,7 +60,7 @@ jobs:
           host: linux
           target: desktop
           arch: linux_gcc_64
-          modules: qtmultimedia
+          modules: qtmultimedia qtpdf
           cache: true
 
       - name: Build
@@ -142,7 +142,7 @@ jobs:
           host: windows
           target: desktop
           arch: win64_msvc2022_64
-          modules: qtmultimedia
+          modules: qtmultimedia qtpdf
           aqtsource: git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7
           cache: true
 
@@ -261,7 +261,7 @@ jobs:
           host: mac
           target: desktop
           arch: clang_64
-          modules: qtmultimedia
+          modules: qtmultimedia qtpdf
           cache: true
 
       - name: Build

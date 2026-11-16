@@ -1631,6 +1631,23 @@ QString BoardModel::linkMediaNames(const QString &markdown, const QList<Media> &
     });
 }
 
+namespace {
+
+// How an attached file shows in a note: audio plays, a PDF shows its
+// pages (with Qt PDF), the rest are cards that open them
+QString segmentKindOf(const QString &suffix)
+{
+    if (kAudioExt.contains(suffix))
+        return QStringLiteral("audio");
+#ifdef CACHE_HAVE_PDF
+    if (suffix == QLatin1String("pdf"))
+        return QStringLiteral("pdf");
+#endif
+    return QStringLiteral("file");
+}
+
+} // namespace
+
 QVariantList BoardModel::renderSegments(const QString &markdown, double maxWidth, int pixelSize,
                                         const QVariantMap &colors, const QStringList &highlight) const
 {
@@ -1681,8 +1698,7 @@ QVariantList BoardModel::renderSegments(const QString &markdown, double maxWidth
         case Piece::File: {
             const QFileInfo fi(piece.target);
             segments.append(QVariantMap{
-                {QStringLiteral("kind"), kAudioExt.contains(fi.suffix().toLower()) ? QStringLiteral("audio")
-                                                                                    : QStringLiteral("file")},
+                {QStringLiteral("kind"), segmentKindOf(fi.suffix().toLower())},
                 {QStringLiteral("name"), piece.name},
                 {QStringLiteral("url"), QUrl::fromLocalFile(piece.target)},
                 {QStringLiteral("folder"), QUrl::fromLocalFile(fi.absolutePath())},

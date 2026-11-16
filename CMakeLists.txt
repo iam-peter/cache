@@ -43,6 +43,16 @@ file(GLOB template_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} CONFIGURE_DEPENDS 
 
 set_source_files_properties(qml/Theme.qml qml/Icons.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
+# PDFs in notes show their pages with Qt PDF; without it they stay cards
+# that open them
+find_package(Qt6 QUIET COMPONENTS Pdf PdfQuick)
+set(pdf_qml_files)
+if(Qt6PdfQuick_FOUND)
+    set(pdf_qml_files qml/PdfBlock.qml)
+else()
+    message(STATUS "Qt PDF not found: PDFs in notes are shown as file cards")
+endif()
+
 qt_add_qml_module(cache
     URI Cache
     VERSION 1.0
@@ -55,6 +65,7 @@ qt_add_qml_module(cache
         qml/NoteBody.qml
         qml/VideoBlock.qml
         qml/AudioBlock.qml
+        ${pdf_qml_files}
         qml/CodeBlock.qml
         qml/EmbedBlock.qml
         qml/FileBlock.qml
@@ -147,6 +158,10 @@ elseif(UNIX)
     else()
         message(WARNING "libsecret-1 not found (libsecret-1-dev): accounts can't be kept")
     endif()
+endif()
+if(Qt6PdfQuick_FOUND)
+    target_link_libraries(cache PRIVATE Qt6::PdfQuick)
+    target_compile_definitions(cache PRIVATE CACHE_HAVE_PDF)
 endif()
 target_link_libraries(cache PRIVATE ${keychain_libraries})
 target_compile_definitions(cache PRIVATE ${keychain_definitions})
