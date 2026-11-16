@@ -126,6 +126,49 @@ QList<WikiLink> wikiLinks(const QString &markdown)
     return result;
 }
 
+namespace {
+
+const QRegularExpression kHeading(QStringLiteral(R"(^(#{1,6})\s+(.*?)\s*#*\s*$)"));
+
+} // namespace
+
+QStringList headings(const QString &markdown)
+{
+    QStringList result;
+    forProseLines(markdown.split(QLatin1Char('\n')), [&](int, const QString &line) {
+        const QRegularExpressionMatch m = kHeading.match(line);
+        if (m.hasMatch() && !m.captured(2).isEmpty())
+            result << m.captured(2);
+    });
+    return result;
+}
+
+QString section(const QString &markdown, const QString &heading)
+{
+    const QStringList lines = markdown.split(QLatin1Char('\n'));
+    const QString wanted = heading.trimmed();
+    int first = -1, level = 0, end = int(lines.size());
+    forProseLines(lines, [&](int i, const QString &line) {
+        if (end < lines.size())
+            return;
+        const QRegularExpressionMatch m = kHeading.match(line);
+        if (!m.hasMatch())
+            return;
+        const int depth = int(m.captured(1).size());
+        if (first < 0) {
+            if (m.captured(2).compare(wanted, Qt::CaseInsensitive) == 0) {
+                first = i;
+                level = depth;
+            }
+        } else if (depth <= level) {
+            end = i;
+        }
+    });
+    if (first < 0)
+        return {};
+    return lines.mid(first, end - first).join(QLatin1Char('\n')).trimmed();
+}
+
 QString setEmbed(const QString &markdown, int line, bool embed)
 {
     QStringList lines = markdown.split(QLatin1Char('\n'));

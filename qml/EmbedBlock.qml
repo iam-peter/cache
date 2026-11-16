@@ -61,6 +61,7 @@ Rectangle {
                 text: block.note.found
                       ? (block.segment.alias || block.note.title)
                         + (block.note.current ? "" : "  ·  " + block.note.projectName)
+                        + (block.note.headingFound === false ? "  " + qsTr("(no such heading: the whole note)") : "")
                       : qsTr("%1 (no such note yet)").arg(block.segment.target)
                 font.weight: Styles.Primitives.fontWeight.medium
                 color: block.note.found ? Theme.link : Theme.textMuted

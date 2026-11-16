@@ -155,6 +155,19 @@ private slots:
         QVERIFY(html.contains(QStringLiteral("<span style=\"color:#ff0000;\">if</span>")));
         QVERIFY(html.contains(QStringLiteral("&lt;")));
     }
+
+    void sections()
+    {
+        const QString md = QStringLiteral("# Plan\nintro\n\n## Next steps\n- a\n### Detail\nd\n```\n# not a heading\n```\n"
+                                          "## Risks ##\nr\n# Other\no");
+        QCOMPARE(Markdown::headings(md),
+                 QStringList({"Plan", "Next steps", "Detail", "Risks", "Other"}));
+        QCOMPARE(Markdown::section(md, QStringLiteral("next STEPS")),
+                 QStringLiteral("## Next steps\n- a\n### Detail\nd\n```\n# not a heading\n```"));
+        QCOMPARE(Markdown::section(md, QStringLiteral("Risks")), QStringLiteral("## Risks ##\nr"));
+        QCOMPARE(Markdown::section(md, QStringLiteral("Other")), QStringLiteral("# Other\no"));
+        QCOMPARE(Markdown::section(md, QStringLiteral("Missing")), QString());
+    }
 };
 
 QTEST_APPLESS_MAIN(TestMarkdown)

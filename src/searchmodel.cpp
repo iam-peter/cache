@@ -381,7 +381,20 @@ const QList<SearchModel::Entry> &SearchModel::currentIndex()
     return m_generation > 0 ? m_entries : index();
 }
 
-int SearchModel::resolve(const QString &target, const QString &fromProject)
+int SearchModel::resolve(const QString &target, const QString &fromProject, QString *heading)
+{
+    // [[Note#Heading]]: the note, unless one is called that in full
+    const int whole = resolveTitle(target, fromProject);
+    const qsizetype hash = target.indexOf(QLatin1Char('#'));
+    if (whole >= 0 || hash <= 0)
+        return whole;
+    const int note = resolveTitle(target.left(hash), fromProject);
+    if (note >= 0 && heading)
+        *heading = target.mid(hash + 1).trimmed();
+    return note;
+}
+
+int SearchModel::resolveTitle(const QString &target, const QString &fromProject)
 {
     QString project;
     QString title = target.trimmed();
@@ -418,17 +431,22 @@ QVariantMap SearchModel::findNote(const QString &target)
 {
     currentIndex();
     const QString open = m_board ? QDir(m_board->projectPath()).absolutePath() : QString();
-    const int i = resolve(target, open);
+    QString heading;
+    const int i = resolve(target, open, &heading);
     if (i < 0)
         return {{QStringLiteral("found"), false}, {QStringLiteral("title"), target}};
     const Entry &e = m_entries.at(i);
+    // Under a heading: just that part, as long as the note has it
+    const QString part = heading.isEmpty() ? QString() : Markdown::section(e.note->text, heading);
     return {
         {QStringLiteral("found"), true},
         {QStringLiteral("projectPath"), e.projectPath},
         {QStringLiteral("projectName"), e.projectName},
         {QStringLiteral("noteId"), e.id},
-        {QStringLiteral("title"), e.note->title},
-        {QStringLiteral("text"), e.note->text},
+        {QStringLiteral("title"), heading.isEmpty() ? e.note->title : e.note->title + QStringLiteral(" › ") + heading},
+        {QStringLiteral("heading"), heading},
+        {QStringLiteral("headingFound"), heading.isEmpty() || !part.isEmpty()},
+        {QStringLiteral("text"), part.isEmpty() ? e.note->text : part},
         {QStringLiteral("current"), e.current},
     };
 }
@@ -436,6 +454,28 @@ QVariantMap SearchModel::findNote(const QString &target)
 QVariantList SearchModel::suggestNotes(const QString &prefix, int limit)
 {
     index();
+    // [[Note#…: the note's headings
+    const qsizetype hash = prefix.indexOf(QLatin1Char('#'));
+    if (hash > 0) {
+        const QString base = prefix.left(hash);
+        const int note = resolveTitle(base, m_board ? QDir(m_board->projectPath()).absolutePath() : QString());
+        if (note < 0)
+            return {};
+        const QString wanted = Fuzzy::fold(prefix.mid(hash + 1).trimmed());
+        QVariantList list;
+        for (const QString &heading : Markdown::headings(m_entries.at(note).note->text)) {
+            if (list.size() >= limit)
+                break;
+            if (!wanted.isEmpty() && !Fuzzy::fold(heading).contains(wanted))
+                continue;
+            list.append(QVariantMap{
+                {QStringLiteral("title"), m_entries.at(note).note->title + QStringLiteral(" › ") + heading},
+                {QStringLiteral("current"), true},
+                {QStringLiteral("insert"), base + QLatin1Char('#') + heading},
+            });
+        }
+        return list;
+    }
     const QString wanted = Fuzzy::fold(prefix.trimmed());
     struct Hit {
         int entry;

@@ -104,7 +104,9 @@ request; the [website](pages/) is published from `pages/` by the
   Hovering a link shows a preview of the note, clicking opens it, and a
   link to a note that doesn't exist yet makes it. A link on a line of its
   own shows a **preview** of the linked note, `![[Title]]`, which its
-  chevron hides and shows again. Notes show how many notes link to them;
+  chevron hides and shows again. `[[Title#Heading]]` links one part of a
+  note: its preview shows only that heading and what lies under it
+  (typing `#` after a title in `[[` offers its headings). Notes show how many notes link to them;
   links between notes of a canvas can be drawn as dotted lines.
 - **Referring to media**: type `@` while writing for a list of the
   images, videos and files of the note, then of the others, each with a

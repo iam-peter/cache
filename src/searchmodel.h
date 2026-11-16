@@ -153,7 +153,10 @@ private:
     // with the revision that makes them ask again, not inside them
     const QList<Entry> &currentIndex();
     void scanDisk();
-    int resolve(const QString &target, const QString &fromProject); // index of the Entry, or -1
+    // The Entry a [[target]] names, or -1; [[Note#Heading]] names the note,
+    // and `heading` gets the heading
+    int resolve(const QString &target, const QString &fromProject, QString *heading = nullptr);
+    int resolveTitle(const QString &target, const QString &fromProject);
     // Whether the note has every term; its score ranks the results and
     // `words` gets what to highlight
     bool match(const QString &title, const Fuzzy::Index &index, int *score, QStringList *words) const;

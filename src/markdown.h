@@ -31,6 +31,13 @@ struct WikiLink {
     bool standalone = false; // alone on its line
 };
 QList<WikiLink> wikiLinks(const QString &markdown);
+
+// The headings of a note, outside code, as written ("Next steps")
+QStringList headings(const QString &markdown);
+// What lies under `heading` (any case): its line and what follows, up to
+// the next heading of the same or a higher level. Empty when there is no
+// such heading. [[Note#Heading]] shows this.
+QString section(const QString &markdown, const QString &heading);
 // Turns the link on `line` into an embed or back into a plain link
 QString setEmbed(const QString &markdown, int line, bool embed);
 // [[links]] as Markdown links to note:<target>, for rendering; left alone

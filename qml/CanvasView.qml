@@ -270,7 +270,9 @@ Item {
             return
         }
         const from = Board.getById(fromId)
-        const title = target.indexOf("/") > 0 ? target.substring(target.indexOf("/") + 1) : target
+        // [[Note#Heading]] to a missing note makes the note
+        const name = target.indexOf("#") > 0 ? target.substring(0, target.indexOf("#")) : target
+        const title = name.indexOf("/") > 0 ? name.substring(name.indexOf("/") + 1) : name
         const row = Board.addNote(from.x !== undefined ? from.x + from.w + 80 : centerWorld().x,
                                   from.y !== undefined ? from.y : centerWorld().y, "# " + title + "\n\n")
         if (row >= 0)
