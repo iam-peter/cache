@@ -133,6 +133,7 @@ QVariant BoardModel::data(const QModelIndex &index, int role) const
     case SizeRole: return it.size;
     case CollapsedRole: return it.collapsed;
     case TaskRole: return it.task;
+    case LockedRole: return it.locked;
     case HiddenRole: return m_hidden.contains(it.id);
     case DescendantsRole: return m_descendants.value(it.id);
     case ChildCountRole: return m_childCount.value(it.id);
@@ -169,6 +170,7 @@ QHash<int, QByteArray> BoardModel::roleNames() const
         {SizeRole, "itemSize"},
         {CollapsedRole, "itemCollapsed"},
         {TaskRole, "itemTask"},
+        {LockedRole, "itemLocked"},
         {HiddenRole, "itemHidden"},
         {DescendantsRole, "descendants"},
         {ChildCountRole, "childCount"},
@@ -669,7 +671,7 @@ int BoardModel::itemAt(double x, double y) const
 
 void BoardModel::setGeometry(int row, double x, double y, double w, double h)
 {
-    if (!valid(row))
+    if (!valid(row) || m_items.at(row).locked)
         return;
     const BoardItem &cur = m_items.at(row);
     if (!differs(cur.x, x) && !differs(cur.y, y) && !differs(cur.w, w) && !differs(cur.h, h))
@@ -801,6 +803,7 @@ QVariantMap BoardModel::get(int row) const
         {QStringLiteral("size"), it.size},
         {QStringLiteral("collapsed"), it.collapsed},
         {QStringLiteral("task"), it.task},
+        {QStringLiteral("locked"), it.locked},
         {QStringLiteral("hidden"), m_hidden.contains(it.id)},
         {QStringLiteral("childCount"), m_childCount.value(it.id)},
     };

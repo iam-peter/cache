@@ -81,6 +81,8 @@ QJsonObject BoardModel::toJson(const BoardItem &it, bool inlineText)
         o.insert(QStringLiteral("collapsed"), true);
     if (!it.task.isEmpty())
         o.insert(QStringLiteral("task"), it.task);
+    if (it.locked)
+        o.insert(QStringLiteral("locked"), true);
     if (!it.source.isEmpty())
         o.insert(QStringLiteral("source"), it.source);
     if (!it.points.isEmpty()) {
@@ -113,6 +115,7 @@ BoardItem BoardModel::itemFromJson(const QJsonObject &o)
     it.shape = o.value(QStringLiteral("shape")).toString();
     it.size = o.value(QStringLiteral("size")).toDouble();
     it.collapsed = o.value(QStringLiteral("collapsed")).toBool();
+    it.locked = o.value(QStringLiteral("locked")).toBool();
     it.task = o.value(QStringLiteral("task")).toString();
     if (it.task != QLatin1String("open") && it.task != QLatin1String("done"))
         it.task.clear();
@@ -515,7 +518,7 @@ bool BoardModel::moveItems(const QVariantList &positions)
     for (const QVariant &v : positions) {
         const QVariantMap p = v.toMap();
         const int row = indexOf(p.value(QStringLiteral("id")).toString());
-        if (!valid(row))
+        if (!valid(row) || m_items.at(row).locked)
             continue;
         const double x = p.value(QStringLiteral("x")).toDouble();
         const double y = p.value(QStringLiteral("y")).toDouble();
@@ -538,7 +541,12 @@ bool BoardModel::moveItems(const QVariantList &positions)
 
 void BoardModel::removeItems(const QStringList &ids)
 {
-    const QSet<QString> doomed(ids.cbegin(), ids.cend());
+    // Locked ones stay
+    QSet<QString> doomed(ids.cbegin(), ids.cend());
+    for (const BoardItem &it : std::as_const(m_items)) {
+        if (it.locked)
+            doomed.remove(it.id);
+    }
     bool any = false;
     for (const BoardItem &it : std::as_const(m_items))
         any = any || doomed.contains(it.id);
@@ -589,6 +597,7 @@ QStringList BoardModel::insertState(const BoardState &state, double dx, double d
         it.id = id;
         it.x += dx;
         it.y += dy;
+        it.locked = false; // a copy is to be placed
         it.z = isSection(it) ? --low : ++z;
         const int row = int(m_items.size());
         beginInsertRows({}, row, row);
@@ -617,6 +626,24 @@ QStringList BoardModel::duplicateItems(const QStringList &ids)
         return {};
     pushUndo();
     return insertState(state, 28, 28);
+}
+
+void BoardModel::setLocked(const QStringList &ids, bool locked)
+{
+    bool pushed = false;
+    for (const QString &id : ids) {
+        const int row = indexOf(id);
+        if (!valid(row) || m_items.at(row).locked == locked)
+            continue;
+        if (!pushed) {
+            pushUndo();
+            pushed = true;
+        }
+        m_items[row].locked = locked;
+        emitRow(row, {LockedRole});
+    }
+    if (pushed)
+        markDirty();
 }
 
 void BoardModel::mergeUndo()
@@ -685,7 +712,7 @@ bool BoardModel::matchSize(const QStringList &ids, const QString &sourceId, cons
     bool pushed = false;
     for (const QString &id : ids) {
         const int row = indexOf(id);
-        if (!valid(row) || row == source || isStroke(m_items.at(row)))
+        if (!valid(row) || row == source || isStroke(m_items.at(row)) || m_items.at(row).locked)
             continue;
         const BoardItem &it = m_items.at(row);
         const double newW = width ? w : it.w;
@@ -810,7 +837,7 @@ void BoardModel::justify(const QStringList &ids, bool horizontally)
     for (const QString &id : ids) {
         const int row = indexOf(id);
         // A text's height is its font's; a line is drawn, not boxed
-        if (!valid(row) || isStroke(m_items.at(row))
+        if (!valid(row) || isStroke(m_items.at(row)) || m_items.at(row).locked
             || (!horizontally && m_items.at(row).type == QLatin1String("text")))
             continue;
         BoardItem &it = m_items[row];

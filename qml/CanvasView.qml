@@ -220,6 +220,10 @@ Item {
     function startEditing(id) {
         if (!id)
             return
+        if (cards[id] && cards[id].itemLocked) {
+            toast.show(qsTr("It's locked. Unlock it to change it."))
+            return
+        }
         selectedLinkId = ""
         selection = [id]
         editingId = id
@@ -362,8 +366,16 @@ Item {
         const ids = selection
         if (ids.length === 0)
             return
+        const locked = ids.filter(id => cards[id] && cards[id].itemLocked)
         clearSelection()
         Board.removeItems(ids)
+        if (locked.length > 0) {
+            // What stays stays selected
+            setSelection(locked)
+            toast.show(locked.length === ids.length ? qsTr("Locked items aren't deleted. Unlock them first.")
+                                                    : qsTr("%n locked item(s) kept: unlock them to delete them.", "",
+                                                           locked.length))
+        }
     }
     // The selected notes, each as tall as what it holds
     function fitToContent() {
@@ -602,6 +614,11 @@ Item {
                         ids.push(inner)
                 }
             }
+        }
+        // Locked ones stay where they are
+        for (let i = ids.length - 1; i >= 0; --i) {
+            if (cards[ids[i]] && cards[ids[i]].itemLocked)
+                ids.splice(i, 1)
         }
         const starts = {}
         for (const mid of ids) {
@@ -1956,6 +1973,11 @@ Item {
             text: view.selection.length > 1 ? qsTr("Fit selection") : qsTr("Zoom to it")
             shortcut: view.selection.length > 1 ? "Ctrl+2" : ""
             onTriggered: view.selection.length > 1 ? view.fitSelection() : view.focusItem(cardMenu.item.id)
+        }
+        MenuItem {
+            text: cardMenu.item.locked ? qsTr("Unlock") : qsTr("Lock")
+            onTriggered: Board.setLocked(view.selection.length > 0 ? view.selection : [cardMenu.item.id],
+                                         !cardMenu.item.locked)
         }
         MenuItem {
             visible: cardMenu.item.type === "note"

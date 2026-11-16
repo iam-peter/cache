@@ -886,6 +886,38 @@ private slots:
         QVERIFY(QFileInfo::exists(dir + QStringLiteral("/assets/50%2off.png")));
         QVERIFY(QFileInfo::exists(dir + QStringLiteral("/assets/50%2off-2.png")));
     }
+
+    void lockedItemsStay()
+    {
+        const QString dir = project("locked");
+        QString id;
+        {
+            BoardModel board;
+            board.load(dir);
+            const int row = board.addNote(0, 0, QStringLiteral("# Keep"), 300, 200);
+            id = board.get(row).value("id").toString();
+            board.setLocked({id}, true);
+            QVERIFY(board.get(row).value("locked").toBool());
+            // Not moved, resized or deleted
+            QVERIFY(!board.moveItems({QVariantMap{{"id", id}, {"x", 50}, {"y", 0}}}));
+            board.setGeometry(row, 0, 0, 500, 500);
+            QCOMPARE(board.get(row).value("w").toDouble(), 300.0);
+            board.removeItems({id});
+            QCOMPARE(board.rowCount(), 1);
+            // A copy is to be placed: not locked
+            const QStringList copies = board.duplicateItems({id});
+            QVERIFY(!board.getById(copies.first()).value("locked").toBool());
+            board.save();
+        }
+        BoardModel again;
+        again.load(dir);
+        QVERIFY(again.getById(id).value("locked").toBool());
+        again.setLocked({id}, false);
+        QVERIFY(again.moveItems({QVariantMap{{"id", id}, {"x", 50}, {"y", 0}}}));
+        again.undo();
+        again.undo();
+        QVERIFY(again.getById(id).value("locked").toBool());
+    }
 };
 
 QTEST_MAIN(TestBoard)

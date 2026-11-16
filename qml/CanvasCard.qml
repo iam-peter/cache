@@ -24,6 +24,7 @@ Item {
     required property real itemSize
     required property bool itemCollapsed
     required property string itemTask // a note that is a task: "", "open" or "done"
+    required property bool itemLocked
     required property bool itemHidden
     required property int descendants
     required property int childCount
@@ -193,6 +194,26 @@ Item {
         opacity: root.isNote && root.itemTask === "done" && !root.editing ? 0.5 : 1
         sourceComponent: root.isNote ? noteBody : root.isShape ? shapeBody : root.isText ? textBody
                        : root.isSection ? sectionBody : root.isLink ? linkBody : strokeBody
+    }
+
+    // Locked: a small lock in the corner, while it is selected or hovered
+    Rectangle {
+        visible: root.itemLocked && root.chrome && (root.selected || cardHover.hovered)
+        z: 12
+        x: -width / 2
+        y: -height / 2
+        width: 20
+        height: 20
+        scale: root.inv
+        radius: 10
+        color: Theme.s.background_elevated
+        border.color: Theme.cardBorder
+        Icon {
+            anchors.centerIn: parent
+            name: "lock"
+            size: 12
+            color: Theme.textMuted
+        }
     }
 
     // A note that is a task: its box to tick, in the corner
@@ -556,8 +577,16 @@ Item {
                         tip: qsTr("Fit the height to the content")
                         onClicked: root.fitToContent()
                     }
+                    Tip {
+                        visible: !root.formatting
+                        iconName: root.itemLocked ? "lock" : "lock-open"
+                        checkable: true
+                        checked: root.itemLocked
+                        tip: root.itemLocked ? qsTr("Locked: click to unlock") : qsTr("Lock: keep it from being moved, resized, edited or deleted")
+                        onClicked: Board.setLocked([root.itemId], !root.itemLocked)
+                    }
                     SizePipette {
-                        visible: !root.isStroke && !root.formatting
+                        visible: !root.isStroke && !root.formatting && !root.itemLocked
                         canvas: root.canvas
                         ids: [root.itemId]
                     }
@@ -616,7 +645,7 @@ Item {
     }
 
     Repeater {
-        model: root.chrome && root.soleSelection && !root.isStroke
+        model: root.chrome && root.soleSelection && !root.isStroke && !root.itemLocked
                ? [{h: -1, v: -1}, {h: 0, v: -1}, {h: 1, v: -1}, {h: 1, v: 0},
                   {h: 1, v: 1}, {h: 0, v: 1}, {h: -1, v: 1}, {h: -1, v: 0}]
                : []

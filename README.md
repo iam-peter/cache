@@ -222,6 +222,11 @@ request; the [website](pages/) is published from `pages/` by the
   flavours, or System. The canvas, note tints and controls all follow the
   theme. Your own themes go in `~/.config/Cache/themes` (format:
   `style/` and igitt's `docs/THEMES.md`).
+- **Locking**: the lock on an item's toolbar (or Lock in its menu) keeps
+  it from being moved, resized, edited or deleted; its tasks can still be
+  ticked. Copies of it aren't locked.
+- **Fit to content**: a note's toolbar button makes it exactly as tall as
+  what it holds.
 - Colours, duplicate, copy and paste between canvases, bring to front or
   send to back, resize handles, arrow-key nudging, undo and redo of
   everything, and export of a whole canvas to one Markdown file.

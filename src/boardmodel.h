@@ -46,6 +46,7 @@ struct BoardItem
     QList<QPointF> points;
     double size = 0;
     bool collapsed = false; // a mindmap branch folded into its root
+    bool locked = false;    // not to be moved, resized, edited or deleted
     QString task;           // a note that is a task itself: "open" or "done"
 };
 
@@ -121,6 +122,7 @@ public:
         SizeRole,
         CollapsedRole,
         TaskRole,        // a note that is a task: "", "open" or "done"
+        LockedRole,
         HiddenRole,      // inside a folded mindmap branch
         DescendantsRole, // how many items a fold hides
         ChildCountRole,
@@ -207,6 +209,9 @@ public:
     Q_INVOKABLE void toggleTask(int row, int task);
     // The note at `row` as a task of its own: "open", "done", or "" for none
     Q_INVOKABLE void setNoteTask(int row, const QString &state);
+    // Locked items stay as they are: not moved, resized, edited or deleted
+    // (their tasks can still be ticked, and they connected). One undo.
+    Q_INVOKABLE void setLocked(const QStringList &ids, bool locked);
 
     // Editing several items at once, each one undo step
     // [{id, x, y}]; whether any moved
