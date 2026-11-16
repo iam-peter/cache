@@ -47,6 +47,7 @@ QVariantMap LinkInfo::toVariant() const
             {QStringLiteral("kind"), kind},
             {QStringLiteral("version"), version},
             {QStringLiteral("remoteImage"), remoteImage},
+            {QStringLiteral("renderSize"), renderSize},
             {QStringLiteral("code"), code},
             {QStringLiteral("language"), language},
             {QStringLiteral("firstLine"), firstLine}};
@@ -64,6 +65,7 @@ LinkInfo LinkInfo::fromVariant(const QVariantMap &map)
     info.kind = map.value(QStringLiteral("kind")).toString();
     info.version = map.value(QStringLiteral("version")).toString();
     info.remoteImage = map.value(QStringLiteral("remoteImage")).toString();
+    info.renderSize = map.value(QStringLiteral("renderSize")).toInt();
     info.code = map.value(QStringLiteral("code")).toString();
     info.language = map.value(QStringLiteral("language")).toString();
     info.firstLine = map.value(QStringLiteral("firstLine"), 1).toInt();
@@ -551,41 +553,8 @@ QVariantMap Links::lookUp(const QString &url, LinkResolver *resolver)
         resolver->resolve(QUrl(url), [self, key](const std::optional<LinkInfo> &info, const QString &error) {
             if (!self)
                 return;
-            Entry &entry = self->m_entries[key];
-            entry.pending = false;
-            if (info) {
-                LinkInfo got = *info;
-                // A picture from the web: shown from disk from now on. Until
-                // a new one is there, the one there was stays.
-                const bool web = got.image.startsWith(QLatin1String("http"));
-                if (web && !self->m_imageFolder.isEmpty()) {
-                    const QString remote = got.image;
-                    got.remoteImage = remote;
-                    const bool kept = entry.info && entry.info->remoteImage == remote
-                                      && QFileInfo::exists(QUrl(entry.info->image).toLocalFile());
-                    if (kept)
-                        got.image = entry.info->image;
-                    else if (entry.info && entry.info->image.startsWith(QLatin1String("file:")))
-                        got.image = entry.info->image;
-                    if (!kept)
-                        self->keepImage(key, remote);
-                }
-                entry.info = got;
-                entry.fetched = QDateTime::currentDateTimeUtc();
-                entry.failed = {};
-                entry.error.clear();
-                if (self->m_persistent)
-                    self->m_save.start();
-                self->m_bump.start();
-            } else {
-                // What was known stays shown; asked again in a while
-                entry.failed = QDateTime::currentDateTimeUtc();
-                entry.error = error;
-                if (!error.isEmpty())
-                    qWarning("Cache: no details for %s: %s", qPrintable(key.section(QLatin1Char(' '), 1)),
-                             qPrintable(error));
-                self->m_bump.start(); // a card stops waiting
-            }
+            self->m_sharpened.remove(key); // read anew: may grow again
+            self->settle(key, info, error);
         });
     }
     if (entry.info)
@@ -593,6 +562,77 @@ QVariantMap Links::lookUp(const QString &url, LinkResolver *resolver)
     if (!entry.error.isEmpty())
         return {{QStringLiteral("error"), entry.error}};
     return {};
+}
+
+void Links::settle(const QString &key, const std::optional<LinkInfo> &info, const QString &error)
+{
+    Entry &entry = m_entries[key];
+    entry.pending = false;
+    if (!info) {
+        // What was known stays shown; asked again in a while
+        entry.failed = QDateTime::currentDateTimeUtc();
+        entry.error = error;
+        if (!error.isEmpty())
+            qWarning("Cache: no details for %s: %s", qPrintable(key.section(QLatin1Char(' '), 1)), qPrintable(error));
+        m_bump.start(); // a card stops waiting
+        return;
+    }
+    LinkInfo got = *info;
+    // A picture from the web: shown from disk from now on. Until a new one
+    // is there, the one there was stays.
+    const bool web = got.image.startsWith(QLatin1String("http"));
+    if (web && !m_imageFolder.isEmpty()) {
+        const QString remote = got.image;
+        got.remoteImage = remote;
+        const bool kept = entry.info && entry.info->remoteImage == remote
+                          && QFileInfo::exists(QUrl(entry.info->image).toLocalFile());
+        if (kept)
+            got.image = entry.info->image;
+        else if (entry.info && entry.info->image.startsWith(QLatin1String("file:")))
+            got.image = entry.info->image;
+        if (!kept)
+            keepImage(key, remote);
+    }
+    entry.info = got;
+    entry.fetched = QDateTime::currentDateTimeUtc();
+    entry.failed = {};
+    entry.error.clear();
+    if (m_persistent)
+        m_save.start();
+    m_bump.start();
+}
+
+void Links::sharpen(const QString &url, int pixels)
+{
+    // In steps, so a little more zoom doesn't ask again
+    int step = 4096;
+    for (const int s : {800, 1600, 3200}) {
+        if (pixels <= s) {
+            step = s;
+            break;
+        }
+    }
+    LinkResolver *resolver = resolverFor(QUrl(url));
+    if (!resolver)
+        return;
+    const QString key = resolver->id() + QLatin1Char(' ') + url;
+    const auto it = m_entries.constFind(key);
+    // Asked once per step: a render can't grow past its service's limit
+    if (it == m_entries.cend() || !it->info || it->pending || it->info->renderSize <= 0
+        || it->info->renderSize >= step || m_sharpening.contains(key) || m_sharpened.value(key) >= step)
+        return;
+    m_sharpening.insert(key);
+    m_sharpened[key] = step;
+    QPointer<Links> self(this);
+    const bool asked = resolver->sharpen(QUrl(url), step, [self, key](const std::optional<LinkInfo> &info, const QString &) {
+        if (!self)
+            return;
+        self->m_sharpening.remove(key);
+        if (info)
+            self->settle(key, info, {});
+    });
+    if (!asked)
+        m_sharpening.remove(key);
 }
 
 void Links::addAccount(const QString &provider, const QString &host, const QString &user, const QString &token,

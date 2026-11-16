@@ -39,10 +39,26 @@ Item {
 
     clip: true
 
+    // Pixels in steps, so a little more zoom doesn't load a picture again
+    function step(px) {
+        for (const s of [400, 800, 1600, 3200])
+            if (px <= s)
+                return s
+        return 4096
+    }
+
     // The page's picture across the top, when the card has room for it
     Image {
         id: picture
-        visible: !body.editing && status === Image.Ready && body.height > 150
+        // Shown from its first load on, also while a sharper one loads
+        property bool loaded: false
+        onStatusChanged: {
+            if (status === Image.Ready)
+                loaded = true
+            else if (status !== Image.Loading)
+                loaded = false
+        }
+        visible: !body.editing && loaded && body.height > 150
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
@@ -54,7 +70,29 @@ Item {
         source: body.info.image || ""
         fillMode: design ? Image.PreserveAspectFit : Image.PreserveAspectCrop
         asynchronous: true
-        sourceSize.width: 640
+        retainWhileLoading: true
+        // How many pixels it covers on screen: the card's size, zoomed, on
+        // this display
+        readonly property real onScreen: (design ? fitted : width) * body.card.canvas.zoom * Screen.devicePixelRatio
+        // A design's longest side as it fits in its box
+        readonly property real fitted: implicitWidth > 0 && implicitHeight > 0 && height > 0
+                                       ? Math.min(width / implicitWidth, height / implicitHeight)
+                                         * Math.max(implicitWidth, implicitHeight)
+                                       : width
+        sourceSize.width: body.step(onScreen)
+        sourceSize.height: design ? body.step(onScreen) : 0
+
+        // A render (a Figma frame) shown larger than it was made: a sharper
+        // one, once resizing and zooming have settled
+        readonly property bool blurred: visible && body.info.renderSize > 0
+                                        && onScreen > body.info.renderSize * 1.25
+        onBlurredChanged: if (blurred) settle.restart()
+        onOnScreenChanged: if (blurred) settle.restart()
+        Timer {
+            id: settle
+            interval: 700
+            onTriggered: if (picture.blurred) Links.sharpen(body.url, Math.round(picture.onScreen))
+        }
     }
 
     ColumnLayout {

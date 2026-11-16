@@ -152,9 +152,12 @@ public:
                             "absoluteBoundingBox":{"x":0,"y":0,"width":320,"height":80}}}}})";
                     } else if (request.startsWith("GET /v1/files/AbCdEf123456/nodes?ids=99%3A1&depth=1 ")) {
                         body = R"({"name":"Design System","nodes":{"99:1":null}})";
-                    } else if (request.startsWith("GET /v1/images/AbCdEf123456?ids=12%3A34&format=png&scale=2 ")) {
+                    } else if (request.startsWith("GET /v1/images/AbCdEf123456?ids=12%3A34&format=png&scale=")) {
                         ++renders;
-                        body = R"({"err":null,"images":{"12:34":")" + renderBase + "/render-" + version + R"(.png"}})";
+                        const QByteArray scale = request.mid(57, request.indexOf(' ', 4) - 57);
+                        scales.append(scale);
+                        const QByteArray name = scale == "2" ? version : version + '@' + scale;
+                        body = R"({"err":null,"images":{"12:34":")" + renderBase + "/render-" + name + R"(.png"}})";
                     } else if (request.startsWith("GET /render-")) {
                         body = "PNG-of-" + request.mid(12, request.indexOf(' ', 4) - 12);
                     } else if (request.startsWith("GET /v1/files/AbCdEf123456?depth=1 ")) {
@@ -177,6 +180,7 @@ public:
     QByteArray version = "1";                      // the file's, as Figma counts
     QByteArray renderBase = "https://example.org"; // where its renders are
     int renders = 0;
+    QList<QByteArray> scales;                      // each render's
 };
 
 // A stand-in for GitLab's API: one project, group/app, with one of each
@@ -1165,6 +1169,67 @@ private slots:
         QCOMPARE(api.renders, 2);
         QVERIFY(!QFile::exists(kept));
         QCOMPARE(links.known(QStringLiteral("figma"), frame)->version, QStringLiteral("2"));
+    }
+
+    void figmaRendersSharpen()
+    {
+        FakeFigma api;
+        api.renderBase = api.base().toUtf8();
+        QTemporaryDir folder;
+        Links links{Links::Detached{}};
+        links.setImageFolder(folder.path());
+        static_cast<FigmaResolver *>(links.resolver(QStringLiteral("figma")))->setApi(api.base());
+        links.accounts()->remember({QStringLiteral("figma"), QStringLiteral("figma.com"), {}}, "figd_test");
+        const QString frame = QStringLiteral("https://www.figma.com/design/AbCdEf123456/DS?node-id=12-34");
+        const auto size = [&] { return links.card(frame).value("renderSize").toInt(); };
+        const auto kept = [&] { return QUrl(links.card(frame).value("image").toString()).toLocalFile(); };
+        const auto content = [&] {
+            QFile file(kept());
+            return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+        };
+
+        // At first twice its size (320 × 80)
+        links.card(frame);
+        QTRY_COMPARE(content(), QByteArray("PNG-of-1.png"));
+        QCOMPARE(size(), 640);
+        const QString first = kept();
+
+        // Shown at 700 px: rendered at the next step, which takes its place
+        links.sharpen(frame, 700);
+        QTRY_COMPARE(content(), QByteArray("PNG-of-1@2.5.png"));
+        QCOMPARE(size(), 800);
+        QCOMPARE(api.scales, (QList<QByteArray>{"2", "2.5"}));
+        QVERIFY(!QFile::exists(first));
+
+        // Smaller again: nothing asked
+        const qsizetype asked = api.requests.size();
+        links.sharpen(frame, 500);
+        QTest::qWait(200);
+        QCOMPARE(api.requests.size(), asked);
+
+        // Far larger: at most four times its size, and only asked once
+        links.sharpen(frame, 3000);
+        QTRY_COMPARE(content(), QByteArray("PNG-of-1@4.png"));
+        QCOMPARE(size(), 1280);
+        const qsizetype then = api.requests.size();
+        links.sharpen(frame, 3000);
+        QTest::qWait(200);
+        QCOMPARE(api.requests.size(), then);
+
+        // Asked again, the file unchanged: the sharp one stays
+        links.reload(frame);
+        links.card(frame);
+        QTRY_VERIFY(api.requests.size() > then);
+        QTest::qWait(200);
+        QCOMPARE(api.renders, 3);
+        QCOMPARE(size(), 1280);
+
+        // The file changed: rendered anew as large as it was needed
+        api.version = "2";
+        links.reload(frame);
+        links.card(frame);
+        QTRY_COMPARE(content(), QByteArray("PNG-of-2@4.png"));
+        QCOMPARE(size(), 1280);
     }
 };
 

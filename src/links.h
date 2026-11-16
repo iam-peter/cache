@@ -33,6 +33,7 @@ struct LinkInfo
     QString kind;    // "design" for a Figma frame or file: its picture is the point
     QString version;     // of what it shows, as its service counts (a Figma file's)
     QString remoteImage; // where `image` came from, when it is kept on disk
+    int renderSize = 0;  // a render's longest side in pixels (Figma's); 0: not one
     QString code;    // lines of a file (GitLab), shown highlighted
     QString language;
     int firstLine = 1;
@@ -151,6 +152,14 @@ public:
     // [{title, detail, url, status, tone, image}]. Called back once.
     using Results = std::function<void(const QVariantList &results)>;
     virtual void search(const QString &query, const Results &done) { Q_UNUSED(query) done({}); }
+    // A sharper picture of what `url` shows, `pixels` on its longest side,
+    // when the one there is is shown larger (a Figma render): false when
+    // it can't make one
+    virtual bool sharpen(const QUrl &url, int pixels, const Done &done)
+    {
+        Q_UNUSED(url) Q_UNUSED(pixels) Q_UNUSED(done)
+        return false;
+    }
     // What waits for the user's review there (merge and pull requests),
     // for the Tasks tab
     virtual void reviews(const Results &done) { done({}); }
@@ -212,6 +221,10 @@ public:
                                 const QString &token, bool everySite = false);
     // Asks bindings that call info() again (once the board can ask)
     void touch();
+    // The picture of `url` is shown `pixels` large on its longest side: a
+    // sharper one, in steps (800, 1600, 3200, 4096), if the one there is is
+    // smaller and its service can make one
+    Q_INVOKABLE void sharpen(const QString &url, int pixels);
 
     // What `resolver` last found for `url`, if anything: to reuse what
     // hasn't changed (a Figma render while the file's version is the same)
@@ -293,6 +306,8 @@ private:
     // A picture from the web into the image folder; the entry shows it
     // once it is there
     void keepImage(const QString &key, const QString &remote);
+    // An answer for the entry `key`: kept, its picture fetched to disk
+    void settle(const QString &key, const std::optional<LinkInfo> &info, const QString &error);
     void bump();
 
     const bool m_persistent;
@@ -307,6 +322,8 @@ private:
     QVariantList m_reviews;
     QString m_imageFolder;
     QSet<QString> m_downloading; // pictures being fetched, by their address
+    QSet<QString> m_sharpening;  // entries a sharper picture is asked for
+    QHash<QString, int> m_sharpened; // the largest step asked for, by entry
     bool m_loaded = false;
     QTimer m_bump; // answers come in batches: one revision for each
     QTimer m_save;

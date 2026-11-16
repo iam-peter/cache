@@ -17,8 +17,10 @@
 
 namespace {
 
-// The longest side a node is rendered at, in pixels: sharp in a card
+// The longest side a node is rendered at, in pixels, at first: sharp in a
+// card; larger only when it is shown larger, up to kMaxSide
 constexpr double kPictureSide = 1600;
+constexpr int kMaxSide = 4096;
 
 bool figmaHost(const QString &host)
 {
@@ -140,13 +142,26 @@ void FigmaResolver::signIn(const Account &, const QByteArray &token, const Signe
 
 void FigmaResolver::resolve(const QUrl &url, const Done &done)
 {
+    read(url, 0, done);
+}
+
+bool FigmaResolver::sharpen(const QUrl &url, int pixels, const Done &done)
+{
+    if (refOf(url).node.isEmpty())
+        return false; // a file's thumbnail is as Figma makes it
+    read(url, pixels, done);
+    return true;
+}
+
+void FigmaResolver::read(const QUrl &url, int pixels, const Done &done)
+{
     const std::optional<Account> account = m_links->accounts()->find(id(), fixedHost());
     const Ref ref = refOf(url);
     if (!account || !ref.valid()) {
         done(std::nullopt, {});
         return;
     }
-    m_links->accounts()->token(*account, [this, url, ref, done](const QByteArray &token) {
+    m_links->accounts()->token(*account, [this, url, pixels, ref, done](const QByteArray &token) {
         if (token.isEmpty()) {
             done(std::nullopt, QObject::tr("The keychain has no Figma token: sign in again in Settings, Accounts."));
             return;
@@ -156,7 +171,7 @@ void FigmaResolver::resolve(const QUrl &url, const Done &done)
         // Just the file's top (its pages), or the node: never all of it
         const QString path = ref.node.isEmpty() ? QStringLiteral("/v1/files/%1?depth=1").arg(file)
                                                 : QStringLiteral("/v1/files/%1/nodes?ids=%2&depth=1").arg(file, node);
-        get(token, path, [this, url, ref, token, file, node, done](int status, const QJsonObject &json, const QString &error) {
+        get(token, path, [this, url, pixels, ref, token, file, node, done](int status, const QJsonObject &json, const QString &error) {
             if (status != 200) {
                 done(std::nullopt, QStringLiteral("Figma: %1").arg(error));
                 return;
@@ -213,17 +228,26 @@ void FigmaResolver::resolve(const QUrl &url, const Done &done)
             if (w > 0 && h > 0)
                 add(QObject::tr("Size"), QStringLiteral("%1 × %2").arg(std::round(w)).arg(std::round(h)));
             add(QObject::tr("Edited"), edited);
-            // The file as it was: the render there is still right, no new one
+            // How large: as asked, or as large as it was needed before, or
+            // the usual (twice its size, at most kPictureSide); at most 4×
+            // its size and kMaxSide
             const std::optional<LinkInfo> before = m_links->known(id(), url.toString());
-            if (before && !info.version.isEmpty() && before->version == info.version && !before->image.isEmpty()) {
+            const double longest = std::max(w, h);
+            const int usual = longest > 0 ? int(std::round(longest * std::min(2.0, kPictureSide / longest))) : 0;
+            const int most = longest > 0 ? std::min(kMaxSide, int(std::round(longest * 4))) : kMaxSide;
+            const int wanted = std::min(most, std::max({pixels, usual, before ? before->renderSize : 0}));
+            // The file as it was, and a render as large: still right, no new one
+            if (before && !info.version.isEmpty() && before->version == info.version && !before->image.isEmpty()
+                && before->renderSize >= wanted) {
                 info.image = before->image;
                 info.remoteImage = before->remoteImage;
+                info.renderSize = before->renderSize;
                 done(info, {});
                 return;
             }
-            // A page has no box: rendered at 1:1; else sharp, not huge
-            const double longest = std::max(w, h);
-            const double scale = longest > 0 ? std::clamp(kPictureSide / longest, 0.01, 2.0) : 1.0;
+            // A page has no box: rendered at 1:1
+            const double scale = longest > 0 ? std::clamp(wanted / longest, 0.01, 4.0) : 1.0;
+            info.renderSize = longest > 0 ? int(std::round(longest * scale)) : 0;
             // In one arg(): the encoded id's %3A would be taken for a %3
             get(token, QStringLiteral("/v1/images/%1?ids=%2&format=png&scale=%3")
                            .arg(file, node, QString::number(scale, 'g', 3)),

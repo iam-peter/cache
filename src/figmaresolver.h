@@ -19,6 +19,8 @@ public:
     QString name() const override { return QStringLiteral("Figma"); }
     bool handles(const QUrl &url) const override;
     void resolve(const QUrl &url, const Done &done) override;
+    // A frame rendered `pixels` large on its longest side (up to 4× its size)
+    bool sharpen(const QUrl &url, int pixels, const Done &done) override;
     void signIn(const Account &account, const QByteArray &token, const SignedIn &done) override;
     // Its accounts are for figma.com, whatever the link's host
     QString fixedHost() const override { return QStringLiteral("figma.com"); }
@@ -41,6 +43,9 @@ public:
     void setApi(const QString &base) { m_api = base; }
 
 private:
+    // What a link points to, its render (if a frame) at least `pixels`
+    // large, else as large as before or the usual size
+    void read(const QUrl &url, int pixels, const Done &done);
     void get(const QByteArray &token, const QString &path, const Links::JsonReply &reply);
 
     void listFiles(const Account &account, const std::function<void()> &done);
