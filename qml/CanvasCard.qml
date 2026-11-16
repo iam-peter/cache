@@ -71,6 +71,11 @@ Item {
         width = Qt.binding(() => itemWidth)
         height = Qt.binding(() => itemHeight)
     }
+    // A note as tall as what it holds
+    function fitToContent() {
+        if (isNote && body.item)
+            body.item.fitToContent()
+    }
     function commitGeometry() {
         Board.setGeometry(index, x, y, width, height)
         rebind()
@@ -544,6 +549,12 @@ Item {
                             id: copyMenu
                             canvas: root.canvas
                         }
+                    }
+                    Tip {
+                        visible: root.isNote && !root.formatting
+                        iconName: "move-vertical"
+                        tip: qsTr("Fit the height to the content")
+                        onClicked: root.fitToContent()
                     }
                     SizePipette {
                         visible: !root.isStroke && !root.formatting

@@ -365,6 +365,13 @@ Item {
         clearSelection()
         Board.removeItems(ids)
     }
+    // The selected notes, each as tall as what it holds
+    function fitToContent() {
+        for (const id of selection) {
+            if (cards[id])
+                cards[id].fitToContent()
+        }
+    }
     function duplicateSelected() {
         const ids = Board.duplicateItems(selection)
         if (ids.length > 0)
@@ -1949,6 +1956,13 @@ Item {
             text: view.selection.length > 1 ? qsTr("Fit selection") : qsTr("Zoom to it")
             shortcut: view.selection.length > 1 ? "Ctrl+2" : ""
             onTriggered: view.selection.length > 1 ? view.fitSelection() : view.focusItem(cardMenu.item.id)
+        }
+        MenuItem {
+            visible: cardMenu.item.type === "note"
+            height: visible ? implicitHeight : 0
+            text: view.selection.length > 1 ? qsTr("Fit the notes' height to their content")
+                                             : qsTr("Fit the height to the content")
+            onTriggered: view.fitToContent()
         }
         MenuSeparator {}
         KeyedMenuItem { text: qsTr("Add child"); shortcut: "Tab"; enabled: cardMenu.item.type === "note" || cardMenu.item.type === "shape"; onTriggered: view.addChild() }

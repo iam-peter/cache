@@ -274,12 +274,22 @@ Item {
             growTimer.start()
         }
     }
+    // The height that shows all of it
+    function neededHeight() {
+        return Math.ceil(flick.contentHeight + Styles.Primitives.spacing.sp200 + Styles.Primitives.spacing.sp150 + 8)
+    }
+    // Exactly as tall as what it holds: smaller too
+    function fitToContent() {
+        const h = Math.max(body.card.minH, neededHeight())
+        if (Math.abs(h - body.card.height) > 1)
+            Board.setGeometry(body.card.index, body.card.x, body.card.y, body.card.width, h)
+    }
     // After editing, a note grows to show what was written (up to a point)
     Timer {
         id: growTimer
         interval: 60
         onTriggered: {
-            const needed = flick.contentHeight + Styles.Primitives.spacing.sp200 + Styles.Primitives.spacing.sp150 + 8
+            const needed = body.neededHeight()
             if (needed > body.card.height + 2)
                 Board.setGeometry(body.card.index, body.card.x, body.card.y, body.card.width,
                                   Math.min(needed, Math.max(body.card.height, 720)))
