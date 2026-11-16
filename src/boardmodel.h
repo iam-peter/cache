@@ -209,13 +209,22 @@ public:
     Q_INVOKABLE void setNoteTask(int row, const QString &state);
 
     // Editing several items at once, each one undo step
-    Q_INVOKABLE void moveItems(const QVariantList &positions); // [{id, x, y}]
+    // [{id, x, y}]; whether any moved
+    Q_INVOKABLE bool moveItems(const QVariantList &positions);
     Q_INVOKABLE void removeItems(const QStringList &ids);
     Q_INVOKABLE QStringList duplicateItems(const QStringList &ids);
+    // Makes the last change part of the one before it: one undo takes
+    // back both (copying with Alt and moving the copies)
+    Q_INVOKABLE void mergeUndo();
     Q_INVOKABLE void setColorOf(const QStringList &ids, const QString &color);
     // left, hcenter, right, top, vcenter, bottom
     Q_INVOKABLE void align(const QStringList &ids, const QString &edge);
     Q_INVOKABLE void distribute(const QStringList &ids, bool horizontally);
+    // In a row, a column or a grid ("row", "column", "grid"), in reading
+    // order, from where the selection starts, 24 apart
+    Q_INVOKABLE void arrange(const QStringList &ids, const QString &layout);
+    // Every item as wide (or as tall) as the selection, lined up with it
+    Q_INVOKABLE void justify(const QStringList &ids, bool horizontally);
     // The size pipette: the items of `ids` take the width, the height or
     // both ("width", "height", "size") of `sourceId`, in one undo step.
     // Pen lines keep theirs, text keeps the height its font gives it.

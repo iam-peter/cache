@@ -496,6 +496,92 @@ Item {
 
     property var moveState: null
 
+    // What moving and resizing snap to: the other items' edges and middles
+    // (the smart guides) and, if set, the dot grid. Space held turns it off.
+    readonly property real gridSize: 24
+    function snapRects(excluded) {
+        const rects = []
+        for (const key in cards) {
+            const c = cards[key]
+            if (!excluded[key] && c.visible && !c.isStroke)
+                rects.push(Qt.rect(c.x, c.y, c.width, c.height))
+        }
+        return rects
+    }
+    // Of `edges`, the one nearest to a guide: {index, delta, at}, at null
+    // when none is within reach
+    function snapEdges(edges, vertical, rects) {
+        let best = { index: -1, delta: 0, at: null, d: 6 / zoom }
+        if (Theme.prefs.snap) {
+            for (const r of rects) {
+                const targets = vertical ? [r.x, r.x + r.width / 2, r.x + r.width]
+                                         : [r.y, r.y + r.height / 2, r.y + r.height]
+                for (let i = 0; i < edges.length; ++i) {
+                    for (const t of targets) {
+                        const d = Math.abs(t - edges[i])
+                        if (d < best.d)
+                            best = { index: i, delta: t - edges[i], at: t, d: d }
+                    }
+                }
+            }
+        }
+        if (best.at === null && Theme.prefs.snapGrid) {
+            best.d = Infinity
+            for (let i = 0; i < edges.length; ++i) {
+                const t = Math.round(edges[i] / gridSize) * gridSize
+                if (Math.abs(t - edges[i]) < best.d)
+                    best = { index: i, delta: t - edges[i], at: null, d: Math.abs(t - edges[i]) }
+            }
+        }
+        return best
+    }
+    // A guide along `at`, over the box and what it lines up with
+    function guideAlong(vertical, at, box, rects) {
+        let lo = vertical ? box.y : box.x
+        let hi = vertical ? box.y + box.height : box.x + box.width
+        for (const r of rects) {
+            const edges = vertical ? [r.x, r.x + r.width / 2, r.x + r.width] : [r.y, r.y + r.height / 2, r.y + r.height]
+            if (edges.some(e => Math.abs(e - at) < 0.5)) {
+                lo = Math.min(lo, vertical ? r.y : r.x)
+                hi = Math.max(hi, vertical ? r.y + r.height : r.x + r.width)
+            }
+        }
+        return vertical ? { x1: at, y1: lo, x2: at, y2: hi } : { x1: lo, y1: at, x2: hi, y2: at }
+    }
+    // A resized item's new box, its moving edges snapped. `handle` says
+    // which sides move ({h, v}: -1 start, 1 end, 0 neither); around the
+    // middle, both do.
+    function snapResize(r, handle, fromMiddle, rects, minW, minH) {
+        if (spaceHeld || (!Theme.prefs.snap && !Theme.prefs.snapGrid)) {
+            guides = []
+            return r
+        }
+        let box = Qt.rect(r.x, r.y, r.width, r.height)
+        const lines = []
+        for (const vertical of [true, false]) {
+            const side = vertical ? handle.h : handle.v
+            if (side === 0)
+                continue
+            const pos = vertical ? box.x : box.y
+            const size = vertical ? box.width : box.height
+            const edges = fromMiddle ? [pos, pos + size] : [side < 0 ? pos : pos + size]
+            const best = snapEdges(edges, vertical, rects)
+            if (best.index < 0)
+                continue
+            const atStart = fromMiddle ? best.index === 0 : side < 0
+            const grow = (atStart ? -best.delta : best.delta) * (fromMiddle ? 2 : 1)
+            if (size + grow < (vertical ? minW : minH))
+                continue
+            const newPos = atStart ? pos + best.delta : fromMiddle ? pos - best.delta : pos
+            box = vertical ? Qt.rect(newPos, box.y, size + grow, box.height)
+                           : Qt.rect(box.x, newPos, box.width, size + grow)
+            if (best.at !== null)
+                lines.push(guideAlong(vertical, best.at, box, rects))
+        }
+        guides = lines
+        return box
+    }
+
     function beginMove(id, p) {
         const ids = selection.indexOf(id) >= 0 ? selection.slice() : [id]
         // A section takes along what lies in it
@@ -517,14 +603,32 @@ Item {
         const moved = {}
         for (const mid of ids)
             moved[mid] = true
-        const others = []
-        for (const key in cards) {
-            const c = cards[key]
-            if (!moved[key] && c.visible && !c.isStroke)
-                others.push(Qt.rect(c.x, c.y, c.width, c.height))
-        }
-        moveState = { ids: ids, starts: starts, origin: p, others: others,
+        moveState = { ids: ids, starts: starts, origin: p, others: snapRects(moved), copied: false,
                       box: Board.boundsOf(selection.indexOf(id) >= 0 ? selection : [id]), moved: false }
+    }
+    // Alt as the move starts: copies go where it is dragged, the originals
+    // stay (and keep their connectors)
+    function copyForMove(st) {
+        const copies = Board.duplicateItems(st.ids)
+        const starts = {}
+        const kept = []
+        for (const id of copies) {
+            const c = cards[id]
+            if (!c)
+                continue
+            // Duplicates land a little off; they start where the originals are
+            starts[id] = Qt.point(c.x - 28, c.y - 28)
+            kept.push(id)
+        }
+        for (const id of st.ids) {
+            const c = cards[id]
+            if (c)
+                st.others.push(Qt.rect(c.x, c.y, c.width, c.height))
+        }
+        st.ids = kept
+        st.starts = starts
+        st.copied = true
+        setSelection(kept)
     }
     function updateMove(p, modifiers) {
         const st = moveState
@@ -534,51 +638,32 @@ Item {
         let dy = p.y - st.origin.y
         if (!st.moved && Math.hypot(dx, dy) * zoom < 3)
             return
+        if (!st.moved && (modifiers & Qt.AltModifier))
+            copyForMove(st)
         st.moved = true
         moving = true
+        // Shift: along one direction only
+        const axis = (modifiers & Qt.ShiftModifier) ? (Math.abs(dx) >= Math.abs(dy) ? "x" : "y") : ""
+        if (axis === "x")
+            dy = 0
+        else if (axis === "y")
+            dx = 0
         const lines = []
-        if (Theme.prefs.snap && !(modifiers & Qt.AltModifier) && st.others.length > 0) {
-            const tolerance = 6 / zoom
+        if (!spaceHeld) {
             const b = st.box
-            const snap = (edges, targets) => {
-                let best = { d: tolerance, delta: 0, at: null }
-                for (const e of edges) {
-                    for (const t of targets) {
-                        const d = Math.abs(t - e)
-                        if (d < best.d)
-                            best = { d: d, delta: t - e, at: t }
-                    }
-                }
-                return best
-            }
-            const xs = [], ys = []
-            for (const o of st.others) {
-                xs.push(o.x, o.x + o.width / 2, o.x + o.width)
-                ys.push(o.y, o.y + o.height / 2, o.y + o.height)
-            }
-            const sx = snap([b.x + dx, b.x + b.width / 2 + dx, b.x + b.width + dx], xs)
-            const sy = snap([b.y + dy, b.y + b.height / 2 + dy, b.y + b.height + dy], ys)
-            if (sx.at !== null)
+            const sx = axis === "y" ? { index: -1 }
+                     : snapEdges([b.x + dx, b.x + b.width / 2 + dx, b.x + b.width + dx], true, st.others)
+            const sy = axis === "x" ? { index: -1 }
+                     : snapEdges([b.y + dy, b.y + b.height / 2 + dy, b.y + b.height + dy], false, st.others)
+            if (sx.index >= 0)
                 dx += sx.delta
-            if (sy.at !== null)
+            if (sy.index >= 0)
                 dy += sy.delta
-            // Lines along what it lines up with
-            const span = (vertical, at) => {
-                let lo = vertical ? b.y + dy : b.x + dx
-                let hi = vertical ? b.y + b.height + dy : b.x + b.width + dx
-                for (const o of st.others) {
-                    const edges = vertical ? [o.x, o.x + o.width / 2, o.x + o.width] : [o.y, o.y + o.height / 2, o.y + o.height]
-                    if (edges.some(e => Math.abs(e - at) < 0.5)) {
-                        lo = Math.min(lo, vertical ? o.y : o.x)
-                        hi = Math.max(hi, vertical ? o.y + o.height : o.x + o.width)
-                    }
-                }
-                return vertical ? { x1: at, y1: lo, x2: at, y2: hi } : { x1: lo, y1: at, x2: hi, y2: at }
-            }
-            if (sx.at !== null)
-                lines.push(span(true, sx.at))
-            if (sy.at !== null)
-                lines.push(span(false, sy.at))
+            const moved = Qt.rect(b.x + dx, b.y + dy, b.width, b.height)
+            if (sx.index >= 0 && sx.at !== null)
+                lines.push(guideAlong(true, sx.at, moved, st.others))
+            if (sy.index >= 0 && sy.at !== null)
+                lines.push(guideAlong(false, sy.at, moved, st.others))
         }
         guides = lines
         for (const id of st.ids) {
@@ -603,7 +688,9 @@ Item {
                 if (c)
                     positions.push({ id: id, x: c.x, y: c.y })
             }
-            Board.moveItems(positions)
+            // Copying and moving the copies: one step to undo
+            if (Board.moveItems(positions) && st.copied)
+                Board.mergeUndo()
         }
         for (const id of st.ids) {
             if (cards[id])

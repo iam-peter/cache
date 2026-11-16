@@ -139,8 +139,9 @@ Item {
         id: dragArea
         anchors.fill: parent
         // Other tools draw or create on top of items: the canvas gets the press
-        enabled: !root.editing && !root.canvas.spaceHeld
-                 && (root.canvas.tool === "select" || root.canvas.tool === "connector")
+        // Space while moving turns snapping off; only before it pans
+        enabled: pressed || (!root.editing && !root.canvas.spaceHeld
+                 && (root.canvas.tool === "select" || root.canvas.tool === "connector"))
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         preventStealing: true
         cursorShape: root.canvas.tool === "connector" && root.connectable ? Qt.CrossCursor
@@ -564,8 +565,9 @@ Item {
 
     // --- Resizing ------------------------------------------------------------
     // From any corner or side, as in drawing programs: Shift keeps the
-    // proportions, Alt resizes around the middle
-    function resizeFrom(handle, start, delta, modifiers) {
+    // proportions, Alt resizes around the middle. The moving edges snap to
+    // other items (`rects`) and the grid, unless Space is held.
+    function resizeFrom(handle, start, delta, modifiers, rects) {
         const keep = modifiers & Qt.ShiftModifier
         const fromMiddle = modifiers & Qt.AltModifier
         const factor = fromMiddle ? 2 : 1
@@ -588,13 +590,14 @@ Item {
         const across = (side, size, startPos, startSize) =>
             fromMiddle || (side === 0 && keep) ? startPos + (startSize - size) / 2
             : side < 0 ? startPos + startSize - size : startPos
+        let box = Qt.rect(across(handle.h, w, start.x, start.width), across(handle.v, h, start.y, start.height), w, h)
+        // Proportions kept: snapping one edge would undo them
+        box = keep ? box : canvas.snapResize(box, handle, fromMiddle, rects, minW, minH)
         // Whole pixels, as moving keeps them
-        w = Math.round(w)
-        h = Math.round(h)
-        root.x = Math.round(across(handle.h, w, start.x, start.width))
-        root.y = Math.round(across(handle.v, h, start.y, start.height))
-        root.width = w
-        root.height = h
+        root.x = Math.round(box.x)
+        root.y = Math.round(box.y)
+        root.width = Math.round(box.width)
+        root.height = Math.round(box.height)
     }
 
     Repeater {
@@ -635,18 +638,26 @@ Item {
 
                 property point start
                 property rect startRect
+                property var rects: []
 
                 onPressed: (mouse) => {
                     start = mapToItem(root.parent, mouse.x, mouse.y)
                     startRect = Qt.rect(root.x, root.y, root.width, root.height)
+                    rects = root.canvas.snapRects({ [root.itemId]: true })
                 }
                 onPositionChanged: (mouse) => {
                     const p = mapToItem(root.parent, mouse.x, mouse.y)
                     root.resizeFrom(handle.modelData, startRect, Qt.point(p.x - start.x, p.y - start.y),
-                                    mouse.modifiers)
+                                    mouse.modifiers, rects)
                 }
-                onReleased: root.commitGeometry()
-                onCanceled: root.commitGeometry()
+                onReleased: {
+                    root.canvas.guides = []
+                    root.commitGeometry()
+                }
+                onCanceled: {
+                    root.canvas.guides = []
+                    root.commitGeometry()
+                }
             }
         }
     }

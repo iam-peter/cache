@@ -126,9 +126,14 @@ Dialog {
                     onToggled: Theme.prefs.wheelZooms = checked
                 }
                 Switch {
-                    text: qsTr("Snap to other items while moving (hold Alt to move freely)")
+                    text: qsTr("Snap to other items while moving and resizing (hold Space to move freely)")
                     checked: Theme.prefs.snap
                     onToggled: Theme.prefs.snap = checked
+                }
+                Switch {
+                    text: qsTr("Snap to the dot grid")
+                    checked: Theme.prefs.snapGrid
+                    onToggled: Theme.prefs.snapGrid = checked
                 }
                 Switch {
                     text: qsTr("Show [[links]] between notes as dotted lines")

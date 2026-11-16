@@ -80,6 +80,20 @@ Rectangle {
             tip: qsTr("Space evenly one above the other")
             onClicked: Board.distribute(bar.ids, false)
         }
+        Action {
+            iconName: "layout-grid"
+            tip: qsTr("Arrange in a row, a column or a grid; fill the width or height")
+            onClicked: arrangeMenu.popup(this, 0, height)
+            Menu {
+                id: arrangeMenu
+                MenuItem { text: qsTr("Arrange in a row"); onTriggered: Board.arrange(bar.ids, "row") }
+                MenuItem { text: qsTr("Arrange in a column"); onTriggered: Board.arrange(bar.ids, "column") }
+                MenuItem { text: qsTr("Arrange in a grid"); onTriggered: Board.arrange(bar.ids, "grid") }
+                MenuSeparator {}
+                MenuItem { text: qsTr("Fill the width"); onTriggered: Board.justify(bar.ids, true) }
+                MenuItem { text: qsTr("Fill the height"); onTriggered: Board.justify(bar.ids, false) }
+            }
+        }
         SizePipette {
             canvas: bar.canvas
             ids: bar.ids

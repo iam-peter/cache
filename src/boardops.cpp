@@ -506,7 +506,7 @@ void BoardModel::toggleTask(int row, int task)
 // ---------------------------------------------------------------------------
 // Several at once
 
-void BoardModel::moveItems(const QVariantList &positions)
+bool BoardModel::moveItems(const QVariantList &positions)
 {
     bool pushed = false;
     for (const QVariant &v : positions) {
@@ -530,6 +530,7 @@ void BoardModel::moveItems(const QVariantList &positions)
         updateDerived();
         markDirty();
     }
+    return pushed;
 }
 
 void BoardModel::removeItems(const QStringList &ids)
@@ -613,6 +614,14 @@ QStringList BoardModel::duplicateItems(const QStringList &ids)
         return {};
     pushUndo();
     return insertState(state, 28, 28);
+}
+
+void BoardModel::mergeUndo()
+{
+    if (m_undo.size() > 1) {
+        m_undo.removeLast();
+        emit undoStateChanged();
+    }
 }
 
 void BoardModel::setColorOf(const QStringList &ids, const QString &color)
@@ -723,6 +732,103 @@ void BoardModel::distribute(const QStringList &ids, bool horizontally)
         at += (horizontally ? it.w : it.h) + gap;
     }
     moveItems(positions);
+}
+
+namespace {
+
+constexpr double kArrangeGap = 24;
+
+} // namespace
+
+void BoardModel::arrange(const QStringList &ids, const QString &layout)
+{
+    QList<int> rows;
+    for (const QString &id : ids) {
+        const int row = indexOf(id);
+        if (valid(row) && !isStroke(m_items.at(row)))
+            rows << row;
+    }
+    if (rows.size() < 2)
+        return;
+    const QRectF bounds = boundsOf(ids);
+
+    // Reading order: lines of items that overlap in height, each left to right
+    std::sort(rows.begin(), rows.end(), [&](int a, int b) { return m_items.at(a).y < m_items.at(b).y; });
+    QList<QList<int>> lines;
+    double lineBottom = 0;
+    for (int row : std::as_const(rows)) {
+        const BoardItem &it = m_items.at(row);
+        if (lines.isEmpty() || it.y >= lineBottom - std::min(it.h, 40.0) / 2) {
+            lines.append(QList<int>{row});
+            lineBottom = it.y + it.h;
+        } else {
+            lines.last().append(row);
+            lineBottom = std::max(lineBottom, it.y + it.h);
+        }
+    }
+    QList<int> order;
+    for (QList<int> &line : lines) {
+        std::sort(line.begin(), line.end(), [&](int a, int b) { return m_items.at(a).x < m_items.at(b).x; });
+        order += line;
+    }
+
+    const qsizetype n = order.size();
+    const qsizetype columns = layout == QLatin1String("row")      ? n
+                              : layout == QLatin1String("column") ? 1
+                                                                  : qsizetype(std::ceil(std::sqrt(double(n))));
+    // Each column as wide as its widest item, each row as tall as its tallest
+    QList<double> widths(columns, 0), heights((n + columns - 1) / columns, 0);
+    for (qsizetype i = 0; i < n; ++i) {
+        const BoardItem &it = m_items.at(order.at(i));
+        widths[i % columns] = std::max(widths[i % columns], it.w);
+        heights[i / columns] = std::max(heights[i / columns], it.h);
+    }
+    QVariantList positions;
+    double y = bounds.top();
+    for (qsizetype r = 0; r < heights.size(); ++r) {
+        double x = bounds.left();
+        for (qsizetype c = 0; c < columns && r * columns + c < n; ++c) {
+            positions.append(QVariantMap{{QStringLiteral("id"), m_items.at(order.at(r * columns + c)).id},
+                                         {QStringLiteral("x"), x},
+                                         {QStringLiteral("y"), y}});
+            x += widths.at(c) + kArrangeGap;
+        }
+        y += heights.at(r) + kArrangeGap;
+    }
+    moveItems(positions);
+}
+
+void BoardModel::justify(const QStringList &ids, bool horizontally)
+{
+    const QRectF bounds = boundsOf(ids);
+    if (ids.size() < 2 || bounds.isEmpty())
+        return;
+    bool pushed = false;
+    for (const QString &id : ids) {
+        const int row = indexOf(id);
+        // A text's height is its font's; a line is drawn, not boxed
+        if (!valid(row) || isStroke(m_items.at(row))
+            || (!horizontally && m_items.at(row).type == QLatin1String("text")))
+            continue;
+        BoardItem &it = m_items[row];
+        const QRectF want = horizontally ? QRectF(bounds.left(), it.y, bounds.width(), it.h)
+                                         : QRectF(it.x, bounds.top(), it.w, bounds.height());
+        if (want == QRectF(it.x, it.y, it.w, it.h))
+            continue;
+        if (!pushed) {
+            pushUndo();
+            pushed = true;
+        }
+        it.x = want.x();
+        it.y = want.y();
+        it.w = want.width();
+        it.h = want.height();
+        emitRow(row, {PosXRole, PosYRole, WidthRole, HeightRole});
+    }
+    if (pushed) {
+        updateDerived();
+        markDirty();
+    }
 }
 
 // ---------------------------------------------------------------------------

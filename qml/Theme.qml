@@ -36,7 +36,8 @@ QtObject {
         property string codeFamily: "JetBrains Mono"
         property real codeSize: 10
         property bool showMinimap: true
-        property bool snap: true             // smart guides while moving
+        property bool snap: true             // smart guides while moving and resizing
+        property bool snapGrid: false        // and to the dot grid
         property bool showWikiLinks: true    // [[links]] as dotted lines
     }
     readonly property font uiFont: Qt.font({ family: prefs.uiFamily, pointSize: prefs.uiSize })

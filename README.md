@@ -55,7 +55,9 @@ request; the [website](pages/) is published from `pages/` by the
   Fit everything with `Ctrl+1` and the selection with `Ctrl+2`. A minimap
   in the corner shows where you are.
 - **Resizing** from any corner or side, as in drawing programs: `Shift`
-  keeps the proportions, `Alt` resizes around the middle.
+  keeps the proportions, `Alt` resizes around the middle. The edges snap
+  to other items' edges and middles, and to the dot grid if set
+  (Settings); `Space` while resizing turns snapping off.
 - **Tools, as in FigJam** (along the bottom): select, pan, note, text,
   code snippet, shapes (rectangle, ellipse, diamond, triangle), section,
   connector, pen and highlighter, each with a one-letter key (`F1`). A note,
@@ -63,8 +65,11 @@ request; the [website](pages/) is published from `pages/` by the
   gives the usual size.
 - **Selecting and arranging**: drag on empty space to select several
   (Shift adds), `Ctrl+A` for all. Move them together with smart guides
-  that snap to other items' edges and centres (Alt moves freely); align
-  and space them evenly, colour, copy, duplicate or delete them at once.
+  that snap to other items' edges and centres (`Space` while moving turns
+  snapping off, `Shift` keeps to one direction, `Alt` drags a copy);
+  align and space them evenly, arrange them in a row, a column or a grid,
+  make them fill the selection's width or height, colour, copy, duplicate
+  or delete them at once.
 - **Markdown notes**: double-click a note to edit it, `Esc` to finish.
   Notes render headings, lists, tables, links, images, videos and code,
   and grow to fit when you finish editing. Each note is a plain `.md`

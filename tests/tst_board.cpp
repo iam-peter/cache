@@ -247,6 +247,58 @@ private slots:
                      QStringLiteral("[gone.png](http://127.0.0.1:1/gone.png)"));
     }
 
+    void arrangeAndJustify()
+    {
+        BoardModel board;
+        board.load(project("arrange"));
+        // Reading order: a, b on top, c below
+        const int c = board.addNote(0, 300, QStringLiteral("c"), 200, 100);
+        const int b = board.addNote(260, 10, QStringLiteral("b"), 160, 120);
+        const int a = board.addNote(0, 0, QStringLiteral("a"), 200, 150);
+        const QString ia = board.get(a).value("id").toString(), ib = board.get(b).value("id").toString(),
+                      ic = board.get(c).value("id").toString();
+        const QStringList ids{ic, ib, ia};
+        const auto at = [&](const QString &id) {
+            const QVariantMap it = board.getById(id);
+            return QPointF(it.value("x").toDouble(), it.value("y").toDouble());
+        };
+        board.arrange(ids, QStringLiteral("row"));
+        QCOMPARE(at(ia), QPointF(0, 0));
+        QCOMPARE(at(ib), QPointF(224, 0));
+        QCOMPARE(at(ic), QPointF(408, 0));
+        board.arrange(ids, QStringLiteral("column"));
+        QCOMPARE(at(ib), QPointF(0, 174));
+        QCOMPARE(at(ic), QPointF(0, 318));
+        // A grid of two columns, each as wide as its widest
+        board.arrange(ids, QStringLiteral("grid"));
+        QCOMPARE(at(ia), QPointF(0, 0));
+        QCOMPARE(at(ib), QPointF(224, 0));
+        QCOMPARE(at(ic), QPointF(0, 174));
+        board.justify(ids, true);
+        for (const QString &id : ids)
+            QCOMPARE(board.getById(id).value("w").toDouble(), 384.0);
+        QCOMPARE(at(ib).x(), 0.0);
+        // One undo each
+        board.undo();
+        QCOMPARE(at(ib), QPointF(224, 0));
+    }
+
+    void copyAndMoveIsOneUndo()
+    {
+        BoardModel board;
+        board.load(project("copymove"));
+        const int row = board.addNote(0, 0, QStringLiteral("x"));
+        const QString id = board.get(row).value("id").toString();
+        const QStringList copies = board.duplicateItems({id});
+        QVERIFY(board.moveItems({QVariantMap{{"id", copies.first()}, {"x", 500}, {"y", 0}}}));
+        board.mergeUndo();
+        QCOMPARE(board.rowCount(), 2);
+        board.undo();
+        QCOMPARE(board.rowCount(), 1);
+        // Nothing moved: nothing to merge
+        QVERIFY(!board.moveItems({QVariantMap{{"id", id}, {"x", 0}, {"y", 0}}}));
+    }
+
     void linksShowWhatTheirServiceKnows()
     {
         BoardModel board;
