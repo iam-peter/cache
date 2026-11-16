@@ -619,18 +619,63 @@ Item {
             if (lo(r) >= hi(b) - tolerance && (after === null || lo(r) < lo(after)))
                 after = r
         }
-        // The gaps others keep: each item to its nearest neighbour after it
+        // The distances others keep, in either direction (a column's gaps
+        // serve a row too): each item to its nearest neighbour after it, and
+        // below it; then the padding inside the section, further down
         const gaps = []
-        for (let i = 0; i < items.length; ++i) {
-            let next = -1
-            for (let j = 0; j < items.length; ++j) {
-                if (j !== i && across(items[i], items[j]) && lo(items[j]) >= hi(items[i])
-                        && (next < 0 || lo(items[j]) < lo(items[next])))
-                    next = j
+        const keep = (d) => {
+            d = Math.round(d)
+            if (d > 0 && d < 400 && gaps.indexOf(d) < 0)
+                gaps.push(d)
+        }
+        for (const along of [true, false]) {
+            const l = r => along === horizontal ? lo(r) : crossLo(r)
+            const h = r => along === horizontal ? hi(r) : crossHi(r)
+            const facing = (r, t) => along === horizontal ? across(r, t)
+                                                          : lo(r) < hi(t) && lo(t) < hi(r)
+            for (let i = 0; i < items.length; ++i) {
+                let next = -1
+                for (let j = 0; j < items.length; ++j) {
+                    if (j !== i && facing(items[i], items[j]) && l(items[j]) >= h(items[i])
+                            && (next < 0 || l(items[j]) < l(items[next])))
+                        next = j
+                }
+                if (next >= 0)
+                    keep(l(items[next]) - h(items[i]))
             }
-            const gap = next < 0 ? 0 : Math.round(lo(items[next]) - hi(items[i]))
-            if (gap > 0 && gap < 400 && gaps.indexOf(gap) < 0)
-                gaps.push(gap)
+        }
+
+        // The section it lies in (the smallest), and the padding the others
+        // in it keep from any of its sides; a padding serves as a gap
+        // between them, and their gaps as a padding
+        const cx = b.x + b.width / 2, cy = b.y + b.height / 2
+        let parent = null
+        for (const sec of sections) {
+            if (cx > sec.x && cx < sec.x + sec.width && cy > sec.y && cy < sec.y + sec.height
+                    && (parent === null || sec.width * sec.height < parent.width * parent.height))
+                parent = sec
+        }
+        const pads = []
+        if (parent !== null) {
+            pads.push(24)
+            for (const r of items) {
+                const inside = r.x >= parent.x && r.y >= parent.y && r.x + r.width <= parent.x + parent.width
+                               && r.y + r.height <= parent.y + parent.height
+                if (!inside)
+                    continue
+                for (const pad of [r.x - parent.x, parent.x + parent.width - r.x - r.width,
+                                   r.y - parent.y, parent.y + parent.height - r.y - r.height]) {
+                    const p = Math.round(pad)
+                    if (p > 0 && p < 200 && pads.indexOf(p) < 0)
+                        pads.push(p)
+                }
+            }
+            for (const gap of gaps.slice()) {
+                if (gap < 200 && pads.indexOf(gap) < 0)
+                    pads.push(gap)
+            }
+            for (const pad of pads)
+                keep(pad)
         }
 
         // Where it may go, and the gaps that measure it there
@@ -647,30 +692,9 @@ Item {
             if (after !== null)
                 candidates.push({ to: lo(after) - gap - size, gaps: [{ from: lo(after) - gap, size: gap, other: after }] })
         }
-        // In a section: the padding the others in it keep from its sides
-        const cx = b.x + b.width / 2, cy = b.y + b.height / 2
-        let parent = null
-        for (const sec of sections) {
-            if (cx > sec.x && cx < sec.x + sec.width && cy > sec.y && cy < sec.y + sec.height
-                    && (parent === null || sec.width * sec.height < parent.width * parent.height))
-                parent = sec
-        }
-        if (parent !== null) {
-            const pads = [24]
-            for (const r of items) {
-                const inside = r.x >= parent.x && r.y >= parent.y && r.x + r.width <= parent.x + parent.width
-                               && r.y + r.height <= parent.y + parent.height
-                if (!inside)
-                    continue
-                for (const pad of [Math.round(lo(r) - lo(parent)), Math.round(hi(parent) - hi(r))]) {
-                    if (pad > 0 && pad < 200 && pads.indexOf(pad) < 0)
-                        pads.push(pad)
-                }
-            }
-            for (const pad of pads) {
-                candidates.push({ to: lo(parent) + pad, gaps: [{ from: lo(parent), size: pad, other: null }] })
-                candidates.push({ to: hi(parent) - pad - size, gaps: [{ from: hi(parent) - pad, size: pad, other: null }] })
-            }
+        for (const pad of pads) {
+            candidates.push({ to: lo(parent) + pad, gaps: [{ from: lo(parent), size: pad, other: null }] })
+            candidates.push({ to: hi(parent) - pad - size, gaps: [{ from: hi(parent) - pad, size: pad, other: null }] })
         }
 
         let best = null
