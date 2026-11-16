@@ -177,6 +177,15 @@ request; the [website](pages/) is published from `pages/` by the
   The command palette searches projects, merge requests and issues, and
   lists your open merge requests and those waiting for your review; the
   latter are also at the top of the Tasks tab.
+- **GitHub** (github.com or GitHub Enterprise, with a personal access
+  token): the same for pull requests (state, branches, author, reviewers,
+  who approved or asked for changes, checks, lines added and removed),
+  Actions runs and their jobs, files with lines (`#L40-L60`) as code,
+  issues, commits, repositories, releases, compares, milestones and gists.
+  The command palette searches repositories, pull requests and issues and
+  lists your open pull requests and those waiting for your review, which
+  are also in the Tasks tab with GitLab's. Without an account, GitHub
+  links are read as the web pages they are.
 - **Figma designs**: with a Figma personal access token (Settings,
   Accounts), a link to a frame or component shows it as Figma renders it,
   on its link card and in its hover card, with its name, size and file;
@@ -355,6 +364,7 @@ ctest --test-dir build --output-on-failure
 | `src/confluenceresolver.*` | Confluence pages, through Confluence's REST API, with the same accounts |
 | `src/figmaresolver.*` | Figma frames and files, through Figma's REST API, rendered as pictures |
 | `src/gitlabresolver.*` | GitLab merge requests, pipelines, files, issues, commits and more, through its REST API |
+| `src/githubresolver.*` | GitHub pull requests, Actions runs, files, issues, commits and more, through its REST API |
 | `src/pageresolver.*` | Any web page's title, description and picture, for link and hover cards |
 | `src/wikipediaresolver.*` | Wikipedia articles' opening lines and pictures |
 | `src/keychain.*` | Tokens in the system's keychain: libsecret, macOS Keychain, Windows Credential Manager |

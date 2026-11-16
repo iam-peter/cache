@@ -313,6 +313,10 @@ ApplicationWindow {
               enabled: Links.accounts.list.some(a => a.provider === "gitlab") },
             { name: qsTr("Merge requests waiting for my review (GitLab)"), query: "mr:review",
               enabled: Links.accounts.list.some(a => a.provider === "gitlab") },
+            { name: qsTr("My open pull requests (GitHub)"), query: "pr:mine",
+              enabled: Links.accounts.list.some(a => a.provider === "github") },
+            { name: qsTr("Pull requests waiting for my review (GitHub)"), query: "pr:review",
+              enabled: Links.accounts.list.some(a => a.provider === "github") },
             { name: qsTr("Export a picture…"), run: () => exportDialog.open() },
             { name: qsTr("Copy canvas as picture"), run: () => canvasView.exportImage([], "copy") },
             { name: qsTr("Export canvas as Markdown"), run: () => {

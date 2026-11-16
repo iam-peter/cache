@@ -1,5 +1,6 @@
 #include "confluenceresolver.h"
 #include "figmaresolver.h"
+#include "githubresolver.h"
 #include "gitlabresolver.h"
 #include "jiraresolver.h"
 #include "links.h"
@@ -251,6 +252,84 @@ public:
     }
     QString host() const { return QStringLiteral("127.0.0.1:%1").arg(serverPort()); }
     QString url(const char *path) const { return QStringLiteral("http://%1/group/app%2").arg(host(), QLatin1String(path)); }
+    QList<QByteArray> requests;
+};
+
+// A stand-in for GitHub Enterprise's API: one repository, o/app
+class FakeGitHub : public QTcpServer
+{
+public:
+    FakeGitHub()
+    {
+        listen(QHostAddress::LocalHost);
+        connect(this, &QTcpServer::newConnection, this, [this] {
+            while (QTcpSocket *socket = nextPendingConnection()) {
+                connect(socket, &QTcpSocket::readyRead, socket, [this, socket] {
+                    const QByteArray request = socket->readAll();
+                    requests << request;
+                    const QByteArray path = QByteArray::fromPercentEncoding(request.mid(4, request.indexOf(' ', 4) - 4));
+                    const QByteArray r = "/api/v3/repos/o/app";
+                    QByteArray status = "200 OK", body;
+                    const auto is = [&](const QByteArray &x) { return path == x; };
+                    if (!request.contains("\r\nAuthorization: Bearer ghp_test\r\n")) {
+                        status = "401 Unauthorized";
+                        body = R"({"message":"Bad credentials"})";
+                    } else if (is("/api/v3/user")) {
+                        body = R"({"login":"ada","name":"Ada Lovelace"})";
+                    } else if (is(r + "/pulls/7")) {
+                        body = R"({"number":7,"title":"Fix the crash on resize","state":"open","draft":false,"merged":false,
+                            "head":{"ref":"fix-resize","sha":"headsha"},"base":{"ref":"main"},"user":{"login":"ada"},
+                            "requested_reviewers":[{"login":"grace"}],"additions":12,"deletions":4,"changed_files":3,
+                            "labels":[{"name":"bug"}],"comments":1,"review_comments":2,"updated_at":"2026-11-15T10:00:00Z"})";
+                    } else if (is(r + "/pulls/7/reviews?per_page=100")) {
+                        body = R"([{"user":{"login":"grace"},"state":"COMMENTED"},{"user":{"login":"grace"},"state":"APPROVED"},
+                            {"user":{"login":"linus"},"state":"CHANGES_REQUESTED"}])";
+                    } else if (is(r + "/commits/headsha/check-runs?per_page=100")) {
+                        body = R"({"check_runs":[{"status":"completed","conclusion":"success"},
+                            {"status":"completed","conclusion":"failure"}]})";
+                    } else if (is(r + "/actions/runs/55")) {
+                        body = R"({"name":"CI","run_number":31,"head_branch":"main","display_title":"Fix it","status":"in_progress",
+                            "run_started_at":"2026-11-15T10:00:00Z","updated_at":"2026-11-15T10:03:05Z","actor":{"login":"ada"},
+                            "event":"push"})";
+                    } else if (is(r + "/actions/runs/55/jobs?per_page=100")) {
+                        body = R"({"jobs":[{"name":"build","status":"completed","conclusion":"success"},
+                            {"name":"test","status":"in_progress","conclusion":null}]})";
+                    } else if (is(r + "/contents/src/main.cpp?ref=main")) {
+                        QStringList lines;
+                        for (int i = 1; i <= 50; ++i)
+                            lines << QStringLiteral("int line%1 = %1;").arg(i);
+                        body = "{\"content\":\"" + lines.join('\n').toUtf8().toBase64() + "\"}";
+                    } else if (is(r + "/issues/9")) {
+                        body = R"({"number":9,"title":"Old idea","state":"closed","state_reason":"not_planned",
+                            "assignees":[],"labels":[],"comments":0})";
+                    } else if (is(r)) {
+                        body = R"({"full_name":"o/app","description":"The app","default_branch":"main","stargazers_count":5,
+                            "owner":{"avatar_url":"https://example.org/o.png"}})";
+                    } else if (is(r + "/commits/main/check-runs?per_page=100")) {
+                        body = R"({"check_runs":[{"status":"completed","conclusion":"success"}]})";
+                    } else if (is(r + "/languages")) {
+                        body = R"({"C++":800,"QML":200})";
+                    } else if (is(r + "/releases/latest")) {
+                        body = R"({"name":"v2","published_at":"2026-11-01T10:00:00Z"})";
+                    } else if (path.startsWith("/api/v3/search/issues") && path.contains("review-requested:@me")) {
+                        body = R"({"items":[{"title":"Review me","number":7,"state":"open",
+                            "repository_url":"https://x/api/v3/repos/o/app","pull_request":{},
+                            "html_url":"https://github.example/o/app/pull/7"}]})";
+                    } else if (path.startsWith("/api/v3/search/")) {
+                        body = R"({"items":[]})";
+                    } else {
+                        status = "404 Not Found";
+                        body = R"({"message":"Not Found"})";
+                    }
+                    socket->write("HTTP/1.1 " + status + "\r\nContent-Type: application/json\r\nContent-Length: "
+                                  + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
+                    socket->disconnectFromHost();
+                });
+            }
+        });
+    }
+    QString host() const { return QStringLiteral("127.0.0.1:%1").arg(serverPort()); }
+    QString url(const char *path) const { return QStringLiteral("http://%1/o/app%2").arg(host(), QLatin1String(path)); }
     QList<QByteArray> requests;
 };
 
@@ -770,7 +849,7 @@ private slots:
         });
         links.search(QStringLiteral("gr")); // too short: not asked
         links.search(QStringLiteral("gradient"));
-        QTRY_COMPARE(found.size(), 4); // GitLab answers too, with nothing
+        QTRY_COMPARE(found.size(), 5); // GitLab and GitHub answer too, with nothing
         const QVariantMap issue = found.value("jira").first().toMap();
         QCOMPARE(issue.value("title").toString(), QStringLiteral("Fix the crash on resize"));
         QCOMPARE(issue.value("url").toString(), QStringLiteral("https://%1/browse/IDS5-7").arg(server.host()));
@@ -788,7 +867,7 @@ private slots:
             found.insert(source, r);
         });
         links.search(QStringLiteral("design sys"));
-        QTRY_COMPARE(found.size(), 4); // GitLab answers too, with nothing
+        QTRY_COMPARE(found.size(), 5); // GitLab and GitHub answer too, with nothing
         QCOMPARE(found.value("figma").size(), 1);
         QCOMPARE(found.value("figma").first().toMap().value("url").toString(),
                  QStringLiteral("https://www.figma.com/design/AbCdEf123456/Design-System"));
@@ -848,7 +927,8 @@ private slots:
 
         const auto read = [&](const QString &url) -> QVariantMap {
             links.card(url);
-            QTest::qWaitFor([&] { return !links.card(url).isEmpty(); }, 5000);
+            const bool known = QTest::qWaitFor([&] { return !links.card(url).isEmpty(); }, 5000);
+            Q_UNUSED(known)
             return links.card(url);
         };
         const auto field = [](const QVariantMap &info, const QString &name) {
@@ -923,6 +1003,102 @@ private slots:
         // The token went only as a bearer token, to this host
         for (const QByteArray &request : std::as_const(server.requests))
             QVERIFY(request.contains("Host: " + server.host().toUtf8()));
+    }
+
+    void githubLinks()
+    {
+        using G = GitHubResolver;
+        const auto ref = [](const char *url) { return G::refOf(QUrl(QLatin1String(url))); };
+        G::Ref r = ref("https://github.com/o/app/pull/7/files");
+        QCOMPARE(r.repo, QStringLiteral("o/app"));
+        QCOMPARE(r.kind, QStringLiteral("pr"));
+        QCOMPARE(r.id, QStringLiteral("7"));
+        r = ref("https://github.com/o/app/blob/main/src/main.cpp#L40-L60");
+        QCOMPARE(r.kind, QStringLiteral("file"));
+        QCOMPARE(r.path, QStringLiteral("src/main.cpp"));
+        QCOMPARE(r.from, 40);
+        QCOMPARE(r.to, 60);
+        QCOMPARE(ref("https://github.com/o/app/actions/runs/55").kind, QStringLiteral("run"));
+        r = ref("https://github.com/o/app/actions/runs/55/job/66");
+        QCOMPARE(r.kind, QStringLiteral("job"));
+        QCOMPARE(r.id, QStringLiteral("66"));
+        QCOMPARE(ref("https://github.com/o/app/releases/tag/v2.0").id, QStringLiteral("v2.0"));
+        QCOMPARE(ref("https://github.com/o/app/compare/v1...main").id, QStringLiteral("v1...main"));
+        QCOMPARE(ref("https://github.com/o/app/tree/main/src").kind, QStringLiteral("repo"));
+        QCOMPARE(ref("https://gist.github.com/ada/0123456789abcdef").kind, QStringLiteral("gist"));
+        // Not in the REST API: read as a page; not a repository at all
+        QVERIFY(!ref("https://github.com/o/app/discussions/3").valid());
+        QVERIFY(!ref("https://github.com/orgs/o/repositories").valid());
+        QVERIFY(!ref("https://github.com/o").valid());
+        // Where the API is
+        QCOMPARE(G::apiOf(QStringLiteral("github.com")).first, QStringLiteral("api.github.com"));
+        QCOMPARE(G::apiOf(QStringLiteral("git.example.com")).second, QStringLiteral("/api/v3"));
+    }
+
+    void githubIsRead()
+    {
+        FakeGitHub server;
+        Links links{Links::Detached{}};
+        QSignalSpy added(&links, &Links::accountAdded);
+        links.addAccount(QStringLiteral("github"), server.host(), {}, QStringLiteral("ghp_test"));
+        QTRY_COMPARE(added.size(), 1);
+        QCOMPARE(added.at(0).at(0).toBool(), true);
+        QVERIFY(added.at(0).at(1).toString().contains(QStringLiteral("Ada Lovelace")));
+
+        const auto read = [&](const QString &url) -> QVariantMap {
+            links.card(url);
+            const bool known = QTest::qWaitFor([&] { return !links.card(url).isEmpty(); }, 5000);
+            Q_UNUSED(known)
+            return links.card(url);
+        };
+        const auto field = [](const QVariantMap &info, const QString &name) {
+            for (const QVariant &f : info.value("fields").toList()) {
+                if (f.toMap().value("name").toString() == name)
+                    return f.toMap().value("value").toString();
+            }
+            return QString();
+        };
+        QVariantMap info = read(server.url("/pull/7"));
+        QCOMPARE(info.value("title").toString(), QStringLiteral("#7"));
+        QCOMPARE(info.value("summary").toString(), QStringLiteral("Fix the crash on resize"));
+        QCOMPARE(info.value("status").toString(), QStringLiteral("Open"));
+        QCOMPARE(field(info, "Branches"), QStringLiteral("fix-resize → main"));
+        QCOMPARE(field(info, "Approved by"), QStringLiteral("grace"));
+        QCOMPARE(field(info, "Changes asked by"), QStringLiteral("linus"));
+        QCOMPARE(field(info, "Checks"), QStringLiteral("1 failed, 1 passed"));
+        QCOMPARE(field(info, "Changes"), QStringLiteral("+12 −4 in 3 files"));
+
+        info = read(server.url("/actions/runs/55"));
+        QCOMPARE(info.value("title").toString(), QStringLiteral("CI #31"));
+        QCOMPARE(info.value("status").toString(), QStringLiteral("Running"));
+        QCOMPARE(field(info, "build"), QStringLiteral("Passed"));
+        QCOMPARE(field(info, "test"), QStringLiteral("Running"));
+        QCOMPARE(field(info, "Duration"), QStringLiteral("3:05"));
+
+        info = read(server.url("/blob/main/src/main.cpp#L40-L41"));
+        QCOMPARE(info.value("code").toString(), QStringLiteral("int line40 = 40;\nint line41 = 41;"));
+        QCOMPARE(info.value("firstLine").toInt(), 40);
+
+        info = read(server.url("/issues/9"));
+        QCOMPARE(info.value("status").toString(), QStringLiteral("Not planned"));
+
+        info = read(server.url(""));
+        QCOMPARE(info.value("title").toString(), QStringLiteral("o/app"));
+        QCOMPARE(info.value("status").toString(), QStringLiteral("Passed"));
+        QCOMPARE(field(info, "Languages"), QStringLiteral("C++ 80%, QML 20%"));
+        QVERIFY(field(info, "Latest release").startsWith(QStringLiteral("v2")));
+
+        info = read(server.url("/pull/404"));
+        QVERIFY(info.value("error").toString().contains(QStringLiteral("Not found")));
+
+        // What waits for review, with GitLab's
+        QSignalSpy reviews(&links, &Links::reviewsChanged);
+        links.refreshReviews();
+        QTRY_COMPARE(reviews.size(), 1);
+        QCOMPARE(links.reviews().first().toMap().value("detail").toString(), QStringLiteral("o/app#7"));
+        // The token went to this host's API only
+        for (const QByteArray &request : std::as_const(server.requests))
+            QVERIFY(request.startsWith("GET /api/v3/"));
     }
 };
 

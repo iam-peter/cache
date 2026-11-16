@@ -196,7 +196,7 @@ Dialog {
                     wrapMode: Text.Wrap
                     color: Theme.textMuted
                     font.pixelSize: Styles.Primitives.fontSize.small
-                    text: qsTr("Links to Jira issues, Confluence pages, GitLab merge requests and pipelines, and Figma designs show their title, status and details while the pointer is on them. The token is kept in your system's keychain and is only ever sent to the sites it is for.")
+                    text: qsTr("Links to Jira issues, Confluence pages, GitLab and GitHub merge and pull requests, pipelines and runs, and Figma designs show their title, status and details while the pointer is on them. The token is kept in your system's keychain and is only ever sent to the sites it is for.")
                 }
                 Label {
                     Layout.fillWidth: true
@@ -311,6 +311,7 @@ Dialog {
                         // Atlassian Cloud's email; GitLab and Figma need only the token
                         readonly property bool needsUser: (Links.providers[currentIndex] || {}).needsUser === true
                         readonly property bool gitlab: currentValue === "gitlab"
+                        readonly property bool github: currentValue === "github"
                         Layout.fillWidth: true
                         textRole: "name"
                         valueRole: "id"
@@ -327,6 +328,7 @@ Dialog {
                         Layout.fillWidth: true
                         Layout.preferredWidth: 100 // fills the row; its text doesn't widen the dialog
                         placeholderText: providerBox.gitlab ? qsTr("gitlab.com, or your GitLab's address")
+                                       : providerBox.github ? qsTr("github.com, or your GitHub Enterprise's address")
                                                             : qsTr("example.atlassian.net, or an issue's address")
                     }
 
@@ -378,6 +380,8 @@ Dialog {
                               ? qsTr("Figma: a personal access token, made in Figma under Settings, Security, with read access to file content.")
                               : providerBox.gitlab
                               ? qsTr("GitLab: a personal access token with the read_api scope, made under your avatar, Edit profile, Access tokens.")
+                              : providerBox.github
+                              ? qsTr("GitHub: a personal access token, made under Settings, Developer settings: fine-grained with read access to contents, pull requests, issues and actions, or classic with repo.")
                               : qsTr("Atlassian Cloud (Jira and Confluence): your email and an <a href=\"https://id.atlassian.com/manage-profile/security/api-tokens\">API token</a>. Data Center: a personal access token from your profile, without an email.")
                         onLinkActivated: (link) => Qt.openUrlExternally(link)
                         HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }

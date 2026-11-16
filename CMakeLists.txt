@@ -109,6 +109,7 @@ qt_add_qml_module(cache
         src/confluenceresolver.h src/confluenceresolver.cpp
         src/figmaresolver.h src/figmaresolver.cpp
         src/gitlabresolver.h src/gitlabresolver.cpp
+        src/githubresolver.h src/githubresolver.cpp
         src/wikipediaresolver.h src/wikipediaresolver.cpp
         src/keychain.h src/keychain.cpp
         src/gridbackground.h src/gridbackground.cpp
@@ -202,6 +203,7 @@ if(BUILD_TESTING)
         src/confluenceresolver.h src/confluenceresolver.cpp
         src/figmaresolver.h src/figmaresolver.cpp
         src/gitlabresolver.h src/gitlabresolver.cpp
+        src/githubresolver.h src/githubresolver.cpp
         src/wikipediaresolver.h src/wikipediaresolver.cpp
         src/keychain.h src/keychain.cpp
         src/markdown.h src/markdown.cpp src/highlight.h src/highlight.cpp)

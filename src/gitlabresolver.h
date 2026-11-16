@@ -29,7 +29,7 @@ public:
     // user's open merge requests, "mr:review" those waiting for their review
     void search(const QString &query, const Results &done) override;
     // The merge requests waiting for the user's review, on every GitLab
-    void reviews(const Results &done);
+    void reviews(const Results &done) override;
 
     // What a link points to
     struct Ref

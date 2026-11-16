@@ -149,6 +149,9 @@ public:
     // [{title, detail, url, status, tone, image}]. Called back once.
     using Results = std::function<void(const QVariantList &results)>;
     virtual void search(const QString &query, const Results &done) { Q_UNUSED(query) done({}); }
+    // What waits for the user's review there (merge and pull requests),
+    // for the Tasks tab
+    virtual void reviews(const Results &done) { done({}); }
 };
 
 // Links to what other services hold, read through their resolvers. What
@@ -166,8 +169,9 @@ class Links : public QObject
     Q_PROPERTY(Accounts *accounts READ accounts CONSTANT)
     // [{id, name, fixedHost, needsUser}] of the resolvers that sign in
     Q_PROPERTY(QVariantList providers READ providers CONSTANT)
-    // GitLab merge requests waiting for the user's review, for the Tasks
-    // tab: [{title, detail, url, status, tone}]; see refreshReviews()
+    // GitLab merge requests and GitHub pull requests waiting for the
+    // user's review, for the Tasks tab: [{title, detail, url, status,
+    // tone}]; see refreshReviews()
     Q_PROPERTY(QVariantList reviews READ reviews NOTIFY reviewsChanged)
 
 public:
@@ -214,7 +218,7 @@ public:
     // more); each answers with found(), its source being the resolver's id
     Q_INVOKABLE void search(const QString &query);
     QVariantList reviews() const { return m_reviews; }
-    // Asks GitLab again which merge requests wait for the user's review
+    // Asks GitLab and GitHub again what waits for the user's review
     Q_INVOKABLE void refreshReviews();
     // The Atlassian sites to search: those with an account of their own,
     // and for an every-site account the sites links have been read from

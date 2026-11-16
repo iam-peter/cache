@@ -2,6 +2,7 @@
 
 #include "confluenceresolver.h"
 #include "figmaresolver.h"
+#include "githubresolver.h"
 #include "gitlabresolver.h"
 #include "jiraresolver.h"
 #include "highlight.h"
@@ -356,6 +357,7 @@ Links::Links(QObject *parent)
     addResolver(std::make_unique<ConfluenceResolver>(this));
     addResolver(std::make_unique<FigmaResolver>(this));
     addResolver(std::make_unique<GitLabResolver>(this));
+    addResolver(std::make_unique<GitHubResolver>(this));
     addOpenResolver(std::make_unique<WikipediaResolver>(this));
     m_page = std::make_unique<PageResolver>(this);
 }
@@ -398,6 +400,7 @@ Links::Links(Detached, QObject *parent)
     addResolver(std::make_unique<ConfluenceResolver>(this));
     addResolver(std::make_unique<FigmaResolver>(this));
     addResolver(std::make_unique<GitLabResolver>(this));
+    addResolver(std::make_unique<GitHubResolver>(this));
     addOpenResolver(std::make_unique<WikipediaResolver>(this));
     m_page = std::make_unique<PageResolver>(this);
 }
@@ -745,23 +748,32 @@ void Links::search(const QString &query)
 
 void Links::refreshReviews()
 {
-    auto *gitlab = static_cast<GitLabResolver *>(resolver(QStringLiteral("gitlab")));
-    const bool any = std::any_of(m_accounts->all().cbegin(), m_accounts->all().cend(),
-                                 [](const Account &a) { return a.provider == QLatin1String("gitlab"); });
-    if (!gitlab || !any) {
-        if (!m_reviews.isEmpty()) {
-            m_reviews.clear();
-            emit reviewsChanged();
-        }
-        return;
-    }
+    // Each service with an account answers; together they are the list
+    struct Gather {
+        QVariantList reviews;
+        int pending = 1;
+    };
+    auto gather = std::make_shared<Gather>();
     QPointer<Links> self(this);
-    gitlab->reviews([self](const QVariantList &results) {
-        if (!self || self->m_reviews == results)
+    const auto settle = [self, gather] {
+        if (--gather->pending > 0 || !self || self->m_reviews == gather->reviews)
             return;
-        self->m_reviews = results;
+        self->m_reviews = gather->reviews;
         emit self->reviewsChanged();
-    });
+    };
+    for (const auto &resolver : m_resolvers) {
+        const QString id = resolver->id();
+        const bool any = std::any_of(m_accounts->all().cbegin(), m_accounts->all().cend(),
+                                     [&id](const Account &a) { return a.provider == id; });
+        if (!any)
+            continue;
+        ++gather->pending;
+        resolver->reviews([gather, settle](const QVariantList &found) {
+            gather->reviews += found;
+            settle();
+        });
+    }
+    settle();
 }
 
 QStringList Links::atlassianSites() const
