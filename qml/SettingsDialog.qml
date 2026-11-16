@@ -196,7 +196,7 @@ Dialog {
                     wrapMode: Text.Wrap
                     color: Theme.textMuted
                     font.pixelSize: Styles.Primitives.fontSize.small
-                    text: qsTr("Links to issues on these hosts show the issue's summary and status, and its details while the pointer is on them. The token is kept in your system's keychain and is only ever sent to its host.")
+                    text: qsTr("Links to issues on these hosts show the issue's summary and status, and its details while the pointer is on them. The token is kept in your system's keychain and is only ever sent to the sites it is for.")
                 }
                 Label {
                     Layout.fillWidth: true
@@ -211,6 +211,7 @@ Dialog {
                     delegate: ColumnLayout {
                         id: account
                         required property var modelData
+                        readonly property bool everySite: modelData.host === "*.atlassian.net"
                         Layout.fillWidth: true
                         spacing: Styles.Primitives.spacing.sp050
                         RowLayout {
@@ -222,7 +223,7 @@ Dialog {
                             }
                             Label {
                                 Layout.fillWidth: true
-                                text: account.modelData.host
+                                text: account.everySite ? qsTr("every atlassian.net site") : account.modelData.host
                                 elide: Text.ElideRight
                             }
                             Label {
@@ -248,8 +249,11 @@ Dialog {
                             }
                             TextField {
                                 Layout.fillWidth: true
-                                text: (account.modelData.aliases || []).join(", ")
-                                placeholderText: qsTr("Other addresses of this Jira, e.g. jira.example.com")
+                                text: (account.modelData.aliases || []).map(a => a.replace("=", " = ")).join(", ")
+                                // Every site's account must say which site an old address moved to
+                                placeholderText: account.everySite
+                                                 ? qsTr("Old addresses and their sites: jira.example.com = example.atlassian.net")
+                                                 : qsTr("Other addresses of this Jira, e.g. jira.example.com")
                                 font.pixelSize: Styles.Primitives.fontSize.small
                                 onEditingFinished: Links.accounts.setAliases(account.modelData.provider,
                                                                              account.modelData.host, text)
@@ -292,7 +296,20 @@ Dialog {
                         placeholderText: qsTr("example.atlassian.net, or an issue's address")
                     }
 
-                    Label { text: qsTr("Email") }
+                    Item {
+                visible: everySiteBox.visible
+                width: 1
+                height: 1
+            }
+            CheckBox {
+                id: everySiteBox
+                Layout.fillWidth: true
+                visible: /\.atlassian\.net(?:[\/:]|$)/i.test(hostField.text.trim())
+                checked: true
+                text: qsTr("For every atlassian.net site: one API token works on all of them")
+            }
+
+            Label { text: qsTr("Email") }
                     TextField {
                         id: userField
                         Layout.fillWidth: true
@@ -333,7 +350,8 @@ Dialog {
                                     return
                                 accounts.busy = true
                                 accounts.message = ""
-                                Links.addAccount(providerBox.currentValue, hostField.text, userField.text, tokenField.text)
+                                Links.addAccount(providerBox.currentValue, hostField.text, userField.text, tokenField.text,
+                                         everySiteBox.visible && everySiteBox.checked)
                             }
                         }
                     }

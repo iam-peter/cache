@@ -38,11 +38,23 @@ struct LinkInfo
 struct Account
 {
     QString provider; // the resolver's id: "jira"
-    QString host;     // "example.atlassian.net", with ":port" if it has one
-    QString user;     // Jira Cloud: the email the token is of; empty for a bearer token
-    // Other hosts whose links it answers for: the old address of a Jira
-    // that moved. Their links are read from `host`; nothing goes to them.
+    // "example.atlassian.net", with ":port" if it has one; or kEverySite:
+    // one Atlassian sign-in (an email and API token of id.atlassian.com)
+    // for every Atlassian Cloud site
+    QString host;
+    QString user; // Jira Cloud: the email the token is of; empty for a bearer token
+    // Other hosts whose links it answers for, such as the old address of a
+    // Jira that moved: "old.example.com", read from `host`, or
+    // "old.example.com=site.atlassian.net", read from that site (every
+    // site's account must say which). Nothing goes to them.
     QStringList aliases;
+
+    static inline const QString kEverySite = QStringLiteral("*.atlassian.net");
+    bool everySite() const { return host == kEverySite; }
+    // The host to ask about a link on `linkHost`: the account's own, an
+    // alias's site, or for every site the link's own; empty when the
+    // account doesn't answer for it. The token goes nowhere else.
+    QString siteFor(const QString &linkHost) const;
 };
 
 // The accounts, kept in the settings, and their tokens, read from the
@@ -154,9 +166,10 @@ public:
     Q_INVOKABLE QVariantMap card(const QString &url);
     // Asks again now (a card's Reload)
     Q_INVOKABLE void reload(const QString &url);
-    // Signs in, then keeps the account: accountAdded says how it went
+    // Signs in, then keeps the account: accountAdded says how it went.
+    // `everySite`: an Atlassian Cloud host stands for every such site.
     Q_INVOKABLE void addAccount(const QString &provider, const QString &host, const QString &user,
-                                const QString &token);
+                                const QString &token, bool everySite = false);
     // Asks bindings that call info() again (once the board can ask)
     void touch();
 
@@ -167,6 +180,8 @@ public:
     static QString authority(const QUrl &url);
     // Only loopback hosts (tests, a local proxy) may be spoken to without TLS
     static bool loopback(const QString &host);
+    // An Atlassian Cloud site: "example.atlassian.net"
+    static bool atlassianSite(const QString &host);
 
     static constexpr int kFreshSeconds = 15 * 60;
     static constexpr int kRetrySeconds = 5 * 60;

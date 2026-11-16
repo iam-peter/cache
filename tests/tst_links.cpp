@@ -281,6 +281,55 @@ private slots:
         links.accounts()->remember({QStringLiteral("jira"), server.host(), {}}, "pat");
         QCOMPARE(links.accounts()->list().first().toMap().value("aliases").toStringList().size(), 1);
     }
+
+    void oneSignInForEveryAtlassianSite()
+    {
+        Links links{Links::Detached{}};
+        Accounts *accounts = links.accounts();
+        const QString every = Account::kEverySite;
+        accounts->remember({QStringLiteral("jira"), every, QStringLiteral("ada@example.org")}, "t");
+        const auto site = [&](const QString &host) {
+            const std::optional<Account> a = accounts->find(QStringLiteral("jira"), host);
+            return a ? a->siteFor(host) : QStringLiteral("-");
+        };
+        QCOMPARE(site(QStringLiteral("qtgroup.atlassian.net")), QStringLiteral("qtgroup.atlassian.net"));
+        QCOMPARE(site(QStringLiteral("qt-project.atlassian.net")), QStringLiteral("qt-project.atlassian.net"));
+        // Nothing that only looks like one
+        QCOMPARE(site(QStringLiteral("qtgroup.atlassian.net.example.com")), QStringLiteral("-"));
+        QCOMPARE(site(QStringLiteral("evilatlassian.net")), QStringLiteral("-"));
+        QCOMPARE(site(QStringLiteral("atlassian.net")), QStringLiteral("-"));
+        JiraResolver jira(&links);
+        QVERIFY(jira.handles(QUrl(QStringLiteral("https://qtgroup.atlassian.net/browse/IDS5-1341"))));
+
+        // An old address names the site it moved to; one without a site,
+        // or with one elsewhere, is left out
+        accounts->setAliases(QStringLiteral("jira"), every,
+                             QStringLiteral("https://jira.old.example.com/browse/X-1 = qt-project.atlassian.net, "
+                                            "other.example.com; bad.example.com -> evil.example.com"));
+        QCOMPARE(accounts->list().first().toMap().value("aliases").toStringList(),
+                 QStringList{QStringLiteral("jira.old.example.com=qt-project.atlassian.net")});
+        QCOMPARE(site(QStringLiteral("jira.old.example.com")), QStringLiteral("qt-project.atlassian.net"));
+        QCOMPARE(site(QStringLiteral("bad.example.com")), QStringLiteral("-"));
+        QVERIFY(jira.handles(QUrl(QStringLiteral("https://jira.old.example.com/browse/IDS5-1186"))));
+
+        // A site's own account still comes first
+        accounts->remember({QStringLiteral("jira"), QStringLiteral("qtgroup.atlassian.net"), {}}, "pat");
+        QCOMPARE(accounts->find(QStringLiteral("jira"), QStringLiteral("qtgroup.atlassian.net"))->host,
+                 QStringLiteral("qtgroup.atlassian.net"));
+        QCOMPARE(accounts->find(QStringLiteral("jira"), QStringLiteral("other.atlassian.net"))->host, every);
+    }
+
+    void aliasesOfOneHostStayWithIt()
+    {
+        Links links{Links::Detached{}};
+        links.accounts()->remember({QStringLiteral("jira"), QStringLiteral("jira.example.com"), {}}, "pat");
+        // Pointing elsewhere would send the token there: left out
+        links.accounts()->setAliases(QStringLiteral("jira"), QStringLiteral("jira.example.com"),
+                                     QStringLiteral("old.example.com, older.example.com = evil.example.com, "
+                                                    "oldest.example.com = jira.example.com"));
+        QCOMPARE(links.accounts()->list().first().toMap().value("aliases").toStringList(),
+                 QStringList({QStringLiteral("old.example.com"), QStringLiteral("oldest.example.com")}));
+    }
 };
 
 QTEST_MAIN(TestLinks)

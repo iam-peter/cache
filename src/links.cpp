@@ -52,6 +52,20 @@ LinkInfo LinkInfo::fromVariant(const QVariantMap &map)
 // ---------------------------------------------------------------------------
 // Accounts
 
+QString Account::siteFor(const QString &linkHost) const
+{
+    const QString h = linkHost.toLower();
+    for (const QString &alias : aliases) {
+        if (alias.section(QLatin1Char('='), 0, 0) == h) {
+            const QString site = alias.section(QLatin1Char('='), 1);
+            return !site.isEmpty() ? site : everySite() ? QString() : host;
+        }
+    }
+    if (everySite())
+        return Links::atlassianSite(h) ? h : QString();
+    return host.compare(h, Qt::CaseInsensitive) == 0 ? host : QString();
+}
+
 Accounts::Accounts(bool persistent, QObject *parent)
     : QObject(parent)
     , m_persistent(persistent)
@@ -90,12 +104,21 @@ bool Accounts::keychain() const
 
 std::optional<Account> Accounts::find(const QString &provider, const QString &host) const
 {
+    // The site's own account first, then one naming it as an old address,
+    // then one for every site
     for (const Account &a : m_accounts) {
-        if (a.provider == provider && a.host.compare(host, Qt::CaseInsensitive) == 0)
+        if (a.provider == provider && !a.everySite() && a.host.compare(host, Qt::CaseInsensitive) == 0)
             return a;
     }
     for (const Account &a : m_accounts) {
-        if (a.provider == provider && a.aliases.contains(host, Qt::CaseInsensitive))
+        for (const QString &alias : a.aliases) {
+            if (a.provider == provider && alias.section(QLatin1Char('='), 0, 0).compare(host, Qt::CaseInsensitive) == 0
+                && !a.siteFor(host).isEmpty())
+                return a;
+        }
+    }
+    for (const Account &a : m_accounts) {
+        if (a.provider == provider && a.everySite() && !a.siteFor(host).isEmpty())
             return a;
     }
     return std::nullopt;
@@ -103,11 +126,28 @@ std::optional<Account> Accounts::find(const QString &provider, const QString &ho
 
 void Accounts::setAliases(const QString &provider, const QString &host, const QString &aliases)
 {
+    const bool everySite = host == Account::kEverySite;
     QStringList hosts;
-    for (const QString &part : aliases.split(QRegularExpression(QStringLiteral("[,\\s]+")), Qt::SkipEmptyParts)) {
-        const QString h = Links::hostOf(part);
-        if (!h.isEmpty() && h.compare(host, Qt::CaseInsensitive) != 0 && !hosts.contains(h))
-            hosts << h;
+    // "old", or "old = site" (also → or ->), separated by commas or new lines
+    for (const QString &entry : aliases.split(QRegularExpression(QStringLiteral("[,;\\n]+")), Qt::SkipEmptyParts)) {
+        const QStringList parts = entry.split(QRegularExpression(QStringLiteral("\\s*(?:=|->|→)\\s*")));
+        const QString old = Links::hostOf(parts.value(0));
+        QString site = parts.size() > 1 ? Links::hostOf(parts.at(1)) : QString();
+        if (old.isEmpty() || old.compare(host, Qt::CaseInsensitive) == 0)
+            continue;
+        // The token goes only where the account belongs: its own host, or
+        // for every site an Atlassian one
+        if (everySite) {
+            if (!Links::atlassianSite(site))
+                continue;
+        } else if (site.compare(host, Qt::CaseInsensitive) == 0) {
+            site.clear();
+        } else if (!site.isEmpty()) {
+            continue;
+        }
+        const QString stored = site.isEmpty() ? old : old + QLatin1Char('=') + site;
+        if (!hosts.contains(stored))
+            hosts << stored;
     }
     for (Account &a : m_accounts) {
         if (a.provider != provider || a.host.compare(host, Qt::CaseInsensitive) != 0 || a.aliases == hosts)
@@ -406,9 +446,11 @@ QVariantMap Links::lookUp(const QString &url, LinkResolver *resolver)
     return entry.info ? entry.info->toVariant() : QVariantMap();
 }
 
-void Links::addAccount(const QString &provider, const QString &host, const QString &user, const QString &token)
+void Links::addAccount(const QString &provider, const QString &host, const QString &user, const QString &token,
+                       bool everySite)
 {
     const QString h = hostOf(host);
+    everySite = everySite && atlassianSite(h);
     LinkResolver *resolver = nullptr;
     for (const auto &r : m_resolvers) {
         if (r->id() == provider)
@@ -418,16 +460,21 @@ void Links::addAccount(const QString &provider, const QString &host, const QStri
         emit accountAdded(false, tr("A host and a token are needed."));
         return;
     }
-    const Account account{provider, h, user.trimmed()};
+    // Signed in on the site given; kept for it, or for every site
+    const Account site{provider, h, user.trimmed(), {}};
+    const Account account{provider, everySite ? Account::kEverySite : h, user.trimmed(), {}};
     const QByteArray secret = token.trimmed().toUtf8();
     QPointer<Links> self(this);
-    resolver->signIn(account, secret, [self, account, secret](bool ok, const QString &message) {
+    resolver->signIn(site, secret, [self, account, secret](bool ok, const QString &signedIn) {
         if (!self)
             return;
         if (!ok) {
-            emit self->accountAdded(false, message);
+            emit self->accountAdded(false, signedIn);
             return;
         }
+        const QString message = account.everySite()
+            ? signedIn + QLatin1Char(' ') + tr("Links to every atlassian.net site are read with it.")
+            : signedIn;
         self->m_accounts->save(account, secret, [self, message](bool saved, const QString &error) {
             if (!self)
                 return;
@@ -462,6 +509,12 @@ QString Links::authority(const QUrl &url)
 {
     const QString host = url.host().toLower();
     return url.port() > 0 ? host + QLatin1Char(':') + QString::number(url.port()) : host;
+}
+
+bool Links::atlassianSite(const QString &host)
+{
+    static const QRegularExpression site(QStringLiteral(R"(^[a-z0-9][a-z0-9-]*\.atlassian\.net$)"));
+    return site.match(host.toLower()).hasMatch();
 }
 
 bool Links::loopback(const QString &host)

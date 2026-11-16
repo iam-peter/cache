@@ -153,12 +153,15 @@ request; the [website](pages/) is published from `pages/` by the
 - **Linked issues**: with an account for a Jira host (Settings, Accounts),
   a link to one of its issues shows the issue's summary and status after
   it, and its type, priority, assignee and when it changed while the
-  pointer is on it. Jira Cloud takes your email and an API token, Jira
-  Data Center a personal access token. A Jira that moved keeps its old
-  links working: give its account the old address under **Also for**,
-  and they are read from the new host. The token is kept in the system's
-  keychain and sent only to its host; what the issues say is kept in
-  Cache's cache folder, not in the project
+  pointer is on it. Jira Cloud takes your email and an API token from
+  id.atlassian.com, which works on every Atlassian Cloud site you can
+  see: one sign-in can serve all `*.atlassian.net` sites. Jira Data
+  Center takes a personal access token. A Jira that moved keeps its old
+  links working: give the account the old address under **Also for**
+  (`jira.example.com = example.atlassian.net` for the all-sites one),
+  and they are read from the new site. The token is kept in the system's
+  keychain and sent only to the sites it is for; what the issues say is
+  kept in Cache's cache folder, not in the project
 - **For Teams, mail and documents**:
   - **Copy note** (`Ctrl+C`, or `Ctrl+Shift+C` while editing) puts a note on
     the clipboard as rich text with its images embedded, code as coloured

@@ -8,8 +8,10 @@
 // with an email and an API token, Jira Data Center with a personal access
 // token. Both answer to REST API 2.
 //
-// The token goes to the account's own host only, over TLS, and no redirect
-// is followed: a sign-in page elsewhere gets nothing.
+// The token goes only to the site the account gives for a link (its own
+// host, an old address's new site, or for an account of every Atlassian
+// site that site), over TLS, and no redirect is followed: a sign-in page
+// elsewhere gets nothing.
 class JiraResolver : public LinkResolver
 {
 public:
@@ -26,7 +28,9 @@ public:
 
 private:
     using Reply = std::function<void(int status, const QJsonObject &json, const QString &error)>;
-    void get(const Account &account, const QByteArray &token, const QString &path, const Reply &reply);
+    // `site`: the account's host, or the one it gives for a link (siteFor)
+    void get(const QString &site, const Account &account, const QByteArray &token, const QString &path,
+             const Reply &reply);
 
     Links *m_links;
 };

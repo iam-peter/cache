@@ -50,18 +50,19 @@ void JiraResolver::resolve(const QUrl &url, const Done &done)
         return;
     }
     const Account a = *account;
-    m_links->accounts()->token(a, [this, a, key, done](const QByteArray &token) {
+    const QString site = a.siteFor(Links::authority(url));
+    m_links->accounts()->token(a, [this, a, site, key, done](const QByteArray &token) {
         if (token.isEmpty()) {
             done(std::nullopt, QStringLiteral("no token for %1").arg(a.host));
             return;
         }
-        get(a, token,
+        get(site, a, token,
             QStringLiteral("/rest/api/2/issue/%1?fields=summary,status,issuetype,priority,assignee,reporter,updated")
                 .arg(key),
-            [a, key, done](int status, const QJsonObject &json, const QString &error) {
+            [site, key, done](int status, const QJsonObject &json, const QString &error) {
                 if (status == 200) {
                     LinkInfo info = infoOf(key, json);
-                    info.site = QStringLiteral("Jira · %1").arg(a.host);
+                    info.site = QStringLiteral("Jira · %1").arg(site);
                     done(info, {});
                 }
                 else
@@ -72,7 +73,7 @@ void JiraResolver::resolve(const QUrl &url, const Done &done)
 
 void JiraResolver::signIn(const Account &account, const QByteArray &token, const SignedIn &done)
 {
-    get(account, token, QStringLiteral("/rest/api/2/myself"),
+    get(account.host, account, token, QStringLiteral("/rest/api/2/myself"),
         [account, done](int status, const QJsonObject &json, const QString &error) {
             if (status == 200) {
                 const QString who = json.value(QLatin1String("displayName")).toString();
@@ -119,12 +120,12 @@ LinkInfo JiraResolver::infoOf(const QString &key, const QJsonObject &issue)
     return info;
 }
 
-void JiraResolver::get(const Account &account, const QByteArray &token, const QString &path, const Reply &reply)
+void JiraResolver::get(const QString &site, const Account &account, const QByteArray &token, const QString &path,
+                       const Reply &reply)
 {
-    // Built from the account, never from the link: the token goes to its host
+    // Built from the site the account gives, never from the link itself
     QUrl url(QStringLiteral("%1://%2%3")
-                 .arg(Links::loopback(account.host) ? QStringLiteral("http") : QStringLiteral("https"),
-                      account.host, path));
+                 .arg(Links::loopback(site) ? QStringLiteral("http") : QStringLiteral("https"), site, path));
     QNetworkRequest request(url);
     request.setRawHeader("Accept", "application/json");
     request.setRawHeader("Authorization", account.user.isEmpty()
