@@ -220,6 +220,11 @@ Item {
     function startEditing(id) {
         if (!id)
             return
+        // Another board: opened, not edited
+        if (cards[id] && cards[id].isBoard) {
+            cards[id].openBoard()
+            return
+        }
         if (cards[id] && cards[id].itemLocked) {
             toast.show(qsTr("It's locked. Unlock it to change it."))
             return
@@ -373,8 +378,9 @@ Item {
             // What stays stays selected
             setSelection(locked)
             toast.show(locked.length === ids.length ? qsTr("Locked items aren't deleted. Unlock them first.")
-                                                    : qsTr("%n locked item(s) kept: unlock them to delete them.", "",
-                                                           locked.length))
+                                                    : locked.length === 1
+                                                      ? qsTr("1 locked item kept: unlock it to delete it.")
+                                                      : qsTr("%1 locked items kept: unlock them to delete them.").arg(locked.length))
         }
     }
     // A link card for `url` in the middle of the view, selected
@@ -384,6 +390,13 @@ Item {
         if (row >= 0)
             setSelection([Board.get(row).id])
         return row
+    }
+    // A card of another project of the workspace, by its folder's name
+    function addBoardCard(project) {
+        const c = centerWorld()
+        const row = Board.addItem("board", Math.round(c.x - 180), Math.round(c.y - 130), 360, 260, "", project)
+        if (row >= 0)
+            setSelection([Board.get(row).id])
     }
     // An empty one, its address being asked for
     function newLinkCard() {

@@ -49,8 +49,12 @@ Popup {
                     list.push({ section: qsTr("Sections"), title: it.title, item: it.id })
             }
             for (const p of Workspace.projects()) {
-                if (fits(p.name, ws))
+                if (fits(p.name, ws)) {
                     list.push({ section: qsTr("Projects"), title: p.name, project: p.row })
+                    if (p.path !== Workspace.currentPath)
+                        list.push({ section: qsTr("Projects"), title: qsTr("Add a card of “%1” here").arg(p.name),
+                                    board: p.name })
+                }
             }
         }
         const names = { jira: "Jira", confluence: "Confluence", figma: "Figma" }
@@ -74,6 +78,8 @@ Popup {
                 canvas.openNote(found.projectPath, found.noteId)
         } else if (entry.item) {
             canvas.focusItem(entry.item)
+        } else if (entry.board) {
+            canvas.addBoardCard(entry.board)
         } else if (entry.project !== undefined) {
             Workspace.currentIndex = entry.project
         } else if (entry.url) {

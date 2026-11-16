@@ -918,6 +918,33 @@ private slots:
         again.undo();
         QVERIFY(again.getById(id).value("locked").toBool());
     }
+
+    void boardPreviews()
+    {
+        // Another project next to this one, with a note and a section
+        const QString other = project("other-board");
+        {
+            BoardModel board;
+            board.load(other);
+            board.addNote(0, 0, QStringLiteral("# Roadmap\n\nsoon"), 300, 200);
+            board.addItem(QStringLiteral("section"), -50, -50, 600, 400, {}, QStringLiteral("Q1"));
+            board.save();
+        }
+        BoardModel board;
+        board.load(project("this-board"));
+        const QVariantMap preview = board.boardPreview(QStringLiteral("other-board"));
+        QVERIFY(preview.value("found").toBool());
+        QCOMPARE(preview.value("notes").toInt(), 1);
+        QStringList titles;
+        for (const QVariant &v : preview.value("items").toList())
+            titles << v.toMap().value("title").toString();
+        QVERIFY(titles.contains(QStringLiteral("Roadmap")));
+        QVERIFY(titles.contains(QStringLiteral("Q1")));
+        QCOMPARE(preview.value("bounds").toRectF(), QRectF(-50, -50, 600, 400));
+        // Not a project, or not one name
+        QVERIFY(!board.boardPreview(QStringLiteral("missing")).value("found").toBool());
+        QVERIFY(!board.boardPreview(QStringLiteral("../other-board")).value("found").toBool());
+    }
 };
 
 QTEST_MAIN(TestBoard)

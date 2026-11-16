@@ -239,6 +239,9 @@ request; the [website](pages/) is published from `pages/` by the
   that have an account of their own) and Figma (the files of the teams
   given under its account) for what you type; Enter adds what they found
   to the canvas as a link card, Shift+Enter opens it in the browser.
+- **Boards in boards**: a card of another project (from the command
+  palette: type its name, then *Add a card of …*) shows its canvas in
+  miniature, with its notes' titles; double-click it to open that project.
 - **Following connectors**: a selected connector's toolbar goes to the
   item it comes from or points to, however far away.
 
@@ -353,6 +356,7 @@ ctest --test-dir build --output-on-failure
 | `qml/LinkBody.qml` | A link card: a web page or an issue |
 | `qml/ExportDialog.qml`, `Redacted.qml` | Exporting pictures; text as grey bars for privacy |
 | `qml/CommandPalette.qml` | Ctrl+P: commands, notes, sections, projects, and Jira, Confluence and Figma |
+| `qml/BoardBody.qml` | A card of another project, its canvas in miniature |
 | `qml/Connector.qml` | A connector, its route and arrows |
 | `qml/ToolPalette.qml`, `Minimap.qml`, `SelectionBar.qml`, `LinkBar.qml` | Tools, map, toolbars for selections and connectors |
 | `qml/TemplateDialog.qml`, `HistoryDialog.qml` | Templates and versions |

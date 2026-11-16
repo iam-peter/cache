@@ -36,9 +36,10 @@ Item {
     readonly property bool isSection: itemType === "section"
     readonly property bool isStroke: itemType === "stroke"
     readonly property bool isLink: itemType === "link"
-    // On a card of its own: notes and web links
-    readonly property bool framed: isNote || isLink
-    readonly property bool connectable: isNote || isShape || isText || isLink
+    readonly property bool isBoard: itemType === "board" // another project
+    // On a card of its own: notes, web links and other boards
+    readonly property bool framed: isNote || isLink || isBoard
+    readonly property bool connectable: isNote || isShape || isText || isLink || isBoard
 
     // Pictures of the canvas show no selection
     readonly property bool selected: !canvas.exporting && canvas.selection.indexOf(itemId) >= 0
@@ -48,8 +49,8 @@ Item {
     readonly property bool formatting: editing && isNote
     readonly property bool linkTarget: canvas.linkTargetId === itemId
     readonly property real inv: 1 / canvas.zoom
-    readonly property real minW: isNote || isLink ? 160 : 30
-    readonly property real minH: isNote ? 70 : isLink ? 60 : 20
+    readonly property real minW: isNote || isLink || isBoard ? 160 : 30
+    readonly property real minH: isNote ? 70 : isLink ? 60 : isBoard ? 100 : 20
     readonly property color fillColor: Theme.noteColor(itemColor)
     readonly property bool chrome: !canvas.exporting
 
@@ -71,6 +72,10 @@ Item {
         y = Qt.binding(() => posY)
         width = Qt.binding(() => itemWidth)
         height = Qt.binding(() => itemHeight)
+    }
+    function openBoard() {
+        if (isBoard && body.item)
+            body.item.open()
     }
     // A note as tall as what it holds
     function fitToContent() {
@@ -193,7 +198,7 @@ Item {
         // A note whose task is done: faded, its tick still clear
         opacity: root.isNote && root.itemTask === "done" && !root.editing ? 0.5 : 1
         sourceComponent: root.isNote ? noteBody : root.isShape ? shapeBody : root.isText ? textBody
-                       : root.isSection ? sectionBody : root.isLink ? linkBody : strokeBody
+                       : root.isSection ? sectionBody : root.isLink ? linkBody : root.isBoard ? boardBody : strokeBody
     }
 
     // Locked: a small lock in the corner, while it is selected or hovered
@@ -253,6 +258,7 @@ Item {
     Component { id: sectionBody; SectionBody { card: root } }
     Component { id: strokeBody; StrokeBody { card: root } }
     Component { id: linkBody; LinkBody { card: root } }
+    Component { id: boardBody; BoardBody { card: root } }
 
     // --- Mindmap: folding a branch ---------------------------------------
     HoverHandler { id: cardHover }

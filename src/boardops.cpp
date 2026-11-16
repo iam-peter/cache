@@ -1548,3 +1548,43 @@ bool BoardModel::saveTemplate(const QStringList &ids, const QString &name, const
                   .toJson(QJsonDocument::Indented));
     return out.commit();
 }
+
+QVariantMap BoardModel::boardPreview(const QString &project) const
+{
+    if (m_projectPath.isEmpty() || project.isEmpty() || project.contains(QLatin1Char('/')))
+        return {{QStringLiteral("found"), false}, {QStringLiteral("name"), project}};
+    const QDir dir(QFileInfo(m_projectPath).absoluteDir().filePath(project));
+    QFile file(dir.filePath(QStringLiteral("canvas.json")));
+    if (!dir.exists() || !file.open(QIODevice::ReadOnly))
+        return {{QStringLiteral("found"), dir.exists()}, {QStringLiteral("name"), project}, {QStringLiteral("notes"), 0}};
+    const QJsonArray items = QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("items")).toArray();
+    QVariantList list;
+    QRectF bounds;
+    int notes = 0;
+    for (const QJsonValue &v : items) {
+        const BoardItem it = itemFromJson(v.toObject());
+        if (it.type == QLatin1String("note"))
+            ++notes;
+        if (list.size() >= 400)
+            continue;
+        QString title;
+        if (it.type == QLatin1String("note")) {
+            // The note's first lines are enough for its title
+            QFile md(dir.filePath(QStringLiteral("notes/%1.md").arg(it.id)));
+            if (md.open(QIODevice::ReadOnly))
+                title = titleForText(QString::fromUtf8(md.read(2048)));
+        } else if (it.type != QLatin1String("stroke")) {
+            title = it.text.section(QLatin1Char('\n'), 0, 0).left(60);
+        }
+        bounds = bounds.united(QRectF(it.x, it.y, it.w, it.h));
+        list << QVariantMap{{QStringLiteral("x"), it.x}, {QStringLiteral("y"), it.y},
+                            {QStringLiteral("w"), it.w}, {QStringLiteral("h"), it.h},
+                            {QStringLiteral("type"), it.type}, {QStringLiteral("color"), it.color},
+                            {QStringLiteral("title"), title}};
+    }
+    return {{QStringLiteral("found"), true},
+            {QStringLiteral("name"), project},
+            {QStringLiteral("notes"), notes},
+            {QStringLiteral("bounds"), bounds},
+            {QStringLiteral("items"), list}};
+}

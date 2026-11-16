@@ -262,6 +262,10 @@ public:
     Q_INVOKABLE QVariantMap getById(const QString &id) const;
     Q_INVOKABLE QRectF itemsBounds() const;
     Q_INVOKABLE QRectF boundsOf(const QStringList &ids) const;
+    // Another project of the workspace, by its folder's name, in miniature
+    // for a board card: {found, name, notes, bounds, items: [{x, y, w, h,
+    // type, color, title}]} (at most a few hundred items)
+    Q_INVOKABLE QVariantMap boardPreview(const QString &project) const;
     Q_INVOKABLE int itemAt(double x, double y) const; // topmost shown, or -1
     // Notes and shapes under (x, y); sections and strokes are skipped
     Q_INVOKABLE QString targetAt(double x, double y, const QString &except = {}) const;
