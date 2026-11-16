@@ -27,6 +27,9 @@ public:
     static LinkInfo infoOf(const QString &key, const QJsonObject &issue);
 
 private:
+    // The account for a link and the site to ask: by the link's host, or
+    // by the Atlassian site that host turned out to be an address of
+    std::optional<std::pair<Account, QString>> accountFor(const QUrl &url) const;
     using Reply = std::function<void(int status, const QJsonObject &json, const QString &error)>;
     // `site`: the account's host, or the one it gives for a link (siteFor)
     void get(const QString &site, const Account &account, const QByteArray &token, const QString &path,

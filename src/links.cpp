@@ -10,6 +10,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
+#include <QNetworkReply>
 #include <QPointer>
 #include <QRegularExpression>
 #include <QSaveFile>
@@ -316,6 +317,10 @@ Links::Links(QObject *parent)
 void Links::save()
 {
     QJsonObject all;
+    QJsonObject sites;
+    for (auto it = m_moved.cbegin(); it != m_moved.cend(); ++it)
+        sites.insert(it.key(), it.value());
+    all.insert(QStringLiteral("sites"), sites);
     for (auto it = m_entries.cbegin(); it != m_entries.cend(); ++it) {
         if (!it->info)
             continue;
@@ -388,11 +393,17 @@ QVariantMap Links::info(const QString &url)
         return {};
     LinkResolver *resolver = resolverFor(QUrl(url));
     if (!resolver) {
-        // An issue on a host no account reads: how it could be
+        // An issue on a host no account reads: maybe another address of
+        // a site one does (asked once); else how it could be read
         const QString key = Markdown::issueKey(url);
         if (key.isEmpty())
             return {};
         const QString host = authority(QUrl(url));
+        load();
+        if (!m_moved.contains(host) && !m_accounts->list().isEmpty()) {
+            discover(host);
+            return {};
+        }
         return {{QStringLiteral("error"),
                  tr("No account reads %1. Add one in Settings, Accounts; or, if this Jira moved to Atlassian "
                     "Cloud, give your account its old address under Also for: \u201c%1 = yoursite.atlassian.net\u201d.")
@@ -406,6 +417,15 @@ QVariantMap Links::card(const QString &url)
     if (!url.startsWith(QLatin1String("http")))
         return {};
     LinkResolver *resolver = resolverFor(QUrl(url));
+    // An issue on an address yet to be looked up: maybe a site's
+    if (!resolver && !Markdown::issueKey(url).isEmpty()) {
+        const QString host = authority(QUrl(url));
+        load();
+        if (!m_moved.contains(host) && !m_accounts->list().isEmpty()) {
+            discover(host);
+            return {};
+        }
+    }
     return lookUp(url, resolver ? resolver : m_page.get());
 }
 
@@ -509,6 +529,63 @@ void Links::addAccount(const QString &provider, const QString &host, const QStri
     });
 }
 
+void Links::discover(const QString &host)
+{
+    if (m_discovering.contains(host) || (!loopback(host) && QUrl(QStringLiteral("https://") + host).host().isEmpty()))
+        return;
+    m_discovering.insert(host);
+    const QString scheme = loopback(host) ? QStringLiteral("http") : QStringLiteral("https");
+    QPointer<Links> self(this);
+    // Asked without signing in: nothing of the user's goes to `host`
+    const auto ask = [self](const QString &url, const std::function<void(const QJsonObject &)> &done) {
+        QNetworkRequest request{QUrl(url)};
+        request.setRawHeader("Accept", "application/json");
+        request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Cache"));
+        request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+        request.setTransferTimeout(10000);
+        QNetworkReply *reply = self->network()->get(request);
+        QObject::connect(reply, &QNetworkReply::finished, reply, [reply, done] {
+            reply->deleteLater();
+            const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            done(status == 200 ? QJsonDocument::fromJson(reply->read(64 * 1024)).object() : QJsonObject());
+        });
+    };
+    const auto settle = [self, host](const QString &site) {
+        if (!self)
+            return;
+        self->m_discovering.remove(host);
+        self->m_moved.insert(host, site);
+        if (self->m_persistent)
+            self->m_save.start();
+        self->touch();
+    };
+    ask(scheme + QStringLiteral("://") + host + QStringLiteral("/rest/api/2/serverInfo"),
+        [self, ask, settle, scheme, host](const QJsonObject &info) {
+            if (!self)
+                return;
+            const QUrl base(info.value(QLatin1String("baseUrl")).toString());
+            const QString site = authority(base);
+            const bool cloud = info.value(QLatin1String("deploymentType")).toString() == QLatin1String("Cloud");
+            if (!cloud || site.isEmpty() || site == host || !(atlassianSite(site) || loopback(site))) {
+                settle({});
+                return;
+            }
+            // The same tenant at both addresses
+            ask(scheme + QStringLiteral("://") + host + QStringLiteral("/_edge/tenant_info"),
+                [self, ask, settle, base, site](const QJsonObject &here) {
+                    const QString id = here.value(QLatin1String("cloudId")).toString();
+                    if (!self || id.isEmpty()) {
+                        settle({});
+                        return;
+                    }
+                    ask(base.scheme() + QStringLiteral("://") + site + QStringLiteral("/_edge/tenant_info"),
+                        [settle, site, id](const QJsonObject &there) {
+                            settle(there.value(QLatin1String("cloudId")).toString() == id ? site : QString());
+                        });
+                });
+        });
+}
+
 void Links::touch()
 {
     m_bump.start();
@@ -550,6 +627,9 @@ void Links::load()
     if (!file.open(QIODevice::ReadOnly))
         return;
     const QJsonObject all = QJsonDocument::fromJson(file.readAll()).object();
+    const QJsonObject sites = all.value(QStringLiteral("sites")).toObject();
+    for (auto it = sites.begin(); it != sites.end(); ++it)
+        m_moved.insert(it.key(), it.value().toString());
     for (auto it = all.begin(); it != all.end(); ++it) {
         if (!it.key().contains(QLatin1Char(' ')))
             continue; // from before entries were kept by resolver

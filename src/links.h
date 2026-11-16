@@ -5,6 +5,7 @@
 #include <QList>
 #include <QObject>
 #include <QPair>
+#include <QSet>
 #include <QTimer>
 #include <QUrl>
 #include <QVariant>
@@ -174,6 +175,10 @@ public:
     // Asks bindings that call info() again (once the board can ask)
     void touch();
 
+    // The Atlassian site `host` is another address of, found out by asking
+    // it (see discover()); empty when not known (yet) or when it is none
+    QString movedTo(const QString &host) const { return m_moved.value(host.toLower()); }
+
     // "example.atlassian.net" from what people paste: a whole address, or
     // the host with or without a scheme
     static QString hostOf(const QString &text);
@@ -202,6 +207,11 @@ private:
     };
 
     LinkResolver *resolverFor(const QUrl &url) const;
+    // Whether `host` is the custom domain of an Atlassian Cloud site: its
+    // serverInfo names the site (asked without signing in, so nothing is
+    // sent), and both give the same cloud id, so a host can't just claim
+    // a site. Once per host; the answer is kept in the cache folder.
+    void discover(const QString &host);
     QVariantMap lookUp(const QString &url, LinkResolver *resolver);
     void load();
     void save();
@@ -213,6 +223,8 @@ private:
     std::vector<std::unique_ptr<LinkResolver>> m_resolvers;
     std::unique_ptr<LinkResolver> m_page; // for cards, when no other knows the link
     QHash<QString, Entry> m_entries; // by resolver and URL: "jira https://…"
+    QHash<QString, QString> m_moved;  // host -> its Atlassian site ("" for none)
+    QSet<QString> m_discovering;
     bool m_loaded = false;
     QTimer m_bump; // answers come in batches: one revision for each
     QTimer m_save;

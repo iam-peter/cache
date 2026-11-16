@@ -37,20 +37,33 @@ bool JiraResolver::handles(const QUrl &url) const
     const QString host = Links::authority(url);
     const bool secure = url.scheme() == QLatin1String("https")
                         || (url.scheme() == QLatin1String("http") && Links::loopback(host));
-    return secure && !Markdown::issueKey(url.toString()).isEmpty()
-           && m_links->accounts()->find(id(), host).has_value();
+    return secure && !Markdown::issueKey(url.toString()).isEmpty() && accountFor(url).has_value();
+}
+
+std::optional<std::pair<Account, QString>> JiraResolver::accountFor(const QUrl &url) const
+{
+    for (const QString &host : {Links::authority(url), m_links->movedTo(Links::authority(url))}) {
+        if (host.isEmpty())
+            continue;
+        if (const std::optional<Account> a = m_links->accounts()->find(id(), host)) {
+            const QString site = a->siteFor(host);
+            if (!site.isEmpty())
+                return std::make_pair(*a, site);
+        }
+    }
+    return std::nullopt;
 }
 
 void JiraResolver::resolve(const QUrl &url, const Done &done)
 {
-    const std::optional<Account> account = m_links->accounts()->find(id(), Links::authority(url));
+    const auto found = accountFor(url);
     const QString key = Markdown::issueKey(url.toString());
-    if (!account || key.isEmpty()) {
+    if (!found || key.isEmpty()) {
         done(std::nullopt, {});
         return;
     }
-    const Account a = *account;
-    const QString site = a.siteFor(Links::authority(url));
+    const Account a = found->first;
+    const QString site = found->second;
     m_links->accounts()->token(a, [this, a, site, key, done](const QByteArray &token) {
         if (token.isEmpty()) {
             done(std::nullopt, QObject::tr("The keychain has no token for %1: sign in again in Settings, Accounts.")

@@ -22,7 +22,11 @@ public:
                     const QByteArray request = socket->readAll();
                     requests << request;
                     QByteArray status = "200 OK", body, extra;
-                    if (!redirectTo.isEmpty()) {
+                    if (request.startsWith("GET /_edge/tenant_info ")) {
+                        body = R"({"cloudId":"tenant-1"})";
+                    } else if (request.startsWith("GET /rest/api/2/serverInfo ")) {
+                        body = R"({"deploymentType":"Cloud","baseUrl":"http://)" + host().toUtf8() + "\"}";
+                    } else if (!redirectTo.isEmpty()) {
                         status = "302 Found";
                         extra = "Location: " + redirectTo.toUtf8() + "\r\n";
                     } else if (!request.contains("\r\nAuthorization: " + authorization + "\r\n")) {
@@ -53,6 +57,37 @@ public:
     QString issue(const char *key) const
     {
         return QStringLiteral("http://%1/browse/%2").arg(host(), QLatin1String(key));
+    }
+    QList<QByteArray> requests;
+};
+
+// Another address of a Jira Cloud site: it names the site and its tenant
+class CustomDomain : public QTcpServer
+{
+public:
+    CustomDomain(const QString &site, const QByteArray &cloudId)
+    {
+        listen(QHostAddress::LocalHost);
+        connect(this, &QTcpServer::newConnection, this, [this, site, cloudId] {
+            while (QTcpSocket *socket = nextPendingConnection()) {
+                connect(socket, &QTcpSocket::readyRead, socket, [this, socket, site, cloudId] {
+                    const QByteArray request = socket->readAll();
+                    requests << request;
+                    QByteArray body = "{}";
+                    if (request.startsWith("GET /rest/api/2/serverInfo "))
+                        body = R"({"deploymentType":"Cloud","baseUrl":"http://)" + site.toUtf8() + "\"}";
+                    else if (request.startsWith("GET /_edge/tenant_info "))
+                        body = R"({"cloudId":")" + cloudId + "\"}";
+                    socket->write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
+                                  + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
+                    socket->disconnectFromHost();
+                });
+            }
+        });
+    }
+    QString issue(const char *key) const
+    {
+        return QStringLiteral("http://localhost:%1/browse/%2").arg(serverPort()).arg(QLatin1String(key));
     }
     QList<QByteArray> requests;
 };
@@ -109,9 +144,10 @@ private slots:
         QVERIFY(!jira.handles(QUrl(QStringLiteral("https://elsewhere.example/browse/IDS5-7"))));
         QVERIFY(!jira.handles(QUrl(QStringLiteral("http://example.atlassian.net/browse/IDS5-7"))));
         // An issue there: what would read it
-        const QVariantMap elsewhere = links.info(QStringLiteral("https://elsewhere.example/browse/IDS5-7"));
-        QVERIFY(!elsewhere.contains("title"));
-        QVERIFY(elsewhere.value("error").toString().contains(QStringLiteral("elsewhere.example")));
+        // (once it is known not to be another address of a site)
+        const QString elsewhere = QStringLiteral("https://elsewhere.example/browse/IDS5-7");
+        QTRY_VERIFY(links.info(elsewhere).value("error").toString().contains(QStringLiteral("elsewhere.example")));
+        QVERIFY(!links.info(elsewhere).contains("title"));
         QVERIFY(links.info(QStringLiteral("https://elsewhere.example/wiki/page")).isEmpty());
     }
 
@@ -283,7 +319,14 @@ private slots:
         links.info(old);
         QTRY_COMPARE(links.info(old).value("summary").toString(), QStringLiteral("Fix the crash on resize"));
         // Asked of the account's own host, under its own name
-        QVERIFY(server.requests.last().contains("Host: " + server.host().toUtf8()));
+        bool asked = false;
+        for (const QByteArray &request : std::as_const(server.requests)) {
+            if (request.startsWith("GET /rest/api/2/issue/")) {
+                QVERIFY(request.contains("Host: " + server.host().toUtf8()));
+                asked = true;
+            }
+        }
+        QVERIFY(asked);
         // Signing in again keeps them
         links.accounts()->remember({QStringLiteral("jira"), server.host(), {}}, "pat");
         QCOMPARE(links.accounts()->list().first().toMap().value("aliases").toStringList().size(), 1);
@@ -336,6 +379,35 @@ private slots:
                                                     "oldest.example.com = jira.example.com"));
         QCOMPARE(links.accounts()->list().first().toMap().value("aliases").toStringList(),
                  QStringList({QStringLiteral("old.example.com"), QStringLiteral("oldest.example.com")}));
+    }
+
+    void customDomainsAreFoundOut()
+    {
+        FakeJira site("Bearer pat");
+        CustomDomain domain(site.host(), "tenant-1");
+        CustomDomain forged(site.host(), "someone-else");
+        Links links{Links::Detached{}};
+        links.accounts()->remember({QStringLiteral("jira"), site.host(), {}}, "pat");
+
+        // Looked up, then read from the site it is an address of
+        QVERIFY(links.info(domain.issue("IDS5-7")).isEmpty());
+        QTRY_COMPARE(links.info(domain.issue("IDS5-7")).value("summary").toString(),
+                     QStringLiteral("Fix the crash on resize"));
+        QCOMPARE(links.movedTo(QStringLiteral("localhost:%1").arg(domain.serverPort())), site.host());
+        // Nothing of the user's went to the other address
+        for (const QByteArray &request : std::as_const(domain.requests))
+            QVERIFY(!request.contains("Authorization"));
+        // Asked once
+        const qsizetype asked = domain.requests.size();
+        links.info(domain.issue("IDS5-8"));
+        QTest::qWait(50);
+        QCOMPARE(domain.requests.size(), asked);
+
+        // A host that names the site but isn't it: not believed
+        links.info(forged.issue("IDS5-7"));
+        QTRY_VERIFY(links.info(forged.issue("IDS5-7")).contains("error"));
+        QVERIFY(links.movedTo(QStringLiteral("localhost:%1").arg(forged.serverPort())).isEmpty());
+        QVERIFY(!links.info(forged.issue("IDS5-7")).contains("title"));
     }
 };
 

@@ -156,10 +156,13 @@ request; the [website](pages/) is published from `pages/` by the
   pointer is on it. Jira Cloud takes your email and an API token from
   id.atlassian.com, which works on every Atlassian Cloud site you can
   see: one sign-in can serve all `*.atlassian.net` sites. Jira Data
-  Center takes a personal access token. A Jira that moved keeps its old
-  links working: give the account the old address under **Also for**
-  (`jira.example.com = example.atlassian.net` for the all-sites one),
-  and they are read from the new site. The token is kept in the system's
+  Center takes a personal access token. Links to another address of an
+  Atlassian site (a custom domain such as `jira.example.com`) are found
+  out by asking that address, without signing in, which site it is;
+  both must give the same cloud id. Any other old address can be given
+  to the account under **Also for** (`jira.example.com =
+  example.atlassian.net` for the all-sites one), and its links are read
+  from the new site. The token is kept in the system's
   keychain and sent only to the sites it is for; what the issues say is
   kept in Cache's cache folder, not in the project
 - **For Teams, mail and documents**:
