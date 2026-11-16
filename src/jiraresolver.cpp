@@ -34,29 +34,13 @@ JiraResolver::JiraResolver(Links *links)
 
 bool JiraResolver::handles(const QUrl &url) const
 {
-    const QString host = Links::authority(url);
-    const bool secure = url.scheme() == QLatin1String("https")
-                        || (url.scheme() == QLatin1String("http") && Links::loopback(host));
-    return secure && !Markdown::issueKey(url.toString()).isEmpty() && accountFor(url).has_value();
-}
-
-std::optional<std::pair<Account, QString>> JiraResolver::accountFor(const QUrl &url) const
-{
-    for (const QString &host : {Links::authority(url), m_links->movedTo(Links::authority(url))}) {
-        if (host.isEmpty())
-            continue;
-        if (const std::optional<Account> a = m_links->accounts()->find(id(), host)) {
-            const QString site = a->siteFor(host);
-            if (!site.isEmpty())
-                return std::make_pair(*a, site);
-        }
-    }
-    return std::nullopt;
+    return Links::secure(url) && !Markdown::issueKey(url.toString()).isEmpty()
+           && m_links->accountFor(id(), url).has_value();
 }
 
 void JiraResolver::resolve(const QUrl &url, const Done &done)
 {
-    const auto found = accountFor(url);
+    const auto found = m_links->accountFor(id(), url);
     const QString key = Markdown::issueKey(url.toString());
     if (!found || key.isEmpty()) {
         done(std::nullopt, {});
@@ -70,7 +54,7 @@ void JiraResolver::resolve(const QUrl &url, const Done &done)
                                    .arg(a.everySite() ? QObject::tr("every atlassian.net site") : a.host));
             return;
         }
-        get(site, a, token,
+        m_links->request(site, a, token,
             QStringLiteral("/rest/api/2/issue/%1?fields=summary,status,issuetype,priority,assignee,reporter,updated")
                 .arg(key),
             [site, key, done](int status, const QJsonObject &json, const QString &error) {
@@ -89,23 +73,38 @@ void JiraResolver::resolve(const QUrl &url, const Done &done)
 
 void JiraResolver::signIn(const Account &account, const QByteArray &token, const SignedIn &done)
 {
-    get(account.host, account, token, QStringLiteral("/rest/api/2/myself"),
-        [account, done](int status, const QJsonObject &json, const QString &error) {
-            if (status == 200) {
-                const QString who = json.value(QLatin1String("displayName")).toString();
-                done(true, who.isEmpty() ? QObject::tr("Signed in to %1.").arg(account.host)
-                                         : QObject::tr("Signed in to %1 as %2.").arg(account.host, who));
-            } else if (status == 401 || status == 403) {
-                done(false, account.user.isEmpty()
-                                ? QObject::tr("%1 didn't take the token. Jira Cloud also needs the email it belongs to.")
-                                      .arg(account.host)
-                                : QObject::tr("%1 didn't take the email and token.").arg(account.host));
-            } else if (status >= 300 && status < 400) {
-                done(false, QObject::tr("%1 sent us to a sign-in page. Is it the Jira host?").arg(account.host));
-            } else {
-                done(false, QObject::tr("Couldn't reach %1: %2").arg(account.host, error));
-            }
-        });
+    // Jira's own; a host with only Confluence answers to Confluence's
+    const QStringList paths{QStringLiteral("/rest/api/2/myself"), QStringLiteral("/wiki/rest/api/user/current"),
+                            QStringLiteral("/rest/api/user/current")};
+    auto attempt = std::make_shared<std::function<void(int)>>();
+    *attempt = [this, account, token, done, paths, attempt](int i) {
+        m_links->request(account.host, account, token, paths.at(i),
+            [account, done, paths, attempt, i](int status, const QJsonObject &json, const QString &error) {
+                if (status == 404 && i + 1 < paths.size()) {
+                    (*attempt)(i + 1);
+                    return;
+                }
+                if (status == 200) {
+                    QString who = json.value(QLatin1String("displayName")).toString();
+                    if (who.isEmpty())
+                        who = json.value(QLatin1String("publicName")).toString();
+                    done(true, who.isEmpty() ? QObject::tr("Signed in to %1.").arg(account.host)
+                                             : QObject::tr("Signed in to %1 as %2.").arg(account.host, who));
+                } else if (status == 401 || status == 403) {
+                    done(false, account.user.isEmpty()
+                                    ? QObject::tr("%1 didn't take the token. Atlassian Cloud also needs the email it belongs to.")
+                                          .arg(account.host)
+                                    : QObject::tr("%1 didn't take the email and token.").arg(account.host));
+                } else if (status >= 300 && status < 400) {
+                    done(false, QObject::tr("%1 sent us to a sign-in page. Is it the Jira or Confluence host?")
+                                    .arg(account.host));
+                } else {
+                    done(false, QObject::tr("Couldn't reach %1: %2").arg(account.host, error));
+                }
+                *attempt = nullptr; // done: let go of itself
+            });
+    };
+    (*attempt)(0);
 }
 
 LinkInfo JiraResolver::infoOf(const QString &key, const QJsonObject &issue)
@@ -134,31 +133,4 @@ LinkInfo JiraResolver::infoOf(const QString &key, const QJsonObject &issue)
     if (updated.isValid())
         add(QObject::tr("Updated"), QLocale().toString(updated.toLocalTime(), QLocale::ShortFormat));
     return info;
-}
-
-void JiraResolver::get(const QString &site, const Account &account, const QByteArray &token, const QString &path,
-                       const Reply &reply)
-{
-    // Built from the site the account gives, never from the link itself
-    QUrl url(QStringLiteral("%1://%2%3")
-                 .arg(Links::loopback(site) ? QStringLiteral("http") : QStringLiteral("https"), site, path));
-    QNetworkRequest request(url);
-    request.setRawHeader("Accept", "application/json");
-    request.setRawHeader("Authorization", account.user.isEmpty()
-                                              ? "Bearer " + token
-                                              : "Basic " + (account.user.toUtf8() + ':' + token).toBase64());
-    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
-    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Cache"));
-    request.setTransferTimeout(15000);
-    QNetworkReply *r = m_links->network()->get(request);
-    QObject::connect(r, &QNetworkReply::finished, r, [r, reply] {
-        r->deleteLater();
-        const int status = r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        const QJsonObject json = QJsonDocument::fromJson(r->readAll()).object();
-        QString error = r->errorString();
-        const QJsonArray messages = json.value(QLatin1String("errorMessages")).toArray();
-        if (!messages.isEmpty())
-            error = messages.first().toString();
-        reply(status, json, error);
-    });
 }

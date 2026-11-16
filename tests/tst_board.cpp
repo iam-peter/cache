@@ -355,6 +355,21 @@ private slots:
         QCOMPARE(html(QStringLiteral("[the crash](%1) **[IDS5-8](https://example.org/x)**").arg(issue)),
                  QStringLiteral("the crash  IN PROGRESS  IDS5-8"));
         QVERIFY(asked.contains(QStringLiteral("https://example.org/x")));
+        // A bare address: the title instead; a page (no status) adds no excerpt
+        const QString page = QStringLiteral("https://example.atlassian.net/wiki/spaces/A/pages/1/x");
+        board.setLinkInfo([&](const QString &url) -> QVariantMap {
+            asked << url;
+            if (url == issue)
+                return {{"title", "IDS5-7"}, {"summary", "Fix the crash"}, {"status", "Done"}, {"tone", "done"}};
+            if (url == page)
+                return {{"title", "Variables"}, {"summary", "A long excerpt"}};
+            return {};
+        });
+        QCOMPARE(html(QStringLiteral("<%1> and <%2>").arg(issue, page)),
+                 QStringLiteral("IDS5-7 Fix the crash  DONE  and Variables"));
+        QVERIFY(board.renderSegments(QStringLiteral("<%1>").arg(page), 400, 14, {}).first().toMap()
+                    .value("html").toString().contains(QStringLiteral("href=\"%1\"").arg(page)));
+
         // Copies stay as written
         asked.clear();
         const int row = board.addNote(0, 0, QStringLiteral("[IDS5-7](%1)").arg(issue));

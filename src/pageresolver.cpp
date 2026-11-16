@@ -1,5 +1,6 @@
 #include "pageresolver.h"
 
+#include "confluenceresolver.h"
 #include "markdown.h"
 
 #include <QHash>
@@ -63,11 +64,14 @@ bool PageResolver::handles(const QUrl &url) const
 void PageResolver::resolve(const QUrl &url, const Done &done)
 {
     const QString key = Markdown::issueKey(url.toString());
-    if (!key.isEmpty()) {
+    if (!key.isEmpty() || ConfluenceResolver::looksLike(url)) {
+        const ConfluenceResolver::Page page = ConfluenceResolver::pageOf(url);
         LinkInfo info;
-        info.title = key;
+        info.title = !key.isEmpty() ? key : !page.title.isEmpty() ? page.title : siteOf(url);
         info.site = siteOf(url);
-        info.summary = QObject::tr("Add an account for %1 in Settings to see this issue.").arg(Links::authority(url));
+        info.summary = !key.isEmpty()
+            ? QObject::tr("Add an account for %1 in Settings to see this issue.").arg(Links::authority(url))
+            : QObject::tr("Add an account for %1 in Settings to see this page.").arg(Links::authority(url));
         done(info, {});
         return;
     }

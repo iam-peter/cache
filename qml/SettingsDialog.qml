@@ -196,7 +196,7 @@ Dialog {
                     wrapMode: Text.Wrap
                     color: Theme.textMuted
                     font.pixelSize: Styles.Primitives.fontSize.small
-                    text: qsTr("Links to issues on these hosts show the issue's summary and status, and its details while the pointer is on them. The token is kept in your system's keychain and is only ever sent to the sites it is for.")
+                    text: qsTr("Links to Jira issues and Confluence pages on these hosts show their title, an issue's summary and status, and their details while the pointer is on them. The token is kept in your system's keychain and is only ever sent to the sites it is for.")
                 }
                 Label {
                     Layout.fillWidth: true
@@ -313,7 +313,7 @@ Dialog {
                     TextField {
                         id: userField
                         Layout.fillWidth: true
-                        placeholderText: qsTr("Jira Cloud only; empty for a personal access token")
+                        placeholderText: qsTr("Atlassian Cloud only; empty for a personal access token")
                     }
 
                     Label { text: qsTr("Token") }
@@ -333,7 +333,7 @@ Dialog {
                         font.pixelSize: Styles.Primitives.fontSize.small
                         textFormat: Text.StyledText
                         linkColor: Theme.s.text_link
-                        text: qsTr("Jira Cloud: your email and an <a href=\"https://id.atlassian.com/manage-profile/security/api-tokens\">API token</a>. Jira Data Center: a personal access token from your profile, without an email.")
+                        text: qsTr("Atlassian Cloud (Jira and Confluence): your email and an <a href=\"https://id.atlassian.com/manage-profile/security/api-tokens\">API token</a>. Data Center: a personal access token from your profile, without an email.")
                         onLinkActivated: (link) => Qt.openUrlExternally(link)
                         HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
                     }

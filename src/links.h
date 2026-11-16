@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDateTime>
+#include <QJsonObject>
 #include <QHash>
 #include <QList>
 #include <QObject>
@@ -125,6 +126,9 @@ public:
     // Tries an account before it is kept: `message` says who it signed in
     // as, or what went wrong
     virtual void signIn(const Account &account, const QByteArray &token, const SignedIn &done) = 0;
+    // Whether accounts are made for it (Settings lists it); Confluence
+    // reads with the Atlassian accounts Jira's sign-in makes
+    virtual bool signsIn() const { return true; }
 };
 
 // Links to what other services hold, read through their resolvers. What
@@ -174,6 +178,18 @@ public:
                                 const QString &token, bool everySite = false);
     // Asks bindings that call info() again (once the board can ask)
     void touch();
+
+    // The account for a link, and the site to ask: by the link's host, or
+    // by the Atlassian site that host turned out to be an address of
+    std::optional<std::pair<Account, QString>> accountFor(const QString &provider, const QUrl &url) const;
+    // A link that may be read with an account: https, or http on loopback
+    static bool secure(const QUrl &url);
+    // GET `path` of `site` with the account's token, its answer as JSON.
+    // Built from the site the account gives, never from a link; no
+    // redirect is followed, so a sign-in page elsewhere gets nothing.
+    using JsonReply = std::function<void(int status, const QJsonObject &json, const QString &error)>;
+    void request(const QString &site, const Account &account, const QByteArray &token, const QString &path,
+                 const JsonReply &reply);
 
     // The Atlassian site `host` is another address of, found out by asking
     // it (see discover()); empty when not known (yet) or when it is none

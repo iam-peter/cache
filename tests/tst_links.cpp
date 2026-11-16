@@ -1,3 +1,4 @@
+#include "confluenceresolver.h"
 #include "jiraresolver.h"
 #include "links.h"
 #include "pageresolver.h"
@@ -22,7 +23,11 @@ public:
                     const QByteArray request = socket->readAll();
                     requests << request;
                     QByteArray status = "200 OK", body, extra;
-                    if (request.startsWith("GET /_edge/tenant_info ")) {
+                    if (noJira && request.startsWith("GET /rest/api/2/")
+                        && !request.startsWith("GET /rest/api/2/serverInfo ")) {
+                        status = "404 Not Found";
+                        body = "{}";
+                    } else if (request.startsWith("GET /_edge/tenant_info ")) {
                         body = R"({"cloudId":"tenant-1"})";
                     } else if (request.startsWith("GET /rest/api/2/serverInfo ")) {
                         body = R"({"deploymentType":"Cloud","baseUrl":"http://)" + host().toUtf8() + "\"}";
@@ -34,6 +39,17 @@ public:
                         body = R"({"errorMessages":["You are not authenticated."]})";
                     } else if (request.startsWith("GET /rest/api/2/myself ")) {
                         body = R"({"displayName":"Ada Lovelace"})";
+                    } else if (request.startsWith("GET /wiki/rest/api/user/current ")) {
+                        body = R"({"publicName":"Ada L."})";
+                    } else if (request.startsWith("GET /wiki/rest/api/content/1174503652?")
+                               || request.startsWith("GET /rest/api/content?spaceKey=DTU&title=Variables%20-%20user%20scenarios&")) {
+                        const QByteArray page = R"({"id":"1174503652","type":"page","title":"Variables - user scenarios",
+                            "space":{"key":"DTU","name":"Design Tools"},
+                            "version":{"when":"2026-11-10T09:30:00.000Z","by":{"displayName":"Grace Hopper"}},
+                            "history":{"createdBy":{"displayName":"Ada Lovelace"}}})";
+                        body = request.startsWith("GET /rest/api/content?") ? "{\"results\":[" + page + "]}" : page;
+                    } else if (request.startsWith("GET /wiki/rest/api/search?") || request.startsWith("GET /rest/api/search?")) {
+                        body = R"({"results":[{"excerpt":"How @@@hl@@@variables@@@endhl@@@ are used &amp; shared"}]})";
                     } else if (request.startsWith("GET /rest/api/2/issue/IDS5-7?")) {
                         body = R"({"key":"IDS5-7","fields":{
                             "summary":"Fix the crash on resize",
@@ -54,6 +70,7 @@ public:
         });
     }
     QString host() const { return QStringLiteral("127.0.0.1:%1").arg(serverPort()); }
+    bool noJira = false; // a host with only Confluence
     QString issue(const char *key) const
     {
         return QStringLiteral("http://%1/browse/%2").arg(host(), QLatin1String(key));
@@ -408,6 +425,80 @@ private slots:
         QTRY_VERIFY(links.info(forged.issue("IDS5-7")).contains("error"));
         QVERIFY(links.movedTo(QStringLiteral("localhost:%1").arg(forged.serverPort())).isEmpty());
         QVERIFY(!links.info(forged.issue("IDS5-7")).contains("title"));
+    }
+
+    void confluenceLinks()
+    {
+        using C = ConfluenceResolver;
+        const auto page = [](const char *url) { return C::pageOf(QUrl(QLatin1String(url))); };
+        C::Page p = page("https://qtgroup.atlassian.net/wiki/spaces/dtu/pages/1174503652/Variables+-+user+scenarios");
+        QCOMPARE(p.id, QStringLiteral("1174503652"));
+        QCOMPARE(p.context, QStringLiteral("/wiki"));
+        QCOMPARE(page("https://x.atlassian.net/wiki/spaces/A/pages/edit-v2/42").id, QStringLiteral("42"));
+        QCOMPARE(page("https://x.atlassian.net/wiki/spaces/A/blog/2026/11/16/77/News").id, QStringLiteral("77"));
+        QCOMPARE(page("https://wiki.example.com/confluence/pages/viewpage.action?pageId=99").id, QStringLiteral("99"));
+        QCOMPARE(page("https://wiki.example.com/confluence/pages/viewpage.action?pageId=99").context,
+                 QStringLiteral("/confluence"));
+        p = page("https://wiki.example.com/display/DTU/Variables+-+user+scenarios");
+        QCOMPARE(p.space, QStringLiteral("DTU"));
+        QCOMPARE(p.title, QStringLiteral("Variables - user scenarios"));
+        QCOMPARE(p.context, QString());
+        // Short links stand for the id
+        for (const QString &id : {QStringLiteral("1174503652"), QStringLiteral("42"), QStringLiteral("65536")}) {
+            const QString tiny = C::tinyOf(id);
+            QCOMPARE(C::idOfTiny(tiny), id);
+            QCOMPARE(page(qPrintable(QStringLiteral("https://x.atlassian.net/wiki/x/") + tiny)).id, id);
+        }
+        // Not a page, and not just any site's /pages/1
+        QVERIFY(!page("https://x.atlassian.net/wiki/spaces/A/overview").valid());
+        QVERIFY(!page("https://x.atlassian.net/browse/IDS5-1").valid());
+        QVERIFY(!C::looksLike(QUrl(QStringLiteral("https://blog.example.com/pages/123/hello"))));
+        QVERIFY(C::looksLike(QUrl(QStringLiteral("https://wiki.example.com/wiki/spaces/A/pages/1/T"))));
+    }
+
+    void confluencePagesAreRead()
+    {
+        FakeJira server("Basic " + QByteArray("ada@example.org:secret").toBase64());
+        Links links{Links::Detached{}};
+        links.accounts()->remember({QStringLiteral("jira"), server.host(), QStringLiteral("ada@example.org")},
+                                   "secret");
+        // By id, as Atlassian Cloud links have it
+        const QString cloud = QStringLiteral("http://%1/wiki/spaces/DTU/pages/1174503652/Variables+-+user+scenarios")
+                                  .arg(server.host());
+        links.info(cloud);
+        QTRY_COMPARE(links.info(cloud).value("title").toString(), QStringLiteral("Variables - user scenarios"));
+        const QVariantMap info = links.info(cloud);
+        QCOMPARE(info.value("summary").toString(), QStringLiteral("How variables are used & shared"));
+        QCOMPARE(info.value("site").toString(), QStringLiteral("Confluence · ") + server.host());
+        QStringList rows;
+        for (const QVariant &row : info.value("fields").toList())
+            rows << row.toMap().value("name").toString() + "=" + row.toMap().value("value").toString();
+        QCOMPARE(rows.first(), QStringLiteral("Space=Design Tools"));
+        QVERIFY(rows.contains(QStringLiteral("Updated by=Grace Hopper")));
+        QVERIFY(rows.contains(QStringLiteral("Created by=Ada Lovelace")));
+        // By space and title, as Data Center's /display links have it
+        const QString display = QStringLiteral("http://%1/display/DTU/Variables+-+user+scenarios").arg(server.host());
+        links.card(display);
+        QTRY_COMPARE(links.card(display).value("title").toString(), QStringLiteral("Variables - user scenarios"));
+        // A missing page says so
+        const QString missing = QStringLiteral("http://%1/wiki/spaces/DTU/pages/5/Gone").arg(server.host());
+        links.info(missing);
+        QTRY_VERIFY(links.info(missing).value("error").toString().startsWith(server.host()));
+    }
+
+    void signInOnAHostWithOnlyConfluence()
+    {
+        FakeJira server("Bearer pat");
+        server.noJira = true;
+        Links links{Links::Detached{}};
+        QSignalSpy added(&links, &Links::accountAdded);
+        links.addAccount(QStringLiteral("jira"), server.host(), {}, QStringLiteral("pat"));
+        QTRY_COMPARE(added.size(), 1);
+        QCOMPARE(added.first().at(0).toBool(), true);
+        QVERIFY(added.first().at(1).toString().contains(QStringLiteral("Ada L.")));
+        // Confluence isn't an account of its own
+        for (const QVariant &p : links.providers())
+            QVERIFY(p.toMap().value("id").toString() != QStringLiteral("confluence"));
     }
 };
 

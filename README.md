@@ -150,10 +150,12 @@ request; the [website](pages/) is published from `pages/` by the
   its key, status, summary and fields. The button beside the site, or
   `Ctrl`+click on the title, opens it; double-click changes the address.
   Pasted into a note, an address stays a Markdown link.
-- **Linked issues**: with an account for a Jira host (Settings, Accounts),
-  a link to one of its issues shows the issue's summary and status after
-  it, and its type, priority, assignee and when it changed while the
-  pointer is on it. Jira Cloud takes your email and an API token from
+- **Linked issues and pages**: with an Atlassian account (Settings,
+  Accounts), a link to a Jira issue shows the issue's summary and status
+  after it, and its type, priority, assignee and when it changed while
+  the pointer is on it; a link to a Confluence page shows its space, an
+  excerpt, and who changed it last and when. A bare address in a note
+  shows the issue's key or the page's title instead. Jira Cloud takes your email and an API token from
   id.atlassian.com, which works on every Atlassian Cloud site you can
   see: one sign-in can serve all `*.atlassian.net` sites. Jira Data
   Center takes a personal access token. Links to another address of an
@@ -301,7 +303,8 @@ ctest --test-dir build --output-on-failure
 | `src/searchmodel.*` | Search over all projects; links, backlinks and tasks across them (`Search` in QML) |
 | `src/fuzzy.*` | Typo-tolerant matching: accent folding, edit distance |
 | `src/links.*` | Details of web links from their services (`Links` in QML), the resolvers' interface, accounts |
-| `src/jiraresolver.*` | Jira issues, through Jira's REST API |
+| `src/jiraresolver.*` | Jira issues, through Jira's REST API; signs in the Atlassian accounts |
+| `src/confluenceresolver.*` | Confluence pages, through Confluence's REST API, with the same accounts |
 | `src/pageresolver.*` | Any web page's title, description and picture, for link cards |
 | `src/keychain.*` | Tokens in the system's keychain: libsecret, macOS Keychain, Windows Credential Manager |
 | `logo/` | The icon (SVG, PNG, ICO, ICNS) and the desktop entry |

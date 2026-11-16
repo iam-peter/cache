@@ -1,5 +1,6 @@
 #include "links.h"
 
+#include "confluenceresolver.h"
 #include "jiraresolver.h"
 #include "keychain.h"
 #include "markdown.h"
@@ -7,6 +8,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
@@ -311,6 +313,7 @@ Links::Links(QObject *parent)
     // Another account or alias: links may be read differently now
     connect(m_accounts, &Accounts::changed, this, &Links::touch);
     addResolver(std::make_unique<JiraResolver>(this));
+    addResolver(std::make_unique<ConfluenceResolver>(this));
     m_page = std::make_unique<PageResolver>(this);
 }
 
@@ -349,6 +352,7 @@ Links::Links(Detached, QObject *parent)
     m_loaded = true;
     connect(m_accounts, &Accounts::changed, this, &Links::touch);
     addResolver(std::make_unique<JiraResolver>(this));
+    addResolver(std::make_unique<ConfluenceResolver>(this));
     m_page = std::make_unique<PageResolver>(this);
 }
 
@@ -361,8 +365,10 @@ Links::~Links()
 QVariantList Links::providers() const
 {
     QVariantList list;
-    for (const auto &resolver : m_resolvers)
-        list << QVariantMap{{QStringLiteral("id"), resolver->id()}, {QStringLiteral("name"), resolver->name()}};
+    for (const auto &resolver : m_resolvers) {
+        if (resolver->signsIn())
+            list << QVariantMap{{QStringLiteral("id"), resolver->id()}, {QStringLiteral("name"), resolver->name()}};
+    }
     return list;
 }
 
@@ -395,8 +401,7 @@ QVariantMap Links::info(const QString &url)
     if (!resolver) {
         // An issue on a host no account reads: maybe another address of
         // a site one does (asked once); else how it could be read
-        const QString key = Markdown::issueKey(url);
-        if (key.isEmpty())
+        if (Markdown::issueKey(url).isEmpty() && !ConfluenceResolver::looksLike(QUrl(url)))
             return {};
         const QString host = authority(QUrl(url));
         load();
@@ -405,8 +410,8 @@ QVariantMap Links::info(const QString &url)
             return {};
         }
         return {{QStringLiteral("error"),
-                 tr("No account reads %1. Add one in Settings, Accounts; or, if this Jira moved to Atlassian "
-                    "Cloud, give your account its old address under Also for: \u201c%1 = yoursite.atlassian.net\u201d.")
+                 tr("No account reads %1. Add one in Settings, Accounts; or, if it is another address of an "
+                    "Atlassian site, give your account it under Also for: \u201c%1 = yoursite.atlassian.net\u201d.")
                      .arg(host)}};
     }
     return lookUp(url, resolver);
@@ -417,8 +422,8 @@ QVariantMap Links::card(const QString &url)
     if (!url.startsWith(QLatin1String("http")))
         return {};
     LinkResolver *resolver = resolverFor(QUrl(url));
-    // An issue on an address yet to be looked up: maybe a site's
-    if (!resolver && !Markdown::issueKey(url).isEmpty()) {
+    // An issue or page on an address yet to be looked up: maybe a site's
+    if (!resolver && (!Markdown::issueKey(url).isEmpty() || ConfluenceResolver::looksLike(QUrl(url)))) {
         const QString host = authority(QUrl(url));
         load();
         if (!m_moved.contains(host) && !m_accounts->list().isEmpty()) {
@@ -526,6 +531,55 @@ void Links::addAccount(const QString &provider, const QString &host, const QStri
             self->touch();
             emit self->accountAdded(true, message);
         });
+    });
+}
+
+std::optional<std::pair<Account, QString>> Links::accountFor(const QString &provider, const QUrl &url) const
+{
+    const QString host = authority(url);
+    for (const QString &h : {host, movedTo(host)}) {
+        if (h.isEmpty())
+            continue;
+        if (const std::optional<Account> a = m_accounts->find(provider, h)) {
+            const QString site = a->siteFor(h);
+            if (!site.isEmpty())
+                return std::make_pair(*a, site);
+        }
+    }
+    return std::nullopt;
+}
+
+bool Links::secure(const QUrl &url)
+{
+    return url.scheme() == QLatin1String("https")
+           || (url.scheme() == QLatin1String("http") && loopback(authority(url)));
+}
+
+void Links::request(const QString &site, const Account &account, const QByteArray &token, const QString &path,
+                    const JsonReply &reply)
+{
+    QNetworkRequest request(QUrl(QStringLiteral("%1://%2%3")
+                                     .arg(loopback(site) ? QStringLiteral("http") : QStringLiteral("https"), site, path)));
+    request.setRawHeader("Accept", "application/json");
+    request.setRawHeader("Authorization", account.user.isEmpty()
+                                              ? "Bearer " + token
+                                              : "Basic " + (account.user.toUtf8() + ':' + token).toBase64());
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Cache"));
+    request.setTransferTimeout(15000);
+    QNetworkReply *r = network()->get(request);
+    QObject::connect(r, &QNetworkReply::finished, r, [r, reply] {
+        r->deleteLater();
+        const int status = r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QJsonObject json = QJsonDocument::fromJson(r->readAll()).object();
+        // Jira's errorMessages, Confluence's message, or the network's
+        QString error = r->errorString();
+        const QJsonArray messages = json.value(QLatin1String("errorMessages")).toArray();
+        if (!messages.isEmpty())
+            error = messages.first().toString();
+        else if (json.value(QLatin1String("message")).isString())
+            error = json.value(QLatin1String("message")).toString();
+        reply(status, json, error);
     });
 }
 

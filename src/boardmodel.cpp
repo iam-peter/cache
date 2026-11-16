@@ -1288,14 +1288,17 @@ QString BoardModel::renderHtml(const QString &markdown, double maxWidth, int pix
     return forClipboard ? bodyOf(html) : html;
 }
 
-// Web links another service knows (an issue): its summary after the link
-// when the link shows just its key, and its status in a label
+// Web links another service knows: a bare address shows the title (an
+// issue's key, a page's name); an issue's summary follows when the link
+// shows just its key, and its status in a label
 void BoardModel::decorateLinks(QTextDocument &doc, const QVariantMap &colors, int pixelSize) const
 {
     struct Anchor {
+        int start;
         int end;
         QString href;
         QString text;
+        QTextCharFormat format;
     };
     QList<Anchor> anchors;
     for (QTextBlock block = doc.begin(); block.isValid(); block = block.next()) {
@@ -1309,7 +1312,8 @@ void BoardModel::decorateLinks(QTextDocument &doc, const QVariantMap &colors, in
                 anchors.last().end += fragment.length();
                 anchors.last().text += fragment.text();
             } else if (href.startsWith(QLatin1String("http"))) {
-                anchors.append({fragment.position() + fragment.length(), href, fragment.text()});
+                anchors.append({fragment.position(), fragment.position() + fragment.length(), href, fragment.text(),
+                                fragment.charFormat()});
             }
         }
     }
@@ -1320,16 +1324,30 @@ void BoardModel::decorateLinks(QTextDocument &doc, const QVariantMap &colors, in
         const QVariantMap info = m_linkInfo(a->href);
         if (info.isEmpty())
             continue;
+        const QString title = info.value(QStringLiteral("title")).toString();
+        QString text = a->text.trimmed();
+        int end = a->end;
+        // A bare address: its title instead, still the link
+        if (!title.isEmpty() && (text == a->href || QUrl(text) == QUrl(a->href))) {
+            QTextCursor bare(&doc);
+            bare.setPosition(a->start);
+            bare.setPosition(a->end, QTextCursor::KeepAnchor);
+            bare.insertText(title, a->format);
+            text = title;
+            end = a->start + int(title.size());
+        }
         QTextCursor cursor(&doc);
-        cursor.setPosition(a->end);
-        const QString summary = info.value(QStringLiteral("summary")).toString();
-        if (!summary.isEmpty() && a->text.trimmed() == info.value(QStringLiteral("title")).toString()) {
+        cursor.setPosition(end);
+        const QString status = info.value(QStringLiteral("status")).toString();
+        // The summary of an issue (a status says it is one); a page's
+        // excerpt would be too long in a note
+        const QString summary = status.isEmpty() ? QString() : info.value(QStringLiteral("summary")).toString();
+        if (!summary.isEmpty() && text == title) {
             QTextCharFormat format;
             if (muted.isValid())
                 format.setForeground(muted);
             cursor.insertText(QStringLiteral(" ") + summary, format);
         }
-        const QString status = info.value(QStringLiteral("status")).toString();
         if (status.isEmpty())
             continue;
         const QString tone = info.value(QStringLiteral("tone")).toString();

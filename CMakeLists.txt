@@ -90,6 +90,7 @@ qt_add_qml_module(cache
         src/workspace.h src/workspace.cpp
         src/videoposters.h src/videoposters.cpp
         src/links.h src/links.cpp src/jiraresolver.h src/jiraresolver.cpp src/pageresolver.h src/pageresolver.cpp
+        src/confluenceresolver.h src/confluenceresolver.cpp
         src/keychain.h src/keychain.cpp
         src/gridbackground.h src/gridbackground.cpp
         src/Fonts.h src/Fonts.cpp
@@ -175,6 +176,7 @@ if(BUILD_TESTING)
     # Links' details, from a stand-in for Jira on localhost
     qt_add_executable(tst_links tests/tst_links.cpp
         src/links.h src/links.cpp src/jiraresolver.h src/jiraresolver.cpp src/pageresolver.h src/pageresolver.cpp
+        src/confluenceresolver.h src/confluenceresolver.cpp
         src/keychain.h src/keychain.cpp
         src/markdown.h src/markdown.cpp src/highlight.h src/highlight.cpp)
     target_include_directories(tst_links PRIVATE src)

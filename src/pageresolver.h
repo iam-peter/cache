@@ -6,9 +6,9 @@
 // as the page announces them (Open Graph, else <title> and the
 // description). Nothing is signed in to.
 //
-// A link to an issue on a host without an account isn't fetched (that
-// would only bring the sign-in page): its card shows the key and how to
-// see more.
+// A link to an issue or a Confluence page on a host without an account
+// isn't fetched (that would only bring the sign-in page): its card shows
+// what it can and how to see more.
 class PageResolver : public LinkResolver
 {
 public:
