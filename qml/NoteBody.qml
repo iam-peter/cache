@@ -31,6 +31,12 @@ Item {
     // lines of its own when it is a block (media, files, tables, several
     // lines), else inline
     function insertMarkdown(md) {
+        // In place of the selection, as a paste of plain text would be
+        if (editor.selectedText.length > 0) {
+            const start = editor.selectionStart
+            editor.remove(start, editor.selectionEnd)
+            editor.cursorPosition = start
+        }
         if (/\n/.test(md) || /^(!?\[|\|)/.test(md))
             insertBlock(md)
         else
