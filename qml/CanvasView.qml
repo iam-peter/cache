@@ -405,6 +405,12 @@ Item {
             toast.show(mode === "text" ? qsTr("Copied the text") : qsTr("Copied the Markdown"))
         }
     }
+    function panBy(dx, dy) {
+        viewAnim.stop()
+        panX += dx
+        panY += dy
+        saveViewSoon()
+    }
     function nudge(dx, dy) {
         if (selection.length === 0)
             return
@@ -916,14 +922,18 @@ Item {
                 view.clearSelection()
         } else if (alt && [Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down].indexOf(event.key) >= 0) {
             view.navigate(event.key)
-        } else if (event.key === Qt.Key_Left) {
-            view.nudge(-step, 0)
-        } else if (event.key === Qt.Key_Right) {
-            view.nudge(step, 0)
-        } else if (event.key === Qt.Key_Up) {
-            view.nudge(0, -step)
-        } else if (event.key === Qt.Key_Down) {
-            view.nudge(0, step)
+        } else if ([Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down].indexOf(event.key) >= 0) {
+            const dx = event.key === Qt.Key_Left ? -1 : event.key === Qt.Key_Right ? 1 : 0
+            const dy = event.key === Qt.Key_Up ? -1 : event.key === Qt.Key_Down ? 1 : 0
+            // Nothing selected: the arrows look around instead (Shift: further)
+            if (view.selection.length === 0)
+                view.panBy(-dx * (shift ? 400 : 80), -dy * (shift ? 400 : 80))
+            else
+                view.nudge(dx * step, dy * step)
+        } else if (!ctrl && !alt && (event.key === Qt.Key_Plus || event.key === Qt.Key_Equal)) {
+            view.zoomBy(1.25)
+        } else if (!ctrl && !alt && event.key === Qt.Key_Minus) {
+            view.zoomBy(0.8)
         } else if (!ctrl && !alt && view.toolKeys[event.key] !== undefined) {
             view.tool = view.toolKeys[event.key]
         } else {

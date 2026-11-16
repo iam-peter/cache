@@ -49,10 +49,13 @@ request; the [website](pages/) is published from `pages/` by the
 
 ## Features
 
-- **Infinite canvas**: zoom with the wheel or a pinch, pan with `Space`+drag,
-  the middle button or the hand tool, fit everything with `Ctrl+1` and
-  the selection with `Ctrl+2`. A minimap in the corner shows where you
-  are.
+- **Infinite canvas**: zoom with the wheel, a pinch, `Ctrl`+wheel or
+  `+`/`-`; pan with `Space`+drag, the middle button, the hand tool,
+  `Shift`+wheel sideways, or the arrow keys while nothing is selected.
+  Fit everything with `Ctrl+1` and the selection with `Ctrl+2`. A minimap
+  in the corner shows where you are.
+- **Resizing** from any corner or side, as in drawing programs: `Shift`
+  keeps the proportions, `Alt` resizes around the middle.
 - **Tools, as in FigJam** (along the bottom): select, pan, note, text,
   code snippet, shapes (rectangle, ellipse, diamond, triangle), section,
   connector, pen and highlighter, each with a one-letter key (`F1`). A note,

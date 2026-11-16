@@ -229,6 +229,7 @@ Item {
         // Only where it is wanted: a folded branch, or the item in hand
         visible: root.chrome && root.childCount > 0 && root.connectable
                  && (root.itemCollapsed || root.selected || cardHover.hovered || foldHover.hovered)
+        z: 11 // over the side's resize handle
         scale: root.inv
         x: root.width + 4 * root.inv - width / 2
         y: root.height / 2 - height / 2
@@ -562,41 +563,91 @@ Item {
     }
 
     // --- Resizing ------------------------------------------------------------
-    Rectangle {
-        visible: root.chrome && root.soleSelection && !root.isStroke
-        z: 10
-        width: 10 * root.inv
-        height: 10 * root.inv
-        radius: 2 * root.inv
-        x: root.width - width / 2
-        y: root.height - height / 2
-        color: Theme.accent
-        border.color: Theme.s.background_elevated
-        border.width: 1.5 * root.inv
+    // From any corner or side, as in drawing programs: Shift keeps the
+    // proportions, Alt resizes around the middle
+    function resizeFrom(handle, start, delta, modifiers) {
+        const keep = modifiers & Qt.ShiftModifier
+        const fromMiddle = modifiers & Qt.AltModifier
+        const factor = fromMiddle ? 2 : 1
+        let w = start.width + handle.h * delta.x * factor
+        let h = start.height + handle.v * delta.y * factor
+        if (keep) {
+            // Corners follow the side that moved most; a side brings the
+            // other dimension along
+            const s = handle.h !== 0 && handle.v !== 0 ? Math.max(w / start.width, h / start.height)
+                    : handle.h !== 0 ? w / start.width : h / start.height
+            const least = Math.max(minW / start.width, minH / start.height)
+            w = start.width * Math.max(s, least)
+            h = start.height * Math.max(s, least)
+        } else {
+            w = Math.max(minW, w)
+            h = Math.max(minH, h)
+        }
+        // What stays: the middle, the opposite side, or (a side resized
+        // with Shift) the middle across it
+        const across = (side, size, startPos, startSize) =>
+            fromMiddle || (side === 0 && keep) ? startPos + (startSize - size) / 2
+            : side < 0 ? startPos + startSize - size : startPos
+        // Whole pixels, as moving keeps them
+        w = Math.round(w)
+        h = Math.round(h)
+        root.x = Math.round(across(handle.h, w, start.x, start.width))
+        root.y = Math.round(across(handle.v, h, start.y, start.height))
+        root.width = w
+        root.height = h
+    }
 
-        MouseArea {
-            anchors.fill: parent
-            anchors.margins: -6 * root.inv
-            cursorShape: Qt.SizeFDiagCursor
-            preventStealing: true
+    Repeater {
+        model: root.chrome && root.soleSelection && !root.isStroke
+               ? [{h: -1, v: -1}, {h: 0, v: -1}, {h: 1, v: -1}, {h: 1, v: 0},
+                  {h: 1, v: 1}, {h: 0, v: 1}, {h: -1, v: 1}, {h: -1, v: 0}]
+               : []
+        delegate: Item {
+            id: handle
+            required property var modelData
+            readonly property bool corner: modelData.h !== 0 && modelData.v !== 0
+            readonly property real knob: 10 * root.inv
+            readonly property real grab: 12 * root.inv
+            z: 10
+            // Corners: a square; sides: the whole side between the corners
+            width: modelData.h === 0 ? Math.max(0, root.width - 2 * knob) : grab
+            height: modelData.v === 0 ? Math.max(0, root.height - 2 * knob) : grab
+            x: modelData.h === 0 ? knob : modelData.h < 0 ? -grab / 2 : root.width - grab / 2
+            y: modelData.v === 0 ? knob : modelData.v < 0 ? -grab / 2 : root.height - grab / 2
 
-            property point start
-            property real startW
-            property real startH
-
-            onPressed: (mouse) => {
-                start = mapToItem(root.parent, mouse.x, mouse.y)
-                startW = root.width
-                startH = root.height
+            Rectangle {
+                visible: handle.corner
+                anchors.centerIn: parent
+                width: handle.knob
+                height: handle.knob
+                radius: 2 * root.inv
+                color: Theme.accent
+                border.color: Theme.s.background_elevated
+                border.width: 1.5 * root.inv
             }
-            onPositionChanged: (mouse) => {
-                const p = mapToItem(root.parent, mouse.x, mouse.y)
-                root.width = Math.max(root.minW, startW + p.x - start.x)
-                // Shift keeps the proportions
-                root.height = (mouse.modifiers & Qt.ShiftModifier) ? root.width * startH / startW
-                                                                    : Math.max(root.minH, startH + p.y - start.y)
+
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: handle.corner ? -4 * root.inv : 0
+                cursorShape: !handle.corner ? (handle.modelData.h === 0 ? Qt.SizeVerCursor : Qt.SizeHorCursor)
+                             : handle.modelData.h === handle.modelData.v ? Qt.SizeFDiagCursor : Qt.SizeBDiagCursor
+                preventStealing: true
+
+                property point start
+                property rect startRect
+
+                onPressed: (mouse) => {
+                    start = mapToItem(root.parent, mouse.x, mouse.y)
+                    startRect = Qt.rect(root.x, root.y, root.width, root.height)
+                }
+                onPositionChanged: (mouse) => {
+                    const p = mapToItem(root.parent, mouse.x, mouse.y)
+                    root.resizeFrom(handle.modelData, startRect, Qt.point(p.x - start.x, p.y - start.y),
+                                    mouse.modifiers)
+                }
+                onReleased: root.commitGeometry()
+                onCanceled: root.commitGeometry()
             }
-            onReleased: root.commitGeometry()
         }
     }
 }
