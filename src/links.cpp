@@ -2,6 +2,7 @@
 
 #include "jiraresolver.h"
 #include "keychain.h"
+#include "markdown.h"
 #include "pageresolver.h"
 
 #include <QDir>
@@ -385,8 +386,19 @@ QVariantMap Links::info(const QString &url)
 {
     if (!url.startsWith(QLatin1String("http")))
         return {};
-    // Nothing shown for hosts without an account (any more)
-    return lookUp(url, resolverFor(QUrl(url)));
+    LinkResolver *resolver = resolverFor(QUrl(url));
+    if (!resolver) {
+        // An issue on a host no account reads: how it could be
+        const QString key = Markdown::issueKey(url);
+        if (key.isEmpty())
+            return {};
+        const QString host = authority(QUrl(url));
+        return {{QStringLiteral("error"),
+                 tr("No account reads %1. Add one in Settings, Accounts; or, if this Jira moved to Atlassian "
+                    "Cloud, give your account its old address under Also for: \u201c%1 = yoursite.atlassian.net\u201d.")
+                     .arg(host)}};
+    }
+    return lookUp(url, resolver);
 }
 
 QVariantMap Links::card(const QString &url)

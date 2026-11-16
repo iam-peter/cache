@@ -108,7 +108,11 @@ private slots:
         QVERIFY(!jira.handles(QUrl(QStringLiteral("https://example.atlassian.net/wiki/spaces/X"))));
         QVERIFY(!jira.handles(QUrl(QStringLiteral("https://elsewhere.example/browse/IDS5-7"))));
         QVERIFY(!jira.handles(QUrl(QStringLiteral("http://example.atlassian.net/browse/IDS5-7"))));
-        QVERIFY(links.info(QStringLiteral("https://elsewhere.example/browse/IDS5-7")).isEmpty());
+        // An issue there: what would read it
+        const QVariantMap elsewhere = links.info(QStringLiteral("https://elsewhere.example/browse/IDS5-7"));
+        QVERIFY(!elsewhere.contains("title"));
+        QVERIFY(elsewhere.value("error").toString().contains(QStringLiteral("elsewhere.example")));
+        QVERIFY(links.info(QStringLiteral("https://elsewhere.example/wiki/page")).isEmpty());
     }
 
     void issueWithEmailAndToken()
@@ -186,7 +190,7 @@ private slots:
 
         links.accounts()->remove(QStringLiteral("jira"), server.host());
         QVERIFY(links.accounts()->list().isEmpty());
-        QVERIFY(links.info(server.issue("IDS5-7")).isEmpty());
+        QVERIFY(!links.info(server.issue("IDS5-7")).contains("title"));
     }
 
     void tokenNeverFollowsARedirect()
@@ -232,7 +236,7 @@ private slots:
         QCOMPARE(card.value("title").toString(), QStringLiteral("IDS5-7"));
         QVERIFY(card.value("summary").toString().contains(QStringLiteral("example.atlassian.net")));
         // Notes only ask services with an account
-        QVERIFY(links.info(QStringLiteral("https://example.atlassian.net/browse/IDS5-7")).isEmpty());
+        QVERIFY(!links.info(QStringLiteral("https://example.atlassian.net/browse/IDS5-7")).contains("title"));
     }
 
     void cardsOfIssuesWithAnAccount()
@@ -271,7 +275,7 @@ private slots:
         links.accounts()->remember({QStringLiteral("jira"), server.host(), {}}, "pat");
         // The old address: same port, another name for this machine
         const QString old = QStringLiteral("http://localhost:%1/browse/IDS5-7").arg(server.serverPort());
-        QVERIFY(links.info(old).isEmpty());
+        QVERIFY(!links.info(old).contains("title"));
         links.accounts()->setAliases(QStringLiteral("jira"), server.host(),
                                      QStringLiteral("https://localhost:%1/browse/X-1, ").arg(server.serverPort()));
         QCOMPARE(links.accounts()->list().first().toMap().value("aliases").toStringList(),
