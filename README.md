@@ -154,7 +154,9 @@ request; the [website](pages/) is published from `pages/` by the
   a link to one of its issues shows the issue's summary and status after
   it, and its type, priority, assignee and when it changed while the
   pointer is on it. Jira Cloud takes your email and an API token, Jira
-  Data Center a personal access token. The token is kept in the system's
+  Data Center a personal access token. A Jira that moved keeps its old
+  links working: give its account the old address under **Also for**,
+  and they are read from the new host. The token is kept in the system's
   keychain and sent only to its host; what the issues say is kept in
   Cache's cache folder, not in the project
 - **For Teams, mail and documents**:

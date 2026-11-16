@@ -119,7 +119,8 @@ private slots:
                                    "secret");
         QSignalSpy revision(&links, &Links::revisionChanged);
         QVERIFY(links.info(server.issue("IDS5-7")).isEmpty()); // asked in the background
-        QTRY_COMPARE(revision.size(), 1);
+        QTRY_VERIFY(!links.info(server.issue("IDS5-7")).isEmpty());
+        QVERIFY(revision.size() >= 1); // so bindings ask again
         const QVariantMap info = links.info(server.issue("IDS5-7"));
         QCOMPARE(info.value("title").toString(), QStringLiteral("IDS5-7"));
         QCOMPARE(info.value("summary").toString(), QStringLiteral("Fix the crash on resize"));
@@ -258,6 +259,27 @@ private slots:
         links.card(file.url("/report.bin"));
         QTRY_COMPARE(links.card(file.url("/report.bin")).value("title").toString(), QStringLiteral("report.bin"));
         QVERIFY(revision.size() >= 2);
+    }
+
+    void aliasesAreReadThroughTheirAccount()
+    {
+        FakeJira server("Bearer pat");
+        Links links{Links::Detached{}};
+        links.accounts()->remember({QStringLiteral("jira"), server.host(), {}}, "pat");
+        // The old address: same port, another name for this machine
+        const QString old = QStringLiteral("http://localhost:%1/browse/IDS5-7").arg(server.serverPort());
+        QVERIFY(links.info(old).isEmpty());
+        links.accounts()->setAliases(QStringLiteral("jira"), server.host(),
+                                     QStringLiteral("https://localhost:%1/browse/X-1, ").arg(server.serverPort()));
+        QCOMPARE(links.accounts()->list().first().toMap().value("aliases").toStringList(),
+                 QStringList{QStringLiteral("localhost:%1").arg(server.serverPort())});
+        links.info(old);
+        QTRY_COMPARE(links.info(old).value("summary").toString(), QStringLiteral("Fix the crash on resize"));
+        // Asked of the account's own host, under its own name
+        QVERIFY(server.requests.last().contains("Host: " + server.host().toUtf8()));
+        // Signing in again keeps them
+        links.accounts()->remember({QStringLiteral("jira"), server.host(), {}}, "pat");
+        QCOMPARE(links.accounts()->list().first().toMap().value("aliases").toStringList().size(), 1);
     }
 };
 

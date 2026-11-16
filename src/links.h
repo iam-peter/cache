@@ -40,6 +40,9 @@ struct Account
     QString provider; // the resolver's id: "jira"
     QString host;     // "example.atlassian.net", with ":port" if it has one
     QString user;     // Jira Cloud: the email the token is of; empty for a bearer token
+    // Other hosts whose links it answers for: the old address of a Jira
+    // that moved. Their links are read from `host`; nothing goes to them.
+    QStringList aliases;
 };
 
 // The accounts, kept in the settings, and their tokens, read from the
@@ -49,7 +52,7 @@ class Accounts : public QObject
     Q_OBJECT
     QML_ANONYMOUS
 
-    // [{provider, host, user}]
+    // [{provider, host, user, aliases}]
     Q_PROPERTY(QVariantList list READ list NOTIFY changed)
     // Whether tokens can be kept (Linux builds need libsecret)
     Q_PROPERTY(bool keychain READ keychain CONSTANT)
@@ -61,7 +64,11 @@ public:
     QVariantList list() const;
     bool keychain() const;
 
+    // The account for `host`, by its own host or one of its aliases
     std::optional<Account> find(const QString &provider, const QString &host) const;
+    // The other hosts the account answers for, from what people type:
+    // addresses or host names, separated by commas or spaces
+    Q_INVOKABLE void setAliases(const QString &provider, const QString &host, const QString &aliases);
     // The account's token, or empty when there is none. From the keychain
     // the first time, in the background: unlocking it may ask the user.
     void token(const Account &account, const std::function<void(const QByteArray &)> &done);

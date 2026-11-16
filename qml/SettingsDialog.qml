@@ -208,29 +208,52 @@ Dialog {
 
                 Repeater {
                     model: Links.accounts.list
-                    delegate: RowLayout {
+                    delegate: ColumnLayout {
+                        id: account
                         required property var modelData
                         Layout.fillWidth: true
-                        spacing: Styles.Primitives.spacing.sp100
-                        Label {
-                            text: Links.providers.find(p => p.id === parent.modelData.provider)?.name ?? parent.modelData.provider
-                            font.weight: Styles.Primitives.fontWeight.semiBold
-                        }
-                        Label {
+                        spacing: Styles.Primitives.spacing.sp050
+                        RowLayout {
                             Layout.fillWidth: true
-                            text: parent.modelData.host
-                            elide: Text.ElideRight
+                            spacing: Styles.Primitives.spacing.sp100
+                            Label {
+                                text: Links.providers.find(p => p.id === account.modelData.provider)?.name ?? account.modelData.provider
+                                font.weight: Styles.Primitives.fontWeight.semiBold
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: account.modelData.host
+                                elide: Text.ElideRight
+                            }
+                            Label {
+                                text: account.modelData.user
+                                color: Theme.textMuted
+                                elide: Text.ElideRight
+                                Layout.maximumWidth: 180
+                            }
+                            Button {
+                                text: qsTr("Remove")
+                                styles: [Styles.ButtonStyle.small]
+                                onClicked: Links.accounts.remove(account.modelData.provider, account.modelData.host)
+                            }
                         }
-                        Label {
-                            text: parent.modelData.user
-                            color: Theme.textMuted
-                            elide: Text.ElideRight
-                            Layout.maximumWidth: 180
-                        }
-                        Button {
-                            text: qsTr("Remove")
-                            styles: [Styles.ButtonStyle.small]
-                            onClicked: Links.accounts.remove(parent.modelData.provider, parent.modelData.host)
+                        // Old addresses of the same Jira: their links are read from this host
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Styles.Primitives.spacing.sp100
+                            Label {
+                                text: qsTr("Also for")
+                                color: Theme.textMuted
+                                font.pixelSize: Styles.Primitives.fontSize.small
+                            }
+                            TextField {
+                                Layout.fillWidth: true
+                                text: (account.modelData.aliases || []).join(", ")
+                                placeholderText: qsTr("Other addresses of this Jira, e.g. jira.example.com")
+                                font.pixelSize: Styles.Primitives.fontSize.small
+                                onEditingFinished: Links.accounts.setAliases(account.modelData.provider,
+                                                                             account.modelData.host, text)
+                            }
                         }
                     }
                 }

@@ -10,6 +10,7 @@
 #include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QPointer>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
@@ -63,7 +64,8 @@ Accounts::Accounts(bool persistent, QObject *parent)
         settings.setArrayIndex(i);
         Account account{settings.value(QStringLiteral("provider")).toString(),
                         settings.value(QStringLiteral("host")).toString(),
-                        settings.value(QStringLiteral("user")).toString()};
+                        settings.value(QStringLiteral("user")).toString(),
+                        settings.value(QStringLiteral("aliases")).toStringList()};
         if (!account.provider.isEmpty() && !account.host.isEmpty())
             m_accounts.append(account);
     }
@@ -76,7 +78,8 @@ QVariantList Accounts::list() const
     for (const Account &a : m_accounts)
         list << QVariantMap{{QStringLiteral("provider"), a.provider},
                             {QStringLiteral("host"), a.host},
-                            {QStringLiteral("user"), a.user}};
+                            {QStringLiteral("user"), a.user},
+                            {QStringLiteral("aliases"), a.aliases}};
     return list;
 }
 
@@ -91,7 +94,29 @@ std::optional<Account> Accounts::find(const QString &provider, const QString &ho
         if (a.provider == provider && a.host.compare(host, Qt::CaseInsensitive) == 0)
             return a;
     }
+    for (const Account &a : m_accounts) {
+        if (a.provider == provider && a.aliases.contains(host, Qt::CaseInsensitive))
+            return a;
+    }
     return std::nullopt;
+}
+
+void Accounts::setAliases(const QString &provider, const QString &host, const QString &aliases)
+{
+    QStringList hosts;
+    for (const QString &part : aliases.split(QRegularExpression(QStringLiteral("[,\\s]+")), Qt::SkipEmptyParts)) {
+        const QString h = Links::hostOf(part);
+        if (!h.isEmpty() && h.compare(host, Qt::CaseInsensitive) != 0 && !hosts.contains(h))
+            hosts << h;
+    }
+    for (Account &a : m_accounts) {
+        if (a.provider != provider || a.host.compare(host, Qt::CaseInsensitive) != 0 || a.aliases == hosts)
+            continue;
+        a.aliases = hosts;
+        if (m_persistent)
+            store();
+        emit changed();
+    }
 }
 
 QString Accounts::keyOf(const Account &account)
@@ -188,7 +213,11 @@ void Accounts::add(const Account &account)
     const QString key = keyOf(account);
     for (Account &a : m_accounts) {
         if (keyOf(a) == key) {
+            // Signing in again keeps the aliases
+            const QStringList aliases = a.aliases;
             a = account;
+            if (a.aliases.isEmpty())
+                a.aliases = aliases;
             emit changed();
             return;
         }
@@ -206,6 +235,7 @@ void Accounts::store() const
         settings.setValue(QStringLiteral("provider"), m_accounts.at(i).provider);
         settings.setValue(QStringLiteral("host"), m_accounts.at(i).host);
         settings.setValue(QStringLiteral("user"), m_accounts.at(i).user);
+        settings.setValue(QStringLiteral("aliases"), m_accounts.at(i).aliases);
     }
     settings.endArray();
 }
@@ -236,6 +266,8 @@ Links::Links(QObject *parent)
     m_save.setSingleShot(true);
     m_save.setInterval(2000);
     connect(&m_save, &QTimer::timeout, this, &Links::save);
+    // Another account or alias: links may be read differently now
+    connect(m_accounts, &Accounts::changed, this, &Links::touch);
     addResolver(std::make_unique<JiraResolver>(this));
     m_page = std::make_unique<PageResolver>(this);
 }
@@ -269,6 +301,7 @@ Links::Links(Detached, QObject *parent)
         emit revisionChanged();
     });
     m_loaded = true;
+    connect(m_accounts, &Accounts::changed, this, &Links::touch);
     addResolver(std::make_unique<JiraResolver>(this));
     m_page = std::make_unique<PageResolver>(this);
 }
