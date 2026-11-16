@@ -1,4 +1,5 @@
 #include "confluenceresolver.h"
+#include "figmaresolver.h"
 #include "jiraresolver.h"
 #include "links.h"
 #include "pageresolver.h"
@@ -106,6 +107,52 @@ public:
     {
         return QStringLiteral("http://localhost:%1/browse/%2").arg(serverPort()).arg(QLatin1String(key));
     }
+    QList<QByteArray> requests;
+};
+
+// A stand-in for Figma's API: one file with one frame
+class FakeFigma : public QTcpServer
+{
+public:
+    FakeFigma()
+    {
+        listen(QHostAddress::LocalHost);
+        connect(this, &QTcpServer::newConnection, this, [this] {
+            while (QTcpSocket *socket = nextPendingConnection()) {
+                connect(socket, &QTcpSocket::readyRead, socket, [this, socket] {
+                    const QByteArray request = socket->readAll();
+                    requests << request;
+                    QByteArray status = "200 OK", body;
+                    if (!request.contains("\r\nX-Figma-Token: figd_test\r\n")) {
+                        status = "403 Forbidden";
+                        body = R"({"status":403,"err":"Invalid token"})";
+                    } else if (request.startsWith("GET /v1/me ")) {
+                        body = R"({"handle":"Ada"})";
+                    } else if (request.startsWith("GET /v1/files/AbCdEf123456/nodes?ids=12%3A34&depth=1 ")) {
+                        body = R"({"name":"Design System","lastModified":"2026-11-15T08:00:00Z","editorType":"figma",
+                            "thumbnailUrl":"https://example.org/thumb.png",
+                            "nodes":{"12:34":{"document":{"id":"12:34","name":"Button / Primary","type":"COMPONENT",
+                            "absoluteBoundingBox":{"x":0,"y":0,"width":320,"height":80}}}}})";
+                    } else if (request.startsWith("GET /v1/files/AbCdEf123456/nodes?ids=99%3A1&depth=1 ")) {
+                        body = R"({"name":"Design System","nodes":{"99:1":null}})";
+                    } else if (request.startsWith("GET /v1/images/AbCdEf123456?ids=12%3A34&format=png&scale=2 ")) {
+                        body = R"({"err":null,"images":{"12:34":"https://example.org/render.png"}})";
+                    } else if (request.startsWith("GET /v1/files/AbCdEf123456?depth=1 ")) {
+                        body = R"({"name":"Design System","lastModified":"2026-11-15T08:00:00Z","editorType":"figjam",
+                            "thumbnailUrl":"https://example.org/thumb.png",
+                            "document":{"children":[{"name":"Cover"},{"name":"Components"}]}})";
+                    } else {
+                        status = "404 Not Found";
+                        body = R"({"status":404,"err":"Not found"})";
+                    }
+                    socket->write("HTTP/1.1 " + status + "\r\nContent-Type: application/json\r\nContent-Length: "
+                                  + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
+                    socket->disconnectFromHost();
+                });
+            }
+        });
+    }
+    QString base() const { return QStringLiteral("http://127.0.0.1:%1").arg(serverPort()); }
     QList<QByteArray> requests;
 };
 
@@ -499,6 +546,72 @@ private slots:
         // Confluence isn't an account of its own
         for (const QVariant &p : links.providers())
             QVERIFY(p.toMap().value("id").toString() != QStringLiteral("confluence"));
+    }
+
+    void figmaLinks()
+    {
+        const auto ref = [](const char *url) { return FigmaResolver::refOf(QUrl(QLatin1String(url))); };
+        FigmaResolver::Ref r = ref("https://www.figma.com/design/AbCdEf123456/Design-System?node-id=12-34&t=x");
+        QCOMPARE(r.file, QStringLiteral("AbCdEf123456"));
+        QCOMPARE(r.node, QStringLiteral("12:34"));
+        QCOMPARE(ref("https://www.figma.com/file/AbCdEf123456/Old").node, QString());
+        QCOMPARE(ref("https://www.figma.com/board/AbCdEf123456/Board").file, QStringLiteral("AbCdEf123456"));
+        QCOMPARE(ref("https://www.figma.com/proto/AbCdEf123456/P?node-id=1-2&starting-point-node-id=1%3A2").node,
+                 QStringLiteral("1:2"));
+        QCOMPARE(ref("https://www.figma.com/design/AbCdEf123456/branch/BrAnCh654321/DS").file,
+                 QStringLiteral("BrAnCh654321"));
+        QCOMPARE(ref("https://www.figma.com/design/AbCdEf123456/DS?node-id=I1-2%3B3-4").node, QStringLiteral("I1:2;3:4"));
+        QVERIFY(!ref("https://www.figma.com/files/recent").valid());
+        QVERIFY(!ref("https://www.figma.com/community/file/123").valid());
+        QVERIFY(!ref("https://figma.example.com/design/AbCdEf123456/X").valid());
+    }
+
+    void figmaDesignsAreRead()
+    {
+        FakeFigma api;
+        Links links{Links::Detached{}};
+        static_cast<FigmaResolver *>(links.resolver(QStringLiteral("figma")))->setApi(api.base());
+        QSignalSpy added(&links, &Links::accountAdded);
+        // Signing in: just a token, for figma.com
+        links.addAccount(QStringLiteral("figma"), QStringLiteral("ignored"), QStringLiteral("ignored"),
+                         QStringLiteral("figd_wrong"));
+        QTRY_COMPARE(added.size(), 1);
+        QCOMPARE(added.at(0).at(0).toBool(), false);
+        QVERIFY(added.at(0).at(1).toString().contains(QStringLiteral("Invalid token")));
+        links.addAccount(QStringLiteral("figma"), {}, {}, QStringLiteral("figd_test"));
+        QTRY_COMPARE(added.size(), 2);
+        QCOMPARE(added.at(1).at(0).toBool(), true);
+        QCOMPARE(links.accounts()->list().first().toMap().value("host").toString(), QStringLiteral("figma.com"));
+
+        // A frame: its name, its file, and its picture rendered by Figma
+        const QString frame = QStringLiteral("https://www.figma.com/design/AbCdEf123456/Design-System?node-id=12-34");
+        links.card(frame);
+        QTRY_COMPARE(links.card(frame).value("image").toString(), QStringLiteral("https://example.org/render.png"));
+        QVariantMap info = links.card(frame);
+        QCOMPARE(info.value("title").toString(), QStringLiteral("Button / Primary"));
+        QCOMPARE(info.value("summary").toString(), QStringLiteral("Component in Design System"));
+        QCOMPARE(info.value("kind").toString(), QStringLiteral("design"));
+        QVERIFY(info.value("fields").toList().at(1).toMap().value("value").toString() == QStringLiteral("320 × 80"));
+        // Notes ask too: it has an account
+        QCOMPARE(links.info(frame).value("title").toString(), QStringLiteral("Button / Primary"));
+
+        // The whole file: its pages and thumbnail
+        const QString file = QStringLiteral("https://www.figma.com/board/AbCdEf123456/Board");
+        links.card(file);
+        QTRY_COMPARE(links.card(file).value("title").toString(), QStringLiteral("Design System"));
+        info = links.card(file);
+        QCOMPARE(info.value("summary").toString(), QStringLiteral("Pages: Cover, Components"));
+        QCOMPARE(info.value("site").toString(), QStringLiteral("FigJam"));
+        QCOMPARE(info.value("image").toString(), QStringLiteral("https://example.org/thumb.png"));
+
+        // A frame that isn't there
+        const QString gone = QStringLiteral("https://www.figma.com/design/AbCdEf123456/DS?node-id=99-1");
+        links.card(gone);
+        QTRY_VERIFY(links.card(gone).value("error").toString().contains(QStringLiteral("no such frame")));
+
+        // The token went to the API only, as Figma wants it
+        for (const QByteArray &request : std::as_const(api.requests))
+            QVERIFY(!request.contains("Authorization"));
     }
 };
 

@@ -48,9 +48,12 @@ Item {
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.margins: 1
-        height: visible ? Math.min(body.height * 0.5, width / 1.91) : 0
+        // A design is the point: most of the card, whole; a page's picture
+        // is a banner
+        readonly property bool design: body.info.kind === "design"
+        height: !visible ? 0 : design ? body.height * 0.68 : Math.min(body.height * 0.5, width / 1.91)
         source: body.info.image || ""
-        fillMode: Image.PreserveAspectCrop
+        fillMode: design ? Image.PreserveAspectFit : Image.PreserveAspectCrop
         asynchronous: true
         sourceSize.width: 640
     }

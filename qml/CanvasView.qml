@@ -1697,6 +1697,18 @@ Item {
 
         contentItem: ColumnLayout {
             spacing: Styles.Primitives.spacing.sp075
+            // Its picture: a page's, or a Figma frame as Figma renders it
+            Image {
+                id: linkPicture
+                Layout.fillWidth: true
+                Layout.preferredHeight: status === Image.Ready && implicitWidth > 0
+                                        ? Math.min(220, width * implicitHeight / implicitWidth) : 0
+                visible: status === Image.Ready
+                source: linkCard.info.image || ""
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+                sourceSize.width: 720
+            }
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Styles.Primitives.spacing.sp100

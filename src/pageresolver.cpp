@@ -1,6 +1,7 @@
 #include "pageresolver.h"
 
 #include "confluenceresolver.h"
+#include "figmaresolver.h"
 #include "markdown.h"
 
 #include <QHash>
@@ -72,6 +73,15 @@ void PageResolver::resolve(const QUrl &url, const Done &done)
         info.summary = !key.isEmpty()
             ? QObject::tr("Add an account for %1 in Settings to see this issue.").arg(Links::authority(url))
             : QObject::tr("Add an account for %1 in Settings to see this page.").arg(Links::authority(url));
+        done(info, {});
+        return;
+    }
+    // A Figma file without a token: its page says little (or asks to sign in)
+    if (FigmaResolver::refOf(url).valid()) {
+        LinkInfo info;
+        info.title = QStringLiteral("Figma");
+        info.site = QStringLiteral("figma.com");
+        info.summary = QObject::tr("Add a Figma token in Settings, Accounts to see this design.");
         done(info, {});
         return;
     }

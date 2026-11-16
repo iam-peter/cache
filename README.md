@@ -155,7 +155,13 @@ request; the [website](pages/) is published from `pages/` by the
   after it, and its type, priority, assignee and when it changed while
   the pointer is on it; a link to a Confluence page shows its space, an
   excerpt, and who changed it last and when. A bare address in a note
-  shows the issue's key or the page's title instead. Jira Cloud takes your email and an API token from
+  shows the issue's key or the page's title instead.
+- **Figma designs**: with a Figma personal access token (Settings,
+  Accounts), a link to a frame or component shows it as Figma renders it,
+  on its link card and in its hover card, with its name, size and file;
+  a link to a file shows its thumbnail and pages. Design files, FigJam
+  boards, prototypes, slides and branches alike. The token goes to
+  Figma's API only. Jira Cloud takes your email and an API token from
   id.atlassian.com, which works on every Atlassian Cloud site you can
   see: one sign-in can serve all `*.atlassian.net` sites. Jira Data
   Center takes a personal access token. Links to another address of an
@@ -305,6 +311,7 @@ ctest --test-dir build --output-on-failure
 | `src/links.*` | Details of web links from their services (`Links` in QML), the resolvers' interface, accounts |
 | `src/jiraresolver.*` | Jira issues, through Jira's REST API; signs in the Atlassian accounts |
 | `src/confluenceresolver.*` | Confluence pages, through Confluence's REST API, with the same accounts |
+| `src/figmaresolver.*` | Figma frames and files, through Figma's REST API, rendered as pictures |
 | `src/pageresolver.*` | Any web page's title, description and picture, for link cards |
 | `src/keychain.*` | Tokens in the system's keychain: libsecret, macOS Keychain, Windows Credential Manager |
 | `logo/` | The icon (SVG, PNG, ICO, ICNS) and the desktop entry |

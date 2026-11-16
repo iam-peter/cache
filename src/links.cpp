@@ -1,6 +1,7 @@
 #include "links.h"
 
 #include "confluenceresolver.h"
+#include "figmaresolver.h"
 #include "jiraresolver.h"
 #include "keychain.h"
 #include "markdown.h"
@@ -34,7 +35,8 @@ QVariantMap LinkInfo::toVariant() const
             {QStringLiteral("tone"), tone},
             {QStringLiteral("fields"), rows},
             {QStringLiteral("image"), image},
-            {QStringLiteral("site"), site}};
+            {QStringLiteral("site"), site},
+            {QStringLiteral("kind"), kind}};
 }
 
 LinkInfo LinkInfo::fromVariant(const QVariantMap &map)
@@ -46,6 +48,7 @@ LinkInfo LinkInfo::fromVariant(const QVariantMap &map)
     info.tone = map.value(QStringLiteral("tone")).toString();
     info.image = map.value(QStringLiteral("image")).toString();
     info.site = map.value(QStringLiteral("site")).toString();
+    info.kind = map.value(QStringLiteral("kind")).toString();
     for (const QVariant &row : map.value(QStringLiteral("fields")).toList()) {
         const QVariantMap r = row.toMap();
         info.fields.append({r.value(QStringLiteral("name")).toString(), r.value(QStringLiteral("value")).toString()});
@@ -314,6 +317,7 @@ Links::Links(QObject *parent)
     connect(m_accounts, &Accounts::changed, this, &Links::touch);
     addResolver(std::make_unique<JiraResolver>(this));
     addResolver(std::make_unique<ConfluenceResolver>(this));
+    addResolver(std::make_unique<FigmaResolver>(this));
     m_page = std::make_unique<PageResolver>(this);
 }
 
@@ -353,6 +357,7 @@ Links::Links(Detached, QObject *parent)
     connect(m_accounts, &Accounts::changed, this, &Links::touch);
     addResolver(std::make_unique<JiraResolver>(this));
     addResolver(std::make_unique<ConfluenceResolver>(this));
+    addResolver(std::make_unique<FigmaResolver>(this));
     m_page = std::make_unique<PageResolver>(this);
 }
 
@@ -367,7 +372,9 @@ QVariantList Links::providers() const
     QVariantList list;
     for (const auto &resolver : m_resolvers) {
         if (resolver->signsIn())
-            list << QVariantMap{{QStringLiteral("id"), resolver->id()}, {QStringLiteral("name"), resolver->name()}};
+            list << QVariantMap{{QStringLiteral("id"), resolver->id()},
+                                {QStringLiteral("name"), resolver->name()},
+                                {QStringLiteral("fixedHost"), resolver->fixedHost()}};
     }
     return list;
 }
@@ -382,6 +389,15 @@ QNetworkAccessManager *Links::network()
 void Links::addResolver(std::unique_ptr<LinkResolver> resolver)
 {
     m_resolvers.push_back(std::move(resolver));
+}
+
+LinkResolver *Links::resolver(const QString &id) const
+{
+    for (const auto &r : m_resolvers) {
+        if (r->id() == id)
+            return r.get();
+    }
+    return nullptr;
 }
 
 LinkResolver *Links::resolverFor(const QUrl &url) const
@@ -492,13 +508,9 @@ QVariantMap Links::lookUp(const QString &url, LinkResolver *resolver)
 void Links::addAccount(const QString &provider, const QString &host, const QString &user, const QString &token,
                        bool everySite)
 {
-    const QString h = hostOf(host);
+    LinkResolver *resolver = this->resolver(provider);
+    const QString h = resolver && !resolver->fixedHost().isEmpty() ? resolver->fixedHost() : hostOf(host);
     everySite = everySite && atlassianSite(h);
-    LinkResolver *resolver = nullptr;
-    for (const auto &r : m_resolvers) {
-        if (r->id() == provider)
-            resolver = r.get();
-    }
     if (!resolver || h.isEmpty() || token.trimmed().isEmpty()) {
         emit accountAdded(false, tr("A host and a token are needed."));
         return;

@@ -30,6 +30,7 @@ struct LinkInfo
     QList<QPair<QString, QString>> fields; // the card's rows, in order
     QString image;   // a picture of it, from the web (a page's og:image)
     QString site;    // where it is: "github.com", "Jira · example.atlassian.net"
+    QString kind;    // "design" for a Figma frame or file: its picture is the point
 
     QVariantMap toVariant() const;
     static LinkInfo fromVariant(const QVariantMap &map);
@@ -129,6 +130,9 @@ public:
     // Whether accounts are made for it (Settings lists it); Confluence
     // reads with the Atlassian accounts Jira's sign-in makes
     virtual bool signsIn() const { return true; }
+    // The one host its accounts are for, whatever people type (Figma's);
+    // empty when they name the host
+    virtual QString fixedHost() const { return {}; }
 };
 
 // Links to what other services hold, read through their resolvers. What
@@ -144,7 +148,7 @@ class Links : public QObject
     // info() ask again
     Q_PROPERTY(int revision READ revision NOTIFY revisionChanged)
     Q_PROPERTY(Accounts *accounts READ accounts CONSTANT)
-    // [{id, name}] of the resolvers that sign in
+    // [{id, name, fixedHost}] of the resolvers that sign in
     Q_PROPERTY(QVariantList providers READ providers CONSTANT)
 
 public:
@@ -161,6 +165,7 @@ public:
 
     // Asked before the resolvers there are
     void addResolver(std::unique_ptr<LinkResolver> resolver);
+    LinkResolver *resolver(const QString &id) const;
 
     // What is known about `url`: {title, summary, status, tone,
     // fields: [{name, value}], image, site}, or, when it couldn't be read

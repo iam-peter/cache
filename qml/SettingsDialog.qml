@@ -126,7 +126,7 @@ Dialog {
                     onToggled: Theme.prefs.wheelZooms = checked
                 }
                 Switch {
-                    text: qsTr("Snap to other items while moving and resizing (hold Space to move freely)")
+                    text: qsTr("Snap to other items (hold Space to move freely)")
                     checked: Theme.prefs.snap
                     onToggled: Theme.prefs.snap = checked
                 }
@@ -196,7 +196,7 @@ Dialog {
                     wrapMode: Text.Wrap
                     color: Theme.textMuted
                     font.pixelSize: Styles.Primitives.fontSize.small
-                    text: qsTr("Links to Jira issues and Confluence pages on these hosts show their title, an issue's summary and status, and their details while the pointer is on them. The token is kept in your system's keychain and is only ever sent to the sites it is for.")
+                    text: qsTr("Links to Jira issues, Confluence pages and Figma designs show their title, an issue's summary and status, and their details and pictures while the pointer is on them. The token is kept in your system's keychain and is only ever sent to the sites it is for.")
                 }
                 Label {
                     Layout.fillWidth: true
@@ -238,8 +238,9 @@ Dialog {
                                 onClicked: Links.accounts.remove(account.modelData.provider, account.modelData.host)
                             }
                         }
-                        // Old addresses of the same Jira: their links are read from this host
+                        // Old addresses of the same site: their links are read from this host
                         RowLayout {
+                            visible: account.modelData.provider === "jira"
                             Layout.fillWidth: true
                             spacing: Styles.Primitives.spacing.sp100
                             Label {
@@ -249,6 +250,7 @@ Dialog {
                             }
                             TextField {
                                 Layout.fillWidth: true
+                                Layout.preferredWidth: 100 // fills the row; its text doesn't widen the dialog
                                 text: (account.modelData.aliases || []).map(a => a.replace("=", " = ")).join(", ")
                                 // Every site's account must say which site an old address moved to
                                 placeholderText: account.everySite
@@ -283,35 +285,48 @@ Dialog {
                     Label { text: qsTr("Service") }
                     ComboBox {
                         id: providerBox
+                        // Figma's accounts are for figma.com: no host, no email
+                        readonly property bool fixed: (Links.providers[currentIndex] || {}).fixedHost !== undefined
+                                                      && Links.providers[currentIndex].fixedHost !== ""
                         Layout.fillWidth: true
                         textRole: "name"
                         valueRole: "id"
                         model: Links.providers
                     }
 
-                    Label { text: qsTr("Host") }
+                    Label {
+                        visible: !providerBox.fixed
+                        text: qsTr("Host")
+                    }
                     TextField {
                         id: hostField
+                        visible: !providerBox.fixed
                         Layout.fillWidth: true
+                        Layout.preferredWidth: 100 // fills the row; its text doesn't widen the dialog
                         placeholderText: qsTr("example.atlassian.net, or an issue's address")
                     }
 
                     Item {
-                visible: everySiteBox.visible
-                width: 1
-                height: 1
-            }
-            CheckBox {
-                id: everySiteBox
-                Layout.fillWidth: true
-                visible: /\.atlassian\.net(?:[\/:]|$)/i.test(hostField.text.trim())
-                checked: true
-                text: qsTr("For every atlassian.net site: one API token works on all of them")
-            }
+                        visible: everySiteBox.visible
+                        width: 1
+                        height: 1
+                    }
+                    CheckBox {
+                        id: everySiteBox
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 100 // fills the row; its text doesn't widen the dialog
+                        visible: !providerBox.fixed && /\.atlassian\.net(?:[\/:]|$)/i.test(hostField.text.trim())
+                        checked: true
+                        text: qsTr("For every atlassian.net site: one API token works on all of them")
+                    }
 
-            Label { text: qsTr("Email") }
+                    Label {
+                        visible: !providerBox.fixed
+                        text: qsTr("Email")
+                    }
                     TextField {
                         id: userField
+                        visible: !providerBox.fixed
                         Layout.fillWidth: true
                         placeholderText: qsTr("Atlassian Cloud only; empty for a personal access token")
                     }
@@ -320,8 +335,10 @@ Dialog {
                     TextField {
                         id: tokenField
                         Layout.fillWidth: true
+                        Layout.preferredWidth: 100 // fills the row; its text doesn't widen the dialog
                         echoMode: TextInput.Password
-                        placeholderText: qsTr("API token or personal access token")
+                        placeholderText: providerBox.fixed ? qsTr("Personal access token")
+                                                           : qsTr("API token or personal access token")
                         onAccepted: addButton.clicked()
                     }
 
@@ -333,7 +350,9 @@ Dialog {
                         font.pixelSize: Styles.Primitives.fontSize.small
                         textFormat: Text.StyledText
                         linkColor: Theme.s.text_link
-                        text: qsTr("Atlassian Cloud (Jira and Confluence): your email and an <a href=\"https://id.atlassian.com/manage-profile/security/api-tokens\">API token</a>. Data Center: a personal access token from your profile, without an email.")
+                        text: providerBox.fixed
+                              ? qsTr("Figma: a personal access token, made in Figma under Settings, Security, with read access to file content.")
+                              : qsTr("Atlassian Cloud (Jira and Confluence): your email and an <a href=\"https://id.atlassian.com/manage-profile/security/api-tokens\">API token</a>. Data Center: a personal access token from your profile, without an email.")
                         onLinkActivated: (link) => Qt.openUrlExternally(link)
                         HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
                     }
@@ -344,14 +363,15 @@ Dialog {
                         Button {
                             id: addButton
                             text: accounts.busy ? qsTr("Signing in…") : qsTr("Sign in and add")
-                            enabled: hostField.text.trim() !== "" && tokenField.text.trim() !== ""
+                            enabled: (providerBox.fixed || hostField.text.trim() !== "") && tokenField.text.trim() !== ""
                             onClicked: {
                                 if (!enabled)
                                     return
                                 accounts.busy = true
                                 accounts.message = ""
-                                Links.addAccount(providerBox.currentValue, hostField.text, userField.text, tokenField.text,
-                                         everySiteBox.visible && everySiteBox.checked)
+                                Links.addAccount(providerBox.currentValue, providerBox.fixed ? "" : hostField.text,
+                                                 providerBox.fixed ? "" : userField.text, tokenField.text,
+                                                 everySiteBox.visible && everySiteBox.checked)
                             }
                         }
                     }
