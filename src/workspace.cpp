@@ -220,7 +220,7 @@ int Workspace::createProject(const QString &name)
     QDir root(m_root);
     QString candidate = base;
     for (int n = 2; root.exists(candidate); ++n)
-        candidate = QStringLiteral("%1 %2").arg(base).arg(n);
+        candidate = QStringLiteral("%1 %2").arg(base, QString::number(n));
     if (!root.mkpath(candidate))
         return -1;
     const QString path = root.filePath(candidate);

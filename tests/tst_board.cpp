@@ -865,6 +865,27 @@ private slots:
         QVERIFY(html.contains(QStringLiteral("Other")));
         QVERIFY(!html.contains(QStringLiteral("[[")));
     }
+
+    void namesWithPercentSigns()
+    {
+        // A name holding %2 stays as it is when made unique
+        BoardModel board;
+        const QString dir = project("percent");
+        board.load(dir);
+        QImage image(4, 4, QImage::Format_RGB32);
+        image.fill(Qt::blue);
+        // Two different pictures of the same name (the same one is reused)
+        QDir(m_dir.path()).mkpath(QStringLiteral("other"));
+        const QString file = m_dir.filePath(QStringLiteral("50%2off.png"));
+        const QString other = m_dir.filePath(QStringLiteral("other/50%2off.png"));
+        QVERIFY(image.save(file));
+        image.fill(Qt::red);
+        QVERIFY(image.save(other));
+        board.dropData({{"text/uri-list", QUrl::fromLocalFile(file).toEncoded()}}, 0, 0);
+        board.dropData({{"text/uri-list", QUrl::fromLocalFile(other).toEncoded()}}, 400, 0);
+        QVERIFY(QFileInfo::exists(dir + QStringLiteral("/assets/50%2off.png")));
+        QVERIFY(QFileInfo::exists(dir + QStringLiteral("/assets/50%2off-2.png")));
+    }
 };
 
 QTEST_MAIN(TestBoard)

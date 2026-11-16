@@ -984,7 +984,7 @@ QString BoardModel::uniqueAssetPath(const QString &base, const QString &extensio
     const QDir dir(m_projectPath);
     QString rel = QStringLiteral("assets/%1.%2").arg(base, extension);
     for (int n = 2; QFileInfo::exists(dir.filePath(rel)); ++n)
-        rel = QStringLiteral("assets/%1-%2.%3").arg(base).arg(n).arg(extension);
+        rel = QStringLiteral("assets/%1-%2.%3").arg(base, QString::number(n), extension);
     return rel;
 }
 
