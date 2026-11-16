@@ -1,5 +1,6 @@
 #include "jiraresolver.h"
 #include "links.h"
+#include "pageresolver.h"
 
 #include <QJsonDocument>
 #include <QSignalSpy>
@@ -54,6 +55,29 @@ public:
         return QStringLiteral("http://%1/browse/%2").arg(host(), QLatin1String(key));
     }
     QList<QByteArray> requests;
+};
+
+// Serves one page as `type`
+class PageServer : public QTcpServer
+{
+public:
+    PageServer(const QByteArray &type, const QByteArray &body)
+    {
+        listen(QHostAddress::LocalHost);
+        connect(this, &QTcpServer::newConnection, this, [this, type, body] {
+            while (QTcpSocket *socket = nextPendingConnection()) {
+                connect(socket, &QTcpSocket::readyRead, socket, [this, socket, type, body] {
+                    socket->readAll();
+                    ++requests;
+                    socket->write("HTTP/1.1 200 OK\r\nContent-Type: " + type + "\r\nContent-Length: "
+                                  + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
+                    socket->disconnectFromHost();
+                });
+            }
+        });
+    }
+    QString url(const char *path) const { return QStringLiteral("http://127.0.0.1:%1%2").arg(serverPort()).arg(QLatin1String(path)); }
+    int requests = 0;
 };
 
 class TestLinks : public QObject
@@ -173,6 +197,67 @@ private slots:
         QTest::qWait(50);
         QCOMPARE(server.requests.size(), 1);
         QVERIFY(elsewhere.requests.isEmpty());
+    }
+
+    void pagesSayWhatTheyAre()
+    {
+        const QUrl url(QStringLiteral("https://www.example.org/posts/1"));
+        LinkInfo info = PageResolver::infoOf(url, QStringLiteral(
+            "<html><head><title>Fallback</title>"
+            "<meta content='A &amp; B' property='og:title'>"
+            "<meta name=\"description\" content=\"Plain description\">"
+            "<meta property=\"og:description\" content=\"Open Graph description\">"
+            "<meta property=\"og:image\" content=\"/img/cover.png\">"
+            "</head></html>"));
+        QCOMPARE(info.title, QStringLiteral("A & B"));
+        QCOMPARE(info.summary, QStringLiteral("Open Graph description"));
+        QCOMPARE(info.image, QStringLiteral("https://www.example.org/img/cover.png"));
+        QCOMPARE(info.site, QStringLiteral("example.org"));
+
+        info = PageResolver::infoOf(url, QStringLiteral("<title>\n  Just a title\n</title>"));
+        QCOMPARE(info.title, QStringLiteral("Just a title"));
+        QVERIFY(info.summary.isEmpty());
+        QVERIFY(info.image.isEmpty());
+    }
+
+    void cardsOfIssuesWithoutAnAccount()
+    {
+        Links links{Links::Detached{}};
+        // Not fetched: the sign-in page would say nothing
+        const QVariantMap card = links.card(QStringLiteral("https://example.atlassian.net/browse/IDS5-7"));
+        QCOMPARE(card.value("title").toString(), QStringLiteral("IDS5-7"));
+        QVERIFY(card.value("summary").toString().contains(QStringLiteral("example.atlassian.net")));
+        // Notes only ask services with an account
+        QVERIFY(links.info(QStringLiteral("https://example.atlassian.net/browse/IDS5-7")).isEmpty());
+    }
+
+    void cardsOfIssuesWithAnAccount()
+    {
+        FakeJira server("Bearer pat");
+        Links links{Links::Detached{}};
+        links.accounts()->remember({QStringLiteral("jira"), server.host(), {}}, "pat");
+        links.card(server.issue("IDS5-7"));
+        QTRY_COMPARE(links.card(server.issue("IDS5-7")).value("status").toString(), QStringLiteral("In Progress"));
+        QCOMPARE(links.card(server.issue("IDS5-7")).value("site").toString(), QStringLiteral("Jira · ") + server.host());
+        // Shared with what notes show
+        QCOMPARE(server.requests.size(), 1);
+        QCOMPARE(links.info(server.issue("IDS5-7")).value("summary").toString(),
+                 QStringLiteral("Fix the crash on resize"));
+        QCOMPARE(server.requests.size(), 1);
+    }
+
+    void cardsOfPages()
+    {
+        PageServer html("text/html; charset=utf-8",
+                        "<head><meta property=\"og:title\" content=\"A page\"></head>");
+        PageServer file("application/octet-stream", "data");
+        Links links{Links::Detached{}};
+        QSignalSpy revision(&links, &Links::revisionChanged);
+        QVERIFY(links.card(html.url("/a")).isEmpty());
+        QTRY_COMPARE(links.card(html.url("/a")).value("title").toString(), QStringLiteral("A page"));
+        links.card(file.url("/report.bin"));
+        QTRY_COMPARE(links.card(file.url("/report.bin")).value("title").toString(), QStringLiteral("report.bin"));
+        QVERIFY(revision.size() >= 2);
     }
 };
 

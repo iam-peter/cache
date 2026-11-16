@@ -26,6 +26,8 @@ struct LinkInfo
     QString status;  // "In Progress"
     QString tone;    // the status as "todo", "progress" or "done"
     QList<QPair<QString, QString>> fields; // the card's rows, in order
+    QString image;   // a picture of it, from the web (a page's og:image)
+    QString site;    // where it is: "github.com", "Jira · example.atlassian.net"
 
     QVariantMap toVariant() const;
     static LinkInfo fromVariant(const QVariantMap &map);
@@ -137,9 +139,14 @@ public:
     void addResolver(std::unique_ptr<LinkResolver> resolver);
 
     // What is known about `url`: {title, summary, status, tone,
-    // fields: [{name, value}]}, or nothing. Asks its resolver in the
-    // background when nothing is known yet, or only something old.
+    // fields: [{name, value}], image, site}, or nothing. Asks its resolver
+    // in the background when nothing is known yet, or only something old.
+    // Only services with an account: notes ask this for every web link.
     Q_INVOKABLE QVariantMap info(const QString &url);
+    // The same for a link card: any web page, read as it is
+    Q_INVOKABLE QVariantMap card(const QString &url);
+    // Asks again now (a card's Reload)
+    Q_INVOKABLE void reload(const QString &url);
     // Signs in, then keeps the account: accountAdded says how it went
     Q_INVOKABLE void addAccount(const QString &provider, const QString &host, const QString &user,
                                 const QString &token);
@@ -171,6 +178,7 @@ private:
     };
 
     LinkResolver *resolverFor(const QUrl &url) const;
+    QVariantMap lookUp(const QString &url, LinkResolver *resolver);
     void load();
     void save();
     void bump();
@@ -179,7 +187,8 @@ private:
     Accounts *m_accounts;
     QNetworkAccessManager *m_network = nullptr;
     std::vector<std::unique_ptr<LinkResolver>> m_resolvers;
-    QHash<QString, Entry> m_entries; // by URL
+    std::unique_ptr<LinkResolver> m_page; // for cards, when no other knows the link
+    QHash<QString, Entry> m_entries; // by resolver and URL: "jira https://…"
     bool m_loaded = false;
     QTimer m_bump; // answers come in batches: one revision for each
     QTimer m_save;

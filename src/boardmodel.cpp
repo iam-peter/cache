@@ -820,6 +820,10 @@ QString BoardModel::titleFor(const BoardItem &item)
         return titleForText(item.text);
     if (item.type == QLatin1String("stroke"))
         return QCoreApplication::translate("BoardModel", "Drawing");
+    if (item.type == QLatin1String("link")) {
+        const QString host = QUrl(item.text).host();
+        return host.isEmpty() ? QCoreApplication::translate("BoardModel", "Link") : host;
+    }
     const QString first = item.text.trimmed().section(QLatin1Char('\n'), 0, 0).left(80);
     if (!first.isEmpty())
         return first;

@@ -69,6 +69,8 @@ QJsonObject BoardModel::toJson(const BoardItem &it, bool inlineText)
         o.insert(QStringLiteral("color"), it.color);
     if (it.type == QLatin1String("note") && !inlineText)
         o.insert(QStringLiteral("file"), QStringLiteral("notes/%1.md").arg(it.id));
+    else if (it.type == QLatin1String("link"))
+        o.insert(QStringLiteral("url"), it.text);
     else if (!it.text.isEmpty())
         o.insert(QStringLiteral("text"), it.text);
     if (!it.shape.isEmpty())
@@ -105,7 +107,8 @@ BoardItem BoardModel::itemFromJson(const QJsonObject &o)
     it.h = o.value(QStringLiteral("h")).toDouble(220);
     it.z = o.value(QStringLiteral("z")).toInt();
     it.color = o.value(QStringLiteral("color")).toString();
-    it.text = o.value(QStringLiteral("text")).toString();
+    // A link card's text is its address
+    it.text = o.value(it.type == QLatin1String("link") ? QStringLiteral("url") : QStringLiteral("text")).toString();
     it.source = o.value(QStringLiteral("source")).toString();
     it.shape = o.value(QStringLiteral("shape")).toString();
     it.size = o.value(QStringLiteral("size")).toDouble();
@@ -1203,7 +1206,8 @@ BoardModel::Prompt BoardModel::promptOf(const QStringList &ids) const
     });
     QList<const BoardItem *> notes;
     for (const BoardItem &it : std::as_const(state.items)) {
-        if ((it.type == QLatin1String("note") || it.type == QLatin1String("text")) && !it.text.trimmed().isEmpty())
+        if ((it.type == QLatin1String("note") || it.type == QLatin1String("text") || it.type == QLatin1String("link"))
+            && !it.text.trimmed().isEmpty())
             notes << &it;
     }
 

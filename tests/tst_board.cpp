@@ -4,7 +4,9 @@
 #include <QDirIterator>
 #include <QFontDatabase>
 #include <QGuiApplication>
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QJsonObject>
 #include <QMimeData>
 #include <QTcpServer>
@@ -221,30 +223,58 @@ private slots:
         TinyServer server;
         BoardModel board;
         board.load(project("web"));
-        // A link: titled once the page is fetched
         const QString page = server.url("/page");
+        // On the canvas, a page on its own is a link card
         QStringList ids = board.dropData({{"text/uri-list", (page + "\r\n").toUtf8()}}, 0, 0);
-        QCOMPARE(board.getById(ids.first()).value("text").toString().trimmed(), QStringLiteral("[%1](%1)").arg(page));
-        QTRY_COMPARE(board.getById(ids.first()).value("text").toString().trimmed(),
-                     QStringLiteral("[Hello & welcome](%1)").arg(page));
+        QCOMPARE(board.getById(ids.first()).value("type").toString(), QStringLiteral("link"));
+        QCOMPARE(board.getById(ids.first()).value("text").toString(), page);
+        ids = board.dropData({{"text/plain", "https://example.atlassian.net/browse/IDS5-1341"}}, 0, 0);
+        QCOMPARE(board.getById(ids.first()).value("type").toString(), QStringLiteral("link"));
+
+        // Onto a note, it is a link in it: titled once the page is fetched
+        const int note = board.addNote(600, 0, QStringLiteral("# Links"));
+        const auto text = [&] { return board.get(note).value("text").toString(); };
+        board.dropData({{"text/uri-list", (page + "\r\n").toUtf8()}}, 0, 0, note);
+        QVERIFY(text().contains(QStringLiteral("[%1](%1)").arg(page)));
+        QTRY_VERIFY(text().contains(QStringLiteral("[Hello & welcome](%1)").arg(page)));
         // A link with a name in the drag keeps it
-        ids = board.dropData({{"text/uri-list", page.toUtf8()},
-                              {"text/html", QStringLiteral("<a href=\"%1\">Named</a>").arg(page).toUtf8()}}, 0, 0);
-        QCOMPARE(board.getById(ids.first()).value("text").toString().trimmed(), QStringLiteral("[Named](%1)").arg(page));
-        // An image: fetched into assets
+        board.dropData({{"text/uri-list", page.toUtf8()},
+                        {"text/html", QStringLiteral("<a href=\"%1\">Named</a>").arg(page).toUtf8()}}, 0, 0, note);
+        QVERIFY(text().contains(QStringLiteral("[Named](%1)").arg(page)));
+        // An issue: named by its key at once, never by its sign-in page
+        board.dropData({{"text/plain", "https://example.atlassian.net/browse/IDS5-1341"}}, 0, 0, note);
+        QVERIFY(text().contains(QStringLiteral("[IDS5-1341](https://example.atlassian.net/browse/IDS5-1341)")));
+        board.dropData({{"text/plain", "https://example.atlassian.net/jira/software/projects/IDS5/"
+                                       "boards/7?selectedIssue=IDS5-99"}}, 0, 0, note);
+        QVERIFY(text().contains(QStringLiteral("[IDS5-99](")));
+
+        // An image: fetched into assets, on the canvas too
         ids = board.dropData({{"text/uri-list", server.url("/pic.png").toUtf8()}}, 0, 0);
         QTRY_VERIFY(board.getById(ids.first()).value("text").toString().contains(QStringLiteral("](assets/pic.png)")));
-        // An issue: named by its key at once, never by its sign-in page
-        ids = board.dropData({{"text/plain", "https://example.atlassian.net/browse/IDS5-1341"}}, 0, 0);
-        QCOMPARE(board.getById(ids.first()).value("text").toString().trimmed(),
-                 QStringLiteral("[IDS5-1341](https://example.atlassian.net/browse/IDS5-1341)"));
-        ids = board.dropData({{"text/plain", "https://example.atlassian.net/jira/software/projects/IDS5/"
-                                             "boards/7?selectedIssue=IDS5-99"}}, 0, 0);
-        QVERIFY(board.getById(ids.first()).value("text").toString().startsWith(QStringLiteral("[IDS5-99](")));
         // One that can't be had: a link to it
         ids = board.dropData({{"text/plain", "http://127.0.0.1:1/gone.png"}}, 0, 0);
         QTRY_COMPARE(board.getById(ids.first()).value("text").toString().trimmed(),
                      QStringLiteral("[gone.png](http://127.0.0.1:1/gone.png)"));
+    }
+
+    void linkCardsKeepTheirAddress()
+    {
+        const QString dir = project("linkcard");
+        {
+            BoardModel board;
+            board.load(dir);
+            board.addItem(QStringLiteral("link"), 10, 20, 320, 200, {}, QStringLiteral("https://example.org/a"));
+            board.save();
+        }
+        QFile file(dir + QStringLiteral("/canvas.json"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QJsonObject item = QJsonDocument::fromJson(file.readAll()).object().value("items").toArray().first().toObject();
+        QCOMPARE(item.value("type").toString(), QStringLiteral("link"));
+        QCOMPARE(item.value("url").toString(), QStringLiteral("https://example.org/a"));
+        QVERIFY(!item.contains("text"));
+        BoardModel again;
+        again.load(dir);
+        QCOMPARE(again.get(0).value("text").toString(), QStringLiteral("https://example.org/a"));
     }
 
     void arrangeAndJustify()

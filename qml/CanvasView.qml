@@ -1853,6 +1853,15 @@ Item {
         property point worldPos
         MenuItem { text: qsTr("New note here"); onTriggered: view.newNoteAt(canvasMenu.worldPos) }
         MenuItem { text: qsTr("New code snippet here"); onTriggered: view.newCodeNoteAt(canvasMenu.worldPos) }
+        MenuItem {
+            text: qsTr("New link card here")
+            onTriggered: {
+                const row = Board.addItem("link", Math.round(canvasMenu.worldPos.x - 160),
+                                           Math.round(canvasMenu.worldPos.y - 100), 320, 200, "", "")
+                if (row >= 0)
+                    view.startEditing(Board.get(row).id)
+            }
+        }
         KeyedMenuItem { text: qsTr("Paste here"); shortcut: "Ctrl+V"; onTriggered: { view.clearSelection(); view.pasteAt(canvasMenu.worldPos) } }
         MenuItem { text: qsTr("Insert template…"); onTriggered: templateDialog.open() }
         MenuSeparator {}
@@ -1866,7 +1875,30 @@ Item {
         id: cardMenu
         property int row: -1
         readonly property var item: row >= 0 ? Board.get(row) : ({})
-        KeyedMenuItem { text: qsTr("Edit"); shortcut: "F2"; enabled: cardMenu.item.type !== "stroke"; onTriggered: view.startEditing(cardMenu.item.id) }
+        KeyedMenuItem {
+            text: cardMenu.item.type === "link" ? qsTr("Change address") : qsTr("Edit")
+            shortcut: "F2"
+            enabled: cardMenu.item.type !== "stroke"
+            onTriggered: view.startEditing(cardMenu.item.id)
+        }
+        MenuItem {
+            visible: cardMenu.item.type === "link"
+            height: visible ? implicitHeight : 0
+            text: qsTr("Open in the browser")
+            onTriggered: Qt.openUrlExternally(cardMenu.item.text)
+        }
+        MenuItem {
+            visible: cardMenu.item.type === "link"
+            height: visible ? implicitHeight : 0
+            text: qsTr("Copy address")
+            onTriggered: Board.copyText(cardMenu.item.text)
+        }
+        MenuItem {
+            visible: cardMenu.item.type === "link"
+            height: visible ? implicitHeight : 0
+            text: qsTr("Reload")
+            onTriggered: Links.reload(cardMenu.item.text)
+        }
         // Every way to copy, the rich copy for Teams among them
         CopyMenu { canvas: view }
         KeyedMenuItem {

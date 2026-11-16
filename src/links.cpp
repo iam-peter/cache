@@ -2,6 +2,7 @@
 
 #include "jiraresolver.h"
 #include "keychain.h"
+#include "pageresolver.h"
 
 #include <QDir>
 #include <QFile>
@@ -26,7 +27,9 @@ QVariantMap LinkInfo::toVariant() const
             {QStringLiteral("summary"), summary},
             {QStringLiteral("status"), status},
             {QStringLiteral("tone"), tone},
-            {QStringLiteral("fields"), rows}};
+            {QStringLiteral("fields"), rows},
+            {QStringLiteral("image"), image},
+            {QStringLiteral("site"), site}};
 }
 
 LinkInfo LinkInfo::fromVariant(const QVariantMap &map)
@@ -36,6 +39,8 @@ LinkInfo LinkInfo::fromVariant(const QVariantMap &map)
     info.summary = map.value(QStringLiteral("summary")).toString();
     info.status = map.value(QStringLiteral("status")).toString();
     info.tone = map.value(QStringLiteral("tone")).toString();
+    info.image = map.value(QStringLiteral("image")).toString();
+    info.site = map.value(QStringLiteral("site")).toString();
     for (const QVariant &row : map.value(QStringLiteral("fields")).toList()) {
         const QVariantMap r = row.toMap();
         info.fields.append({r.value(QStringLiteral("name")).toString(), r.value(QStringLiteral("value")).toString()});
@@ -232,6 +237,7 @@ Links::Links(QObject *parent)
     m_save.setInterval(2000);
     connect(&m_save, &QTimer::timeout, this, &Links::save);
     addResolver(std::make_unique<JiraResolver>(this));
+    m_page = std::make_unique<PageResolver>(this);
 }
 
 void Links::save()
@@ -264,6 +270,7 @@ Links::Links(Detached, QObject *parent)
     });
     m_loaded = true;
     addResolver(std::make_unique<JiraResolver>(this));
+    m_page = std::make_unique<PageResolver>(this);
 }
 
 Links::~Links()
@@ -305,24 +312,46 @@ QVariantMap Links::info(const QString &url)
 {
     if (!url.startsWith(QLatin1String("http")))
         return {};
-    load();
-    const QUrl address(url);
-    LinkResolver *resolver = resolverFor(address);
     // Nothing shown for hosts without an account (any more)
+    return lookUp(url, resolverFor(QUrl(url)));
+}
+
+QVariantMap Links::card(const QString &url)
+{
+    if (!url.startsWith(QLatin1String("http")))
+        return {};
+    LinkResolver *resolver = resolverFor(QUrl(url));
+    return lookUp(url, resolver ? resolver : m_page.get());
+}
+
+void Links::reload(const QString &url)
+{
+    for (auto it = m_entries.begin(); it != m_entries.end(); ++it) {
+        if (it.key().section(QLatin1Char(' '), 1) == url) {
+            it->fetched = {};
+            it->failed = {};
+        }
+    }
+    touch();
+}
+
+QVariantMap Links::lookUp(const QString &url, LinkResolver *resolver)
+{
     if (!resolver)
         return {};
-
-    Entry &entry = m_entries[url];
+    load();
+    const QString key = resolver->id() + QLatin1Char(' ') + url;
+    Entry &entry = m_entries[key];
     const QDateTime now = QDateTime::currentDateTimeUtc();
-    const bool fresh = entry.info && entry.fetched.secsTo(now) < kFreshSeconds;
+    const bool fresh = entry.info && entry.fetched.isValid() && entry.fetched.secsTo(now) < kFreshSeconds;
     const bool resting = entry.failed.isValid() && entry.failed.secsTo(now) < kRetrySeconds;
     if (!fresh && !resting && !entry.pending) {
         entry.pending = true;
         QPointer<Links> self(this);
-        resolver->resolve(address, [self, url](const std::optional<LinkInfo> &info, const QString &error) {
+        resolver->resolve(QUrl(url), [self, key](const std::optional<LinkInfo> &info, const QString &error) {
             if (!self)
                 return;
-            Entry &entry = self->m_entries[url];
+            Entry &entry = self->m_entries[key];
             entry.pending = false;
             if (info) {
                 entry.info = info;
@@ -335,7 +364,9 @@ QVariantMap Links::info(const QString &url)
                 // What was known stays shown; asked again in a while
                 entry.failed = QDateTime::currentDateTimeUtc();
                 if (!error.isEmpty())
-                    qWarning("Cache: no details for %s: %s", qPrintable(url), qPrintable(error));
+                    qWarning("Cache: no details for %s: %s", qPrintable(key.section(QLatin1Char(' '), 1)),
+                             qPrintable(error));
+                self->m_bump.start(); // a card stops waiting
             }
         });
     }
@@ -416,6 +447,8 @@ void Links::load()
         return;
     const QJsonObject all = QJsonDocument::fromJson(file.readAll()).object();
     for (auto it = all.begin(); it != all.end(); ++it) {
+        if (!it.key().contains(QLatin1Char(' ')))
+            continue; // from before entries were kept by resolver
         const QJsonObject o = it.value().toObject();
         Entry entry;
         entry.info = LinkInfo::fromVariant(o.value(QStringLiteral("info")).toObject().toVariantMap());

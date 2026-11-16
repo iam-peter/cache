@@ -144,6 +144,12 @@ request; the [website](pages/) is published from `pages/` by the
     a link)
   - Markdown and text files become notes of their own, and notes copied
     from Cache paste back exactly
+- **Link cards**: a web address pasted or dropped on empty canvas (or
+  **New link card here** in the canvas menu) becomes a card with the
+  page's picture, title, description and site; a Jira issue's card shows
+  its key, status, summary and fields. The button beside the site, or
+  `Ctrl`+click on the title, opens it; double-click changes the address.
+  Pasted into a note, an address stays a Markdown link.
 - **Linked issues**: with an account for a Jira host (Settings, Accounts),
   a link to one of its issues shows the issue's summary and status after
   it, and its type, priority, assignee and when it changed while the
@@ -288,6 +294,7 @@ ctest --test-dir build --output-on-failure
 | `src/fuzzy.*` | Typo-tolerant matching: accent folding, edit distance |
 | `src/links.*` | Details of web links from their services (`Links` in QML), the resolvers' interface, accounts |
 | `src/jiraresolver.*` | Jira issues, through Jira's REST API |
+| `src/pageresolver.*` | Any web page's title, description and picture, for link cards |
 | `src/keychain.*` | Tokens in the system's keychain: libsecret, macOS Keychain, Windows Credential Manager |
 | `logo/` | The icon (SVG, PNG, ICO, ICNS) and the desktop entry |
 | `packaging/` | Debian package, Windows installer, QML imports for the deploy tools |
@@ -304,6 +311,7 @@ ctest --test-dir build --output-on-failure
 | `qml/NoteBody.qml` | A rendered note and its editor, with `[[` completion |
 | `qml/*Body.qml` | Shapes, text, sections and pen lines |
 | `qml/CodeBlock.qml`, `EmbedBlock.qml`, `VideoBlock.qml`, `FileBlock.qml` | Code, link previews, videos and attached files in notes |
+| `qml/LinkBody.qml` | A link card: a web page or an issue |
 | `qml/Connector.qml` | A connector, its route and arrows |
 | `qml/ToolPalette.qml`, `Minimap.qml`, `SelectionBar.qml`, `LinkBar.qml` | Tools, map, toolbars for selections and connectors |
 | `qml/TemplateDialog.qml`, `HistoryDialog.qml` | Templates and versions |

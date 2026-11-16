@@ -58,9 +58,12 @@ void JiraResolver::resolve(const QUrl &url, const Done &done)
         get(a, token,
             QStringLiteral("/rest/api/2/issue/%1?fields=summary,status,issuetype,priority,assignee,reporter,updated")
                 .arg(key),
-            [key, done](int status, const QJsonObject &json, const QString &error) {
-                if (status == 200)
-                    done(infoOf(key, json), {});
+            [a, key, done](int status, const QJsonObject &json, const QString &error) {
+                if (status == 200) {
+                    LinkInfo info = infoOf(key, json);
+                    info.site = QStringLiteral("Jira · %1").arg(a.host);
+                    done(info, {});
+                }
                 else
                     done(std::nullopt, error);
             });

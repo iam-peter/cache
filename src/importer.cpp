@@ -67,6 +67,33 @@ bool richText(const QString &html)
     return !text.trimmed().isEmpty() && formatting.match(html).hasMatch();
 }
 
+// The one web page `mime` holds, if that is all it holds: no image, no
+// files, not several addresses
+QString lonePage(const QMimeData *mime)
+{
+    if (mime->hasImage())
+        return {};
+    QStringList web;
+    for (const QUrl &url : mime->urls()) {
+        if (url.isLocalFile())
+            return {};
+        if (url.scheme() == QLatin1String("http") || url.scheme() == QLatin1String("https"))
+            web << url.toString();
+    }
+    const QString text = mime->hasText() ? mime->text().trimmed() : QString();
+    if (web.isEmpty() && Markdown::isWebUrl(text))
+        web << QUrl(text).toString();
+    web.removeDuplicates();
+    if (web.size() != 1)
+        return {};
+    const QUrl url(web.first());
+    const QString html = mime->hasHtml() ? mime->html() : QString();
+    if (kImageExt.contains(QFileInfo(url.path()).suffix().toLower())
+        || (html.contains(QStringLiteral("<img"), Qt::CaseInsensitive) && html.contains(web.first().toHtmlEscaped())))
+        return {};
+    return web.first();
+}
+
 // A file name for something from the web
 QString nameFromUrl(const QUrl &url, const QString &fallback)
 {
@@ -209,6 +236,15 @@ QStringList BoardModel::insertMime(const QMimeData *mime, double cx, double cy, 
             }
         }
         return ids;
+    }
+
+    // A web page on its own, on the canvas: a card showing it
+    if (!targetIsNote && !mime->hasFormat(kAppMarkdown) && Markdown::tableFromCells(mime->text()).isEmpty()) {
+        const QString page = lonePage(mime);
+        if (!page.isEmpty()) {
+            const int row = addItem(QStringLiteral("link"), std::round(cx - 160), std::round(cy - 100), 320, 200, {}, page);
+            return row >= 0 ? QStringList{m_items.at(row).id} : QStringList();
+        }
     }
 
     bool media = false;

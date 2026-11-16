@@ -34,7 +34,10 @@ Item {
     readonly property bool isText: itemType === "text"
     readonly property bool isSection: itemType === "section"
     readonly property bool isStroke: itemType === "stroke"
-    readonly property bool connectable: isNote || isShape || isText
+    readonly property bool isLink: itemType === "link"
+    // On a card of its own: notes and web links
+    readonly property bool framed: isNote || isLink
+    readonly property bool connectable: isNote || isShape || isText || isLink
 
     // Pictures of the canvas show no selection
     readonly property bool selected: !canvas.exporting && canvas.selection.indexOf(itemId) >= 0
@@ -44,8 +47,8 @@ Item {
     readonly property bool formatting: editing && isNote
     readonly property bool linkTarget: canvas.linkTargetId === itemId
     readonly property real inv: 1 / canvas.zoom
-    readonly property real minW: isNote ? 160 : 30
-    readonly property real minH: isNote ? 70 : 20
+    readonly property real minW: isNote || isLink ? 160 : 30
+    readonly property real minH: isNote ? 70 : isLink ? 60 : 20
     readonly property color fillColor: Theme.noteColor(itemColor)
     readonly property bool chrome: !canvas.exporting
 
@@ -109,15 +112,15 @@ Item {
         linking = false
     }
 
-    // Note card: shadow and frame
+    // Note and link card: shadow and frame
     Styles.Shadow {
-        visible: root.isNote
+        visible: root.framed
         anchors.fill: parent
         radius: Theme.radius
         depth: root.selected ? 3 : 1
     }
     Rectangle {
-        visible: root.isNote
+        visible: root.framed
         anchors.fill: parent
         radius: Theme.radius
         color: root.fillColor
@@ -126,7 +129,7 @@ Item {
     }
     // Others show their selection as an outline
     Rectangle {
-        visible: root.chrome && ((root.selected && (root.isText || root.isStroke)) || (root.linkTarget && !root.isNote))
+        visible: root.chrome && ((root.selected && (root.isText || root.isStroke)) || (root.linkTarget && !root.framed))
         anchors.fill: parent
         anchors.margins: -4 * root.inv
         radius: Theme.radius
@@ -184,7 +187,7 @@ Item {
         // A note whose task is done: faded, its tick still clear
         opacity: root.isNote && root.itemTask === "done" && !root.editing ? 0.5 : 1
         sourceComponent: root.isNote ? noteBody : root.isShape ? shapeBody : root.isText ? textBody
-                       : root.isSection ? sectionBody : strokeBody
+                       : root.isSection ? sectionBody : root.isLink ? linkBody : strokeBody
     }
 
     // A note that is a task: its box to tick, in the corner
@@ -223,6 +226,7 @@ Item {
     Component { id: textBody; TextBody { card: root } }
     Component { id: sectionBody; SectionBody { card: root } }
     Component { id: strokeBody; StrokeBody { card: root } }
+    Component { id: linkBody; LinkBody { card: root } }
 
     // --- Mindmap: folding a branch ---------------------------------------
     HoverHandler { id: cardHover }
