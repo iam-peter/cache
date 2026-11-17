@@ -163,6 +163,12 @@ public:
                              "containing_frame":{"name":"Button","pageName":"Components","containingComponentSet":"15737:7099"}},
                             {"key":"c2","file_key":"QwErTy111111","node_id":"1:2","name":"Icon Button",
                              "containing_frame":{"pageName":"Components"}}],"cursor":{}}})";
+                    } else if (request.startsWith("GET /v2/folders/530533745/meta ")) {
+                        body = R"({"id":"530533745","name":"Design System"})";
+                    } else if (request.startsWith("GET /v2/folders/530533745/files ")) {
+                        body = R"({"files":[{"key":"LiBrArY12345","name":"Ignite Product Components"}]})";
+                    } else if (request.startsWith("GET /v2/folders/530533745/folders ")) {
+                        body = R"({"folders":[]})";
                     } else if (request.startsWith("GET /v1/files/LiBrArY12345?depth=2 ")) {
                         // A library file named under the account: sets and frames
                         // on its pages, a set deeper in, a set of another library
@@ -1061,6 +1067,20 @@ private slots:
         QTRY_VERIFY(found.contains("figma"));
         QCOMPARE(found.value("figma").first().toMap().value("title").toString(), QStringLiteral("Ignite Product Components"));
         links.accounts()->setLibraries(QStringLiteral("figma"), QStringLiteral("figma.com"), QString());
+        // A folder named by its address: its files, and what they hold
+        links.accounts()->setTeams(QStringLiteral("figma"), QStringLiteral("figma.com"),
+            QStringLiteral("https://www.figma.com/files/1068536443537812145/folder/530533745?fuid=1019188949571396138"));
+        QCOMPARE(links.accounts()->find(QStringLiteral("figma"), QStringLiteral("figma.com"))->teams,
+                 QStringList{QStringLiteral("folder/530533745")});
+        found.clear();
+        links.search(QStringLiteral("button"));
+        QTRY_VERIFY(found.contains("figma"));
+        QCOMPARE(found.value("figma").first().toMap().value("detail").toString(),
+                 QStringLiteral("Figma · Ignite Product Components · component set"));
+        found.clear();
+        links.search(QStringLiteral("ignite"));
+        QTRY_VERIFY(found.contains("figma"));
+        QCOMPARE(found.value("figma").first().toMap().value("detail").toString(), QStringLiteral("Figma · Design System"));
         // A team Figma won't list: why, where the files would be
         links.accounts()->setTeams(QStringLiteral("figma"), QStringLiteral("figma.com"), QStringLiteral("9999999"));
         found.clear();

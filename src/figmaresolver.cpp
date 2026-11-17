@@ -296,6 +296,9 @@ constexpr int kLibraryPage = 1000;
 constexpr int kLibraryPages = 40;
 // Component results shown for a search, best first
 constexpr int kComponentResults = 12;
+// Files whose components are read one by one (in folders named on the
+// account, and library files)
+constexpr int kMaxLibraryFiles = 60;
 
 } // namespace
 
@@ -313,7 +316,11 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
         int pending = 1;
         int folders = 0;
         // A folder's files and subfolders, named by its path
-        std::function<void(const QString &id, const QString &name, int depth)> walk;
+        // `read`: their components too (a folder named on the account)
+        std::function<void(const QString &id, const QString &name, int depth, bool read)> walk;
+        // A library file's component sets, components and frames
+        std::function<void(const QString &key)> readLibrary;
+        int libraryFiles = 0;
         // A page of a team library's component sets or components
         std::function<void(const QString &team, const QString &kind, const QString &after, int page)> library;
     };
@@ -329,6 +336,7 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
             return;
         listing->walk = nullptr; // they hold the listing
         listing->library = nullptr;
+        listing->readLibrary = nullptr;
         for (auto it = listing->libraryErrors.cbegin(); it != listing->libraryErrors.cend(); ++it) {
             const QString team = QStringLiteral("team %1").arg(it.key());
             if (std::none_of(listing->errors.cbegin(), listing->errors.cend(),
@@ -363,23 +371,35 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
             settle();
             return;
         }
-        listing->walk = [this, token, listing, settle, addFiles](const QString &id, const QString &name, int depth) {
+        listing->walk = [this, token, listing, settle, addFiles](const QString &id, const QString &name, int depth,
+                                                                  bool read) {
             if (++listing->folders > kMaxFolders)
                 return;
             listing->pending += 2;
             get(token, QStringLiteral("/v2/folders/%1/files").arg(id),
-                [settle, addFiles, name](int status, const QJsonObject &json, const QString &) {
-                    if (status == 200)
+                [listing, settle, addFiles, id, name, depth, read](int status, const QJsonObject &json, const QString &error) {
+                    if (status == 200) {
                         addFiles(json, name);
+                        // A folder named on the account: what its files hold
+                        for (const QJsonValue &f : itemsOf(json, {"files"})) {
+                            const QString key = f.toObject().value(QLatin1String("key")).toString();
+                            if (read && !key.isEmpty() && listing->readLibrary && ++listing->libraryFiles <= kMaxLibraryFiles)
+                                listing->readLibrary(key);
+                        }
+                    } else if (read && depth == 0) {
+                        listing->errors << (status == 403
+                            ? QObject::tr("folder %1: %2 The token needs folders:read.").arg(id, error)
+                            : QObject::tr("folder %1: %2").arg(id, error));
+                    }
                     settle();
                 });
             get(token, QStringLiteral("/v2/folders/%1/folders").arg(id),
-                [listing, settle, name, depth](int status, const QJsonObject &json, const QString &) {
+                [listing, settle, name, depth, read](int status, const QJsonObject &json, const QString &) {
                     if (status == 200 && depth < kFolderDepth && listing->walk) {
                         for (const QJsonValue &v : itemsOf(json, {"folders"})) {
                             const QJsonObject sub = v.toObject();
                             listing->walk(idOf(sub), name + QStringLiteral(" / ") + sub.value(QLatin1String("name")).toString(),
-                                          depth + 1);
+                                          depth + 1, read);
                         }
                     }
                     settle();
@@ -444,9 +464,9 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
                 settle();
             });
         };
-        // Library files named under the account: their pages' component
-        // sets, components and frames (file_content:read), published or not
-        for (const QString &key : libraries) {
+        // A library file: its pages' component sets, components and frames
+        // (file_content:read), published or not
+        listing->readLibrary = [this, token, listing, settle](const QString &key) {
             ++listing->pending;
             get(token, QStringLiteral("/v1/files/%1?depth=2").arg(key),
                 [listing, settle, key](int status, const QJsonObject &json, const QString &error) {
@@ -503,8 +523,28 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
                     }
                     settle();
                 });
+        };
+        for (const QString &key : libraries) {
+            ++listing->libraryFiles;
+            listing->readLibrary(key);
         }
-        for (const QString &team : teams) {
+        for (const QString &entry : teams) {
+            // A folder (figma.com/files/…/folder/<id>): its files, and what
+            // they hold; named by the folder's name if Figma tells it
+            if (entry.startsWith(QLatin1String("folder/"))) {
+                const QString folder = entry.mid(7);
+                ++listing->pending;
+                get(token, QStringLiteral("/v2/folders/%1/meta").arg(folder),
+                    [listing, settle, folder](int status, const QJsonObject &json, const QString &) {
+                        const QString name = json.value(QLatin1String("name")).toString();
+                        if (listing->walk)
+                            listing->walk(folder, status == 200 && !name.isEmpty() ? name : QObject::tr("Folder %1").arg(folder),
+                                          0, true);
+                        settle();
+                    });
+                continue;
+            }
+            const QString &team = entry;
             listing->library(team, QStringLiteral("component_sets"), {}, 0);
             listing->library(team, QStringLiteral("components"), {}, 0);
             ++listing->pending;
@@ -516,7 +556,7 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
                         for (const QJsonValue &v : itemsOf(json, {"folders"})) {
                             const QJsonObject folder = v.toObject();
                             if (listing->walk)
-                                listing->walk(idOf(folder), folder.value(QLatin1String("name")).toString(), 0);
+                                listing->walk(idOf(folder), folder.value(QLatin1String("name")).toString(), 0, false);
                         }
                         settle();
                         return;

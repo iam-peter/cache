@@ -168,12 +168,18 @@ void Accounts::setTeams(const QString &provider, const QString &host, const QStr
     // number after team/ (the others are the organisation's and the user's).
     // Or ids alone.
     static const QRegularExpression inAddress(QStringLiteral(R"(team/(\d{6,}))"));
+    // A folder's: figma.com/files/<organisation>/folder/<folder>, kept as
+    // "folder/<folder>"
+    static const QRegularExpression folderAddress(QStringLiteral(R"(folder/(\d{4,}))"));
     static const QRegularExpression alone(QStringLiteral(R"((?:^|[\s,;])(\d{6,})(?=$|[\s,;]))"));
     QStringList ids;
     for (const QString &entry : teams.split(QRegularExpression(QStringLiteral("[\\s,;]+")), Qt::SkipEmptyParts)) {
         const QRegularExpressionMatch inside = inAddress.match(entry);
+        const QRegularExpressionMatch folder = folderAddress.match(entry);
         const QRegularExpressionMatch bare = alone.match(entry);
-        const QString team = inside.hasMatch() ? inside.captured(1) : bare.hasMatch() ? bare.captured(1) : QString();
+        const QString team = folder.hasMatch() ? QStringLiteral("folder/") + folder.captured(1)
+                           : inside.hasMatch() ? inside.captured(1)
+                           : bare.hasMatch() ? bare.captured(1) : QString();
         if (!team.isEmpty() && !ids.contains(team))
             ids << team;
     }

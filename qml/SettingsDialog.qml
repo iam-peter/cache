@@ -253,7 +253,7 @@ Dialog {
                                 Layout.fillWidth: true
                                 Layout.preferredWidth: 100 // fills the row; its text doesn't widen the dialog
                                 text: (account.modelData.teams || []).join(", ")
-                                placeholderText: qsTr("Team addresses (figma.com/files/team/…), for searching their files")
+                                placeholderText: qsTr("Team or folder addresses (figma.com/files/…/team/… or …/folder/…), for searching them")
                                 font.pixelSize: Styles.Primitives.fontSize.small
                                 onEditingFinished: Links.accounts.setTeams(account.modelData.provider,
                                                                            account.modelData.host, text)
