@@ -2,9 +2,11 @@
 
 #include "confluenceresolver.h"
 #include "figmaresolver.h"
+#include "gerritresolver.h"
 #include "gitlabresolver.h"
 #include "markdown.h"
 
+#include <QFileInfo>
 #include <QHash>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -89,6 +91,19 @@ void PageResolver::resolve(const QUrl &url, const Done &done)
         info.summary = QObject::tr("Add a GitLab account for %1 in Settings to see this.").arg(Links::authority(url));
         done(info, {});
         return;
+    }
+    // A Gerrit change on a host without an account: its page is an app
+    // that asks the API, which wants a sign-in
+    if (url.path().contains(QLatin1String("/+/")) || url.fragment().startsWith(QLatin1String("/c/"))) {
+        const GerritResolver::Ref ref = GerritResolver::refOf(url);
+        if (ref.valid()) {
+            LinkInfo info;
+            info.title = ref.path.isEmpty() ? QObject::tr("Change %1").arg(ref.number) : QFileInfo(ref.path).fileName();
+            info.site = ref.project.isEmpty() ? QStringLiteral("Gerrit") : QStringLiteral("Gerrit · %1").arg(ref.project);
+            info.summary = QObject::tr("Add a Gerrit account for %1 in Settings to see this.").arg(Links::authority(url));
+            done(info, {});
+            return;
+        }
     }
     // A Figma file without a token: its page says little (or asks to sign in)
     if (FigmaResolver::refOf(url).valid()) {

@@ -317,6 +317,10 @@ ApplicationWindow {
               enabled: Links.accounts.list.some(a => a.provider === "github") },
             { name: qsTr("Pull requests waiting for my review (GitHub)"), query: "pr:review",
               enabled: Links.accounts.list.some(a => a.provider === "github") },
+            { name: qsTr("My open changes (Gerrit)"), query: "gerrit:mine",
+              enabled: Links.accounts.list.some(a => a.provider === "gerrit") },
+            { name: qsTr("Changes waiting for my review (Gerrit)"), query: "gerrit:review",
+              enabled: Links.accounts.list.some(a => a.provider === "gerrit") },
             { name: qsTr("Export a picture…"), run: () => exportDialog.open() },
             { name: qsTr("Copy canvas as picture"), run: () => canvasView.exportImage([], "copy") },
             { name: qsTr("Export canvas as Markdown"), run: () => {

@@ -3,6 +3,7 @@
 #include "confluenceresolver.h"
 #include "figmaresolver.h"
 #include "githubresolver.h"
+#include "gerritresolver.h"
 #include "gitlabresolver.h"
 #include "jiraresolver.h"
 #include "highlight.h"
@@ -372,6 +373,7 @@ Links::Links(QObject *parent)
     addResolver(std::make_unique<FigmaResolver>(this));
     addResolver(std::make_unique<GitLabResolver>(this));
     addResolver(std::make_unique<GitHubResolver>(this));
+    addResolver(std::make_unique<GerritResolver>(this));
     addOpenResolver(std::make_unique<WikipediaResolver>(this));
     m_page = std::make_unique<PageResolver>(this);
 }
@@ -415,6 +417,7 @@ Links::Links(Detached, QObject *parent)
     addResolver(std::make_unique<FigmaResolver>(this));
     addResolver(std::make_unique<GitLabResolver>(this));
     addResolver(std::make_unique<GitHubResolver>(this));
+    addResolver(std::make_unique<GerritResolver>(this));
     addOpenResolver(std::make_unique<WikipediaResolver>(this));
     m_page = std::make_unique<PageResolver>(this);
 }

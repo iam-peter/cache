@@ -196,7 +196,7 @@ Dialog {
                     wrapMode: Text.Wrap
                     color: Theme.textMuted
                     font.pixelSize: Styles.Primitives.fontSize.small
-                    text: qsTr("Links to Jira issues, Confluence pages, GitLab and GitHub merge and pull requests, pipelines and runs, and Figma designs show their title, status and details while the pointer is on them. The token is kept in your system's keychain and is only ever sent to the sites it is for.")
+                    text: qsTr("Links to Jira issues, Confluence pages, GitLab and GitHub merge and pull requests, pipelines and runs, Gerrit changes and Figma designs show their title, status and details while the pointer is on them. The token is kept in your system's keychain and is only ever sent to the sites it is for.")
                 }
                 Label {
                     Layout.fillWidth: true
@@ -312,6 +312,7 @@ Dialog {
                         readonly property bool needsUser: (Links.providers[currentIndex] || {}).needsUser === true
                         readonly property bool gitlab: currentValue === "gitlab"
                         readonly property bool github: currentValue === "github"
+                        readonly property bool gerrit: currentValue === "gerrit"
                         Layout.fillWidth: true
                         textRole: "name"
                         valueRole: "id"
@@ -329,6 +330,7 @@ Dialog {
                         Layout.preferredWidth: 100 // fills the row; its text doesn't widen the dialog
                         placeholderText: providerBox.gitlab ? qsTr("gitlab.com, or your GitLab's address")
                                        : providerBox.github ? qsTr("github.com, or your GitHub Enterprise's address")
+                                       : providerBox.gerrit ? qsTr("codereview.qt-project.org, or your Gerrit's address")
                                                             : qsTr("example.atlassian.net, or an issue's address")
                     }
 
@@ -348,23 +350,25 @@ Dialog {
 
                     Label {
                         visible: providerBox.needsUser
-                        text: qsTr("Email")
+                        text: providerBox.gerrit ? qsTr("Username") : qsTr("Email")
                     }
                     TextField {
                         id: userField
                         visible: providerBox.needsUser
                         Layout.fillWidth: true
-                        placeholderText: qsTr("Atlassian Cloud only; empty for a personal access token")
+                        placeholderText: providerBox.gerrit ? qsTr("Your Gerrit username, as HTTP Credentials shows it")
+                                                            : qsTr("Atlassian Cloud only; empty for a personal access token")
                     }
 
-                    Label { text: qsTr("Token") }
+                    Label { text: providerBox.gerrit ? qsTr("Password") : qsTr("Token") }
                     TextField {
                         id: tokenField
                         Layout.fillWidth: true
                         Layout.preferredWidth: 100 // fills the row; its text doesn't widen the dialog
                         echoMode: TextInput.Password
                         placeholderText: providerBox.fixed ? qsTr("Personal access token")
-                                                           : qsTr("API token or personal access token")
+                                       : providerBox.gerrit ? qsTr("HTTP password")
+                                                            : qsTr("API token or personal access token")
                         onAccepted: addButton.clicked()
                     }
 
@@ -382,6 +386,8 @@ Dialog {
                               ? qsTr("GitLab: a personal access token with the read_api scope, made under your avatar, Edit profile, Access tokens.")
                               : providerBox.github
                               ? qsTr("GitHub: a personal access token, made under Settings, Developer settings: fine-grained with read access to contents, pull requests, issues and actions, or classic with repo.")
+                              : providerBox.gerrit
+                              ? qsTr("Gerrit: your username and an HTTP password, made in Gerrit under Settings, HTTP Credentials, Generate new password. It is not your sign-in password.")
                               : qsTr("Atlassian Cloud (Jira and Confluence): your email and an <a href=\"https://id.atlassian.com/manage-profile/security/api-tokens\">API token</a>. Data Center: a personal access token from your profile, without an email.")
                         onLinkActivated: (link) => Qt.openUrlExternally(link)
                         HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
@@ -394,6 +400,7 @@ Dialog {
                             id: addButton
                             text: accounts.busy ? qsTr("Signing in…") : qsTr("Sign in and add")
                             enabled: (providerBox.fixed || hostField.text.trim() !== "") && tokenField.text.trim() !== ""
+                                     && (!providerBox.gerrit || userField.text.trim() !== "")
                             onClicked: {
                                 if (!enabled)
                                     return

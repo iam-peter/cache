@@ -1,6 +1,7 @@
 #include "confluenceresolver.h"
 #include "figmaresolver.h"
 #include "githubresolver.h"
+#include "gerritresolver.h"
 #include "gitlabresolver.h"
 #include "jiraresolver.h"
 #include "links.h"
@@ -343,6 +344,70 @@ public:
     QString host() const { return QStringLiteral("127.0.0.1:%1").arg(serverPort()); }
     QString url(const char *path) const { return QStringLiteral("http://%1/o/app%2").arg(host(), QLatin1String(path)); }
     QList<QByteArray> requests;
+};
+
+// A stand-in for Gerrit's REST API: one change, qt/qtbase 600000, signed
+// in to as ada with an HTTP password
+class FakeGerrit : public QTcpServer
+{
+public:
+    FakeGerrit()
+    {
+        listen(QHostAddress::LocalHost);
+        connect(this, &QTcpServer::newConnection, this, [this] {
+            while (QTcpSocket *socket = nextPendingConnection()) {
+                connect(socket, &QTcpSocket::readyRead, socket, [this, socket] {
+                    const QByteArray request = socket->readAll();
+                    requests << request;
+                    const QByteArray path = QByteArray::fromPercentEncoding(request.mid(4, request.indexOf(' ', 4) - 4));
+                    const QByteArray options = "?o=DETAILED_LABELS&o=DETAILED_ACCOUNTS&o=CURRENT_REVISION&o=CURRENT_COMMIT"
+                                               "&o=CURRENT_FILES";
+                    QByteArray status = "200 OK", body;
+                    if (!request.contains("\r\nAuthorization: Basic " + QByteArray("ada:httppw").toBase64() + "\r\n")) {
+                        status = "401 Unauthorized";
+                        body = "Unauthorized";
+                    } else if (path == "/a/accounts/self") {
+                        body = ")]}'\n" R"({"_account_id":1,"name":"Ada Lovelace","username":"ada"})";
+                    } else if (path == "/a/changes/qt/qtbase~600000" + options || path == "/a/changes/600000" + options) {
+                        body = ")]}'\n" R"({"project":"qt/qtbase","branch":"dev","topic":"resize",
+                            "subject":"Fix the crash on resize","status":"NEW","_number":600000,
+                            "owner":{"_account_id":1,"name":"Ada Lovelace"},"insertions":12,"deletions":4,
+                            "unresolved_comment_count":2,"updated":"2026-11-15 10:00:00.000000000",
+                            "attention_set":{"2":{"account":{"_account_id":2,"name":"Grace Hopper"},"reason":"reviewer"}},
+                            "labels":{"Sanity-Review":{"approved":{"name":"Qt Sanity Bot"},
+                                                       "all":[{"value":1,"name":"Qt Sanity Bot"}]},
+                                      "Code-Review":{"disliked":{"name":"Bob"},"all":[{"value":-1,"name":"Bob"},
+                                                     {"value":0,"name":"Linus"},{"value":1,"name":"Grace Hopper"}]}},
+                            "current_revision":"abc","revisions":{"abc":{"_number":3,"commit":{"message":
+                            "Fix the crash on resize\n\nThe window resized while its scene\ngraph was rendering.\n\nPick-to: 6.10\nTask-number: QTBUG-12345\nChange-Id: I0123\n"},
+                            "files":{"/COMMIT_MSG":{},"src/a.cpp":{},"src/b.cpp":{}}}}})";
+                    } else if (path == "/a/changes/qt/qtbase~600000/revisions/3/files/src/corelib/foo.cpp/content") {
+                        QByteArray file;
+                        for (int i = 1; i <= 80; ++i)
+                            file += "int line" + QByteArray::number(i) + " = " + QByteArray::number(i) + ";\n";
+                        body = file.toBase64();
+                    } else if (path.startsWith("/a/changes/?n=8&o=LABELS&q=")) {
+                        const QByteArray q = path.mid(27);
+                        queries << q;
+                        body = ")]}'\n" + QByteArray(q.contains("attention:self") || q == "resize"
+                            ? R"([{"project":"qt/qtbase","_number":600000,"subject":"Fix the crash on resize",
+                                  "status":"NEW","labels":{"Code-Review":{"approved":{"name":"Grace Hopper"}}}}])"
+                            : "[]");
+                    } else {
+                        status = "404 Not Found";
+                        body = "Not found";
+                    }
+                    socket->write("HTTP/1.1 " + status + "\r\nContent-Type: application/json\r\nContent-Length: "
+                                  + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
+                    socket->disconnectFromHost();
+                });
+            }
+        });
+    }
+    QString host() const { return QStringLiteral("127.0.0.1:%1").arg(serverPort()); }
+    QString url(const char *path) const { return QStringLiteral("http://%1%2").arg(host(), QLatin1String(path)); }
+    QList<QByteArray> requests;
+    QList<QByteArray> queries;
 };
 
 // Serves one page as `type`
@@ -870,7 +935,7 @@ private slots:
         });
         links.search(QStringLiteral("gr")); // too short: not asked
         links.search(QStringLiteral("gradient"));
-        QTRY_COMPARE(found.size(), 5); // GitLab and GitHub answer too, with nothing
+        QTRY_COMPARE(found.size(), 6); // GitLab, GitHub and Gerrit answer too, with nothing
         const QVariantMap issue = found.value("jira").first().toMap();
         QCOMPARE(issue.value("title").toString(), QStringLiteral("Fix the crash on resize"));
         QCOMPARE(issue.value("url").toString(), QStringLiteral("https://%1/browse/IDS5-7").arg(server.host()));
@@ -888,7 +953,7 @@ private slots:
             found.insert(source, r);
         });
         links.search(QStringLiteral("design sys"));
-        QTRY_COMPARE(found.size(), 5); // GitLab and GitHub answer too, with nothing
+        QTRY_COMPARE(found.size(), 6); // GitLab, GitHub and Gerrit answer too, with nothing
         QCOMPARE(found.value("figma").size(), 1);
         QCOMPARE(found.value("figma").first().toMap().value("url").toString(),
                  QStringLiteral("https://www.figma.com/design/AbCdEf123456/Design-System"));
@@ -1169,6 +1234,138 @@ private slots:
         QCOMPARE(api.renders, 2);
         QVERIFY(!QFile::exists(kept));
         QCOMPARE(links.known(QStringLiteral("figma"), frame)->version, QStringLiteral("2"));
+    }
+
+    void gerritLinks()
+    {
+        using G = GerritResolver;
+        const auto ref = [](const char *url) { return G::refOf(QUrl(QLatin1String(url))); };
+        G::Ref r = ref("https://codereview.qt-project.org/c/qt/qtbase/+/600000");
+        QCOMPARE(r.project, QStringLiteral("qt/qtbase"));
+        QCOMPARE(r.number, 600000);
+        QCOMPARE(r.patchSet, 0);
+        QVERIFY(r.path.isEmpty());
+        QCOMPARE(G::changeId(r), QStringLiteral("qt%2Fqtbase~600000"));
+        QCOMPARE(ref("https://codereview.qt-project.org/c/qt/qtbase/+/600000/3").patchSet, 3);
+        r = ref("https://codereview.qt-project.org/c/qt/qtbase/+/600000/3/src/corelib/global/qglobal.h#40");
+        QCOMPARE(r.patchSet, 3);
+        QCOMPARE(r.path, QStringLiteral("src/corelib/global/qglobal.h"));
+        QCOMPARE(r.line, 40);
+        r = ref("https://codereview.qt-project.org/c/qt/qtbase/+/600000/1..3/src/x.cpp#b12");
+        QCOMPARE(r.patchSet, 3);
+        QCOMPARE(r.line, 12);
+        r = ref("https://codereview.qt-project.org/c/qt/qtbase/+/600000/comment/abc123/");
+        QCOMPARE(r.number, 600000);
+        QVERIFY(r.path.isEmpty());
+        QCOMPARE(ref("https://codereview.qt-project.org/c/qt/qtbase/+/600000?tab=comments").number, 600000);
+        // Old and short links: no project, asked by number
+        r = ref("https://codereview.qt-project.org/#/c/600000/");
+        QCOMPARE(r.number, 600000);
+        QCOMPARE(G::changeId(r), QStringLiteral("600000"));
+        QCOMPARE(ref("https://codereview.qt-project.org/600000").number, 600000);
+        // Gerrit somewhere on its host
+        r = ref("https://git.example.com/gerrit/c/app/+/5");
+        QCOMPARE(r.base, QStringLiteral("/gerrit"));
+        QCOMPARE(r.project, QStringLiteral("app"));
+        // Not a change
+        QVERIFY(!ref("https://codereview.qt-project.org/q/status:open").valid());
+        QVERIFY(!ref("https://codereview.qt-project.org/admin/repos").valid());
+        QCOMPARE(G::jsonOf(")]}'\n{\"a\":1}"), QByteArray("{\"a\":1}"));
+    }
+
+    void gerritIsRead()
+    {
+        FakeGerrit server;
+        Links links{Links::Detached{}};
+        QSignalSpy added(&links, &Links::accountAdded);
+        links.addAccount(QStringLiteral("gerrit"), server.host(), QStringLiteral("ada"), QStringLiteral("wrong"));
+        QTRY_COMPARE(added.size(), 1);
+        QCOMPARE(added.at(0).at(0).toBool(), false);
+        QVERIFY(added.at(0).at(1).toString().contains(QStringLiteral("HTTP password")));
+        links.addAccount(QStringLiteral("gerrit"), server.host(), QStringLiteral("ada"), QStringLiteral("httppw"));
+        QTRY_COMPARE(added.size(), 2);
+        QCOMPARE(added.at(1).at(0).toBool(), true);
+        QVERIFY(added.at(1).at(1).toString().contains(QStringLiteral("Ada Lovelace")));
+
+        const auto read = [&](const QString &url) -> QVariantMap {
+            links.card(url);
+            const bool known = QTest::qWaitFor([&] { return !links.card(url).isEmpty(); }, 5000);
+            Q_UNUSED(known)
+            return links.card(url);
+        };
+        const auto field = [](const QVariantMap &info, const QString &name) {
+            for (const QVariant &f : info.value("fields").toList()) {
+                if (f.toMap().value("name").toString() == name)
+                    return f.toMap().value("value").toString();
+            }
+            return QString();
+        };
+        QVariantMap info = read(server.url("/c/qt/qtbase/+/600000"));
+        QCOMPARE(info.value("title").toString(), QStringLiteral("Fix the crash on resize"));
+        QCOMPARE(info.value("site").toString(), QStringLiteral("Gerrit · qt/qtbase"));
+        QCOMPARE(info.value("summary").toString(), QStringLiteral("The window resized while its scene graph was rendering."));
+        // A bot's +1 doesn't make it approved
+        QCOMPARE(info.value("status").toString(), QStringLiteral("Open"));
+        const QVariantList fields = info.value("fields").toList();
+        QCOMPARE(fields.first().toMap().value("name").toString(), QStringLiteral("Code-Review"));
+        QCOMPARE(field(info, "Code-Review"), QStringLiteral("+1 Grace Hopper, −1 Bob"));
+        QCOMPARE(field(info, "Sanity-Review"), QStringLiteral("+1 Qt Sanity Bot"));
+        QCOMPARE(field(info, "Owner"), QStringLiteral("Ada Lovelace"));
+        QCOMPARE(field(info, "Branch"), QStringLiteral("dev"));
+        QCOMPARE(field(info, "Changes"), QStringLiteral("+12 −4 in 2 files"));
+        QCOMPARE(field(info, "Waiting for"), QStringLiteral("Grace Hopper"));
+        QCOMPARE(field(info, "Unresolved comments"), QStringLiteral("2"));
+        QCOMPARE(field(info, "Patch set"), QStringLiteral("3"));
+        QCOMPARE(field(info, "Tasks"), QStringLiteral("QTBUG-12345"));
+        QCOMPARE(field(info, "Topic"), QStringLiteral("resize"));
+
+        // By number only
+        QCOMPARE(read(server.url("/600000")).value("title").toString(), QStringLiteral("Fix the crash on resize"));
+
+        // A file of a patch set, from a little before the line pointed at
+        info = read(server.url("/c/qt/qtbase/+/600000/3/src/corelib/foo.cpp#40"));
+        QCOMPARE(info.value("title").toString(), QStringLiteral("foo.cpp"));
+        QCOMPARE(info.value("firstLine").toInt(), 37);
+        QVERIFY(info.value("code").toString().startsWith(QStringLiteral("int line37 = 37;\nint line38")));
+        QCOMPARE(info.value("code").toString().count(QLatin1Char('\n')), 29);
+        QCOMPARE(info.value("language").toString(), QStringLiteral("cpp"));
+
+        info = read(server.url("/c/qt/qtbase/+/404"));
+        QVERIFY(info.value("error").toString().contains(QStringLiteral("Not found")));
+
+        // Search, and what waits for review
+        QHash<QString, QVariantList> found;
+        connect(&links, &Links::found, this, [&](const QString &, const QString &source, const QVariantList &r) {
+            found.insert(source, r);
+        });
+        links.search(QStringLiteral("resize"));
+        QTRY_VERIFY(found.contains("gerrit"));
+        const QVariantMap change = found.value("gerrit").first().toMap();
+        QCOMPARE(change.value("status").toString(), QStringLiteral("Approved"));
+        QCOMPARE(change.value("detail").toString(), QStringLiteral("qt/qtbase · 600000"));
+        QCOMPARE(change.value("url").toString(), server.url("/c/qt/qtbase/+/600000"));
+        found.clear();
+        links.search(QStringLiteral("gerrit:mine"));
+        QTRY_VERIFY(found.contains("gerrit"));
+        QVERIFY(server.queries.contains("is:open owner:self"));
+        QSignalSpy reviews(&links, &Links::reviewsChanged);
+        links.refreshReviews();
+        QTRY_COMPARE(reviews.size(), 1);
+        QCOMPARE(links.reviews().first().toMap().value("detail").toString(), QStringLiteral("qt/qtbase · 600000"));
+        // The password went to this host's REST API only
+        for (const QByteArray &request : std::as_const(server.requests))
+            QVERIFY(request.startsWith("GET /a/"));
+    }
+
+    void gerritWithoutAccount()
+    {
+        Links links{Links::Detached{}};
+        const QString url = QStringLiteral("https://codereview.example/c/qt/qtbase/+/600000");
+        links.card(url);
+        QTRY_VERIFY(!links.card(url).isEmpty());
+        const QVariantMap info = links.card(url);
+        QCOMPARE(info.value("title").toString(), QStringLiteral("Change 600000"));
+        QVERIFY(info.value("summary").toString().contains(QStringLiteral("Add a Gerrit account")));
     }
 
     void figmaRendersSharpen()

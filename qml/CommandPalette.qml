@@ -57,8 +57,9 @@ Popup {
                 }
             }
         }
-        const names = { jira: "Jira", confluence: "Confluence", gitlab: "GitLab", github: "GitHub", figma: "Figma" }
-        for (const source of ["jira", "confluence", "gitlab", "github", "figma"]) {
+        const names = { jira: "Jira", confluence: "Confluence", gitlab: "GitLab", github: "GitHub", gerrit: "Gerrit",
+                        figma: "Figma" }
+        for (const source of ["jira", "confluence", "gitlab", "github", "gerrit", "figma"]) {
             for (const r of (remote[source] || []))
                 list.push({ section: names[source], title: r.title, detail: r.detail, status: r.status || "",
                             tone: r.tone || "", url: r.url, error: r.error === true })
@@ -141,7 +142,7 @@ Popup {
         TextField {
             id: field
             Layout.fillWidth: true
-            placeholderText: qsTr("A command, a note, a section, a project, or what to find in Jira, Confluence, GitLab, GitHub, Figma")
+            placeholderText: qsTr("A command, a note, a section, a project, or what to find in Jira, Confluence, GitLab, GitHub, Gerrit, Figma")
             onTextChanged: {
                 palette.query = text
                 palette.remote = ({})
@@ -239,7 +240,7 @@ Popup {
             Layout.fillWidth: true
             visible: palette.query.trim().length >= 3 && Object.keys(palette.remote).length === 0
                      && Links.accounts.list.length > 0
-            text: qsTr("Asking Jira, Confluence, GitLab, GitHub and Figma…")
+            text: qsTr("Asking Jira, Confluence, GitLab, GitHub, Gerrit and Figma…")
             color: Theme.textMuted
             font.pixelSize: Styles.Primitives.fontSize.small
             leftPadding: Styles.Primitives.spacing.sp075
