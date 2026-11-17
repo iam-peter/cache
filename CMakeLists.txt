@@ -74,6 +74,7 @@ qt_add_qml_module(cache
         qml/SectionBody.qml
         qml/StrokeBody.qml
         qml/LinkBody.qml
+        qml/FieldBody.qml
         qml/Redacted.qml
         qml/ExportDialog.qml
         qml/CommandPalette.qml

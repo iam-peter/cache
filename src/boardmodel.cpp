@@ -148,6 +148,8 @@ QVariant BoardModel::data(const QModelIndex &index, int role) const
         return it.type == QLatin1String("section") ? m_sectionOrder.value(it.id, -1)
                                                    : m_sectionOrder.value(m_sectionOf.value(it.id), -1);
     case ReadingOrderRole: return m_readingOrder.value(it.id);
+    case FieldsRole: return it.fields;
+    case CompactRole: return it.compact;
     default: return {};
     }
 }
@@ -172,6 +174,8 @@ QHash<int, QByteArray> BoardModel::roleNames() const
         {SizeRole, "itemSize"},
         {CollapsedRole, "itemCollapsed"},
         {TaskRole, "itemTask"},
+        {FieldsRole, "itemFields"},
+        {CompactRole, "itemCompact"},
         {LockedRole, "itemLocked"},
         {HiddenRole, "itemHidden"},
         {DescendantsRole, "descendants"},
@@ -808,6 +812,10 @@ QVariantMap BoardModel::get(int row) const
         {QStringLiteral("locked"), it.locked},
         {QStringLiteral("hidden"), m_hidden.contains(it.id)},
         {QStringLiteral("childCount"), m_childCount.value(it.id)},
+        {QStringLiteral("fields"), it.fields},
+        {QStringLiteral("compact"), it.compact},
+        {QStringLiteral("fullH"), it.fullH},
+        {QStringLiteral("section"), m_sectionOf.value(it.id)},
     };
 }
 

@@ -1304,6 +1304,8 @@ private slots:
         QVariantMap info = read(server.url("/c/qt/qtbase/+/600000"));
         QCOMPARE(info.value("title").toString(), QStringLiteral("Fix the crash on resize"));
         QCOMPARE(info.value("site").toString(), QStringLiteral("Gerrit · qt/qtbase · dev"));
+        QCOMPARE(info.value("source").toString(), QStringLiteral("gerrit"));
+        QCOMPARE(info.value("label").toString(), QStringLiteral("600000"));
         QCOMPARE(info.value("summary").toString(), QStringLiteral("The window resized while its scene graph was rendering."));
         // A bot's +1 doesn't make it approved
         QCOMPARE(info.value("status").toString(), QStringLiteral("Open"));

@@ -887,6 +887,69 @@ private slots:
         QVERIFY(QFileInfo::exists(dir + QStringLiteral("/assets/50%2off-2.png")));
     }
 
+    void foldedSectionsHideWhatTheyHold()
+    {
+        const QString dir = project("folded");
+        QString section, inside, outside;
+        {
+            BoardModel board;
+            board.load(dir);
+            section = board.get(board.addItem("section", 0, 0, 600, 400, {}, QStringLiteral("Tickets"))).value("id").toString();
+            inside = board.get(board.addItem("link", 40, 40, 320, 200, {}, QStringLiteral("https://example.org/a"))).value("id").toString();
+            outside = board.get(board.addItem("field", 700, 40, 200, 44, QStringLiteral(":status"),
+                                               QStringLiteral("https://example.org/a"))).value("id").toString();
+            board.toggleCollapsed(section, 36);
+            const QVariantMap folded = board.getById(section);
+            QVERIFY(folded.value("collapsed").toBool());
+            QCOMPARE(folded.value("h").toDouble(), 36.0);
+            QCOMPARE(folded.value("fullH").toDouble(), 400.0);
+            QVERIFY(board.getById(inside).value("hidden").toBool());
+            // A detail pulled out of it stays in sight
+            QVERIFY(!board.getById(outside).value("hidden").toBool());
+            QCOMPARE(board.data(board.index(board.indexOf(section)), BoardModel::DescendantsRole).toInt(), 1);
+            // Moving the strip moves what it holds
+            QCOMPARE(board.contentsOf(section), QStringList{inside});
+            board.save();
+        }
+        BoardModel again;
+        again.load(dir);
+        QVERIFY(again.getById(inside).value("hidden").toBool());
+        QCOMPARE(again.getById(outside).value("text").toString(), QStringLiteral("https://example.org/a"));
+        QCOMPARE(again.getById(outside).value("shape").toString(), QStringLiteral(":status"));
+        again.toggleCollapsed(section);
+        QCOMPARE(again.getById(section).value("h").toDouble(), 400.0);
+        QVERIFY(!again.getById(inside).value("hidden").toBool());
+        again.undo();
+        QVERIFY(again.getById(inside).value("hidden").toBool());
+    }
+
+    void linkCardsChooseAndFold()
+    {
+        const QString dir = project("cardchoices");
+        QString id;
+        {
+            BoardModel board;
+            board.load(dir);
+            const int row = board.addItem("link", 0, 0, 320, 240, {}, QStringLiteral("https://example.org/a"));
+            id = board.get(row).value("id").toString();
+            board.setFields(id, {QStringLiteral(":status"), QStringLiteral("Owner")});
+            board.setCompact(id, true, 64);
+            QCOMPARE(board.getById(id).value("h").toDouble(), 64.0);
+            QCOMPARE(board.data(board.index(row), BoardModel::CompactRole).toBool(), true);
+            board.save();
+        }
+        BoardModel again;
+        again.load(dir);
+        QCOMPARE(again.getById(id).value("fields").toStringList(), (QStringList{QStringLiteral(":status"), QStringLiteral("Owner")}));
+        QVERIFY(again.getById(id).value("compact").toBool());
+        again.setCompact(id, false);
+        QCOMPARE(again.getById(id).value("h").toDouble(), 240.0);
+        again.setFields(id, {});
+        QVERIFY(again.getById(id).value("fields").toStringList().isEmpty());
+        again.undo();
+        QCOMPARE(again.getById(id).value("fields").toStringList().size(), 2);
+    }
+
     void lockedItemsStay()
     {
         const QString dir = project("locked");

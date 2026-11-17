@@ -50,6 +50,7 @@ QVariantMap LinkInfo::toVariant() const
             {QStringLiteral("remoteImage"), remoteImage},
             {QStringLiteral("renderSize"), renderSize},
             {QStringLiteral("unresolved"), unresolved},
+            {QStringLiteral("label"), label},
             {QStringLiteral("code"), code},
             {QStringLiteral("language"), language},
             {QStringLiteral("firstLine"), firstLine}};
@@ -69,6 +70,7 @@ LinkInfo LinkInfo::fromVariant(const QVariantMap &map)
     info.remoteImage = map.value(QStringLiteral("remoteImage")).toString();
     info.renderSize = map.value(QStringLiteral("renderSize")).toInt();
     info.unresolved = map.value(QStringLiteral("unresolved")).toInt();
+    info.label = map.value(QStringLiteral("label")).toString();
     info.code = map.value(QStringLiteral("code")).toString();
     info.language = map.value(QStringLiteral("language")).toString();
     info.firstLine = map.value(QStringLiteral("firstLine"), 1).toInt();
@@ -528,7 +530,27 @@ QVariantMap Links::card(const QString &url)
             }
         }
     }
-    return lookUp(url, resolver ? resolver : m_page.get());
+    QVariantMap info = lookUp(url, resolver ? resolver : m_page.get());
+    if (!info.isEmpty())
+        info.insert(QStringLiteral("source"), resolver ? resolver->id() : QStringLiteral("page"));
+    return info;
+}
+
+QStringList Links::cardFields(const QString &source) const
+{
+    return QSettings().value(QStringLiteral("linkCards/") + source).toStringList();
+}
+
+void Links::setCardFields(const QString &source, const QStringList &fields)
+{
+    if (source.isEmpty())
+        return;
+    QSettings settings;
+    if (fields.isEmpty())
+        settings.remove(QStringLiteral("linkCards/") + source);
+    else
+        settings.setValue(QStringLiteral("linkCards/") + source, fields);
+    touch();
 }
 
 void Links::reload(const QString &url)

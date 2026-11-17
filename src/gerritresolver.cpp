@@ -242,6 +242,7 @@ void GerritResolver::readChange(const Account &account, const QByteArray &token,
         const QJsonObject change = QJsonDocument::fromJson(jsonOf(body)).object();
         LinkInfo info;
         info.title = change.value(QLatin1String("subject")).toString();
+        info.label = QString::number(change.value(QLatin1String("_number")).toInt(ref.number));
         // Its branch too: an issue's cherry-picks share their subject
         info.site = QStringLiteral("Gerrit · %1 · %2").arg(change.value(QLatin1String("project")).toString(ref.project),
                                                           change.value(QLatin1String("branch")).toString());

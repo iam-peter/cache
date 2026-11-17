@@ -119,7 +119,8 @@ request; the [website](pages/) is published from `pages/` by the
   marked: its line in the editor, or the other note on the canvas. In
   the note, the names are links: hovering one shows the medium.
 - **Sections**: labelled areas (`S`) that take along what lies in them when
-  moved. They are the chapters of the sidebar's note list.
+  moved. They are the chapters of the sidebar's note list. The chevron on
+  a section's title folds it to a strip, hiding what lies in it.
 - **Shapes, text and pen**: shapes with labels for flowcharts, free text in
   four sizes, pen and highlighter lines, all in the theme's colours.
 - **Templates**: Kanban board, retrospective, meeting notes, pros and
@@ -160,7 +161,13 @@ request; the [website](pages/) is published from `pages/` by the
   page's picture, title, description and site; a Jira issue's card shows
   its key, status, summary and fields. The button beside the site, or
   `Ctrl`+click on the title, opens it; double-click changes the address.
-  Pasted into a note, an address stays a Markdown link.
+  Pasted into a note, an address stays a Markdown link. The eye in a
+  card's toolbar chooses what it shows (picture, description, status and
+  each field), for that card or for every card of its service; a card
+  folds to its title line. Any detail (a ticket's status, a review's
+  votes, unresolved comments) can be **pulled out** as a node of its own
+  that stays up to date: beside the card's section, so folding the
+  section keeps it in sight, and made narrow, a traffic light.
 - **Linked issues and pages**: with an Atlassian account (Settings,
   Accounts), a link to a Jira issue shows the issue's summary and status
   after it, and its type, priority, assignee and when it changed while
@@ -186,6 +193,14 @@ request; the [website](pages/) is published from `pages/` by the
   lists your open pull requests and those waiting for your review, which
   are also in the Tasks tab with GitLab's. Without an account, GitHub
   links are read as the web pages they are.
+- **Gerrit** (such as codereview.qt-project.org, with your username and
+  an HTTP password from Gerrit's Settings, HTTP Credentials): a link to a
+  change shows its state, each label's votes, owner, branch, lines
+  changed, whose attention it waits for and its unresolved comments; a
+  link to a file of a patch set shows its lines. The command palette
+  searches changes and lists your open ones and those waiting for your
+  review (also in the Tasks tab). A Jira issue's card adds cards of the
+  changes naming its key, connected to it.
 - **Figma designs**: with a Figma personal access token (Settings,
   Accounts), a link to a frame or component shows it as Figma renders it,
   on its link card and in its hover card, with its name, size and file;

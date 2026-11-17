@@ -33,6 +33,9 @@ struct BoardItem
     // "text"    a free text label; size is its font size
     // "stroke"  a pen or highlighter line (shape); points are relative to
     //           x/y, size is the line width
+    // "link"    a web link as a card; text is its address
+    // "field"   one detail of a link (text), pulled out of its card: shape
+    //           says which (":status", ":unresolved" or a field's name)
     QString type;
     double x = 0;
     double y = 0;
@@ -45,9 +48,16 @@ struct BoardItem
     QString shape;
     QList<QPointF> points;
     double size = 0;
-    bool collapsed = false; // a mindmap branch folded into its root
+    bool collapsed = false; // a mindmap branch folded into its root; a
+                            // section folded up, hiding what lies in it
     bool locked = false;    // not to be moved, resized, edited or deleted
     QString task;           // a note that is a task itself: "open" or "done"
+    // A link card: the details it shows, by name (":picture",
+    // ":description", ":status" and the fields'); empty: as usual
+    QStringList fields;
+    bool compact = false;   // a link card folded to its title line
+    double fullH = 0;       // the height a folded card or section unfolds to
+    QStringList members;    // what a folded section hid when it was folded
 };
 
 // A connector from one item to another, or from an item back to itself.
@@ -130,6 +140,8 @@ public:
         SectionTitleRole,
         SectionOrderRole, // that section's place in reading order
         ReadingOrderRole,
+        FieldsRole,
+        CompactRole,
     };
     Q_ENUM(Roles)
 
@@ -252,7 +264,13 @@ public:
     Q_INVOKABLE QString addConnectedNote(const QString &from, double x, double y, const QString &fromSide = {});
     Q_INVOKABLE QString parentOf(const QString &id) const;
     Q_INVOKABLE QStringList childrenOf(const QString &id) const; // top to bottom
-    Q_INVOKABLE void toggleCollapsed(const QString &id);
+    // A branch folded into its root, or a section folded to a strip `height`
+    // tall, hiding what lies in it (and back)
+    Q_INVOKABLE void toggleCollapsed(const QString &id, double height = 36);
+    // A link card's details, by name (see BoardItem::fields); empty: as usual
+    Q_INVOKABLE void setFields(const QString &id, const QStringList &fields);
+    // A link card folded to its title line, `height` tall, or unfolded
+    Q_INVOKABLE void setCompact(const QString &id, bool compact, double height = 0);
     // Lays the branch below `rootId` out as a tree to its right
     Q_INVOKABLE void tidy(const QString &rootId);
 

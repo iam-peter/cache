@@ -83,6 +83,14 @@ QJsonObject BoardModel::toJson(const BoardItem &it, bool inlineText)
         o.insert(QStringLiteral("task"), it.task);
     if (it.locked)
         o.insert(QStringLiteral("locked"), true);
+    if (!it.fields.isEmpty())
+        o.insert(QStringLiteral("fields"), QJsonArray::fromStringList(it.fields));
+    if (it.compact)
+        o.insert(QStringLiteral("compact"), true);
+    if (it.fullH > 0)
+        o.insert(QStringLiteral("fullH"), rounded(it.fullH));
+    if (!it.members.isEmpty())
+        o.insert(QStringLiteral("members"), QJsonArray::fromStringList(it.members));
     if (!it.source.isEmpty())
         o.insert(QStringLiteral("source"), it.source);
     if (!it.points.isEmpty()) {
@@ -119,6 +127,12 @@ BoardItem BoardModel::itemFromJson(const QJsonObject &o)
     it.task = o.value(QStringLiteral("task")).toString();
     if (it.task != QLatin1String("open") && it.task != QLatin1String("done"))
         it.task.clear();
+    for (const QJsonValue &v : o.value(QStringLiteral("fields")).toArray())
+        it.fields << v.toString();
+    it.compact = o.value(QStringLiteral("compact")).toBool();
+    it.fullH = o.value(QStringLiteral("fullH")).toDouble();
+    for (const QJsonValue &v : o.value(QStringLiteral("members")).toArray())
+        it.members << v.toString();
     const QJsonArray points = o.value(QStringLiteral("points")).toArray();
     for (qsizetype i = 0; i + 1 < points.size(); i += 2)
         it.points.append(QPointF(points.at(i).toDouble(), points.at(i + 1).toDouble()));
@@ -225,6 +239,15 @@ void BoardModel::updateDerived()
             hidden.insert(next);
             todo += children.value(next);
         }
+        // A folded section: what lay in it too
+        if (isSection(it)) {
+            for (const QString &member : it.members) {
+                if (member != it.id && !seen.contains(member) && indexOf(member) >= 0) {
+                    seen.insert(member);
+                    hidden.insert(member);
+                }
+            }
+        }
         descendants.insert(it.id, int(seen.size()) - 1);
     }
 
@@ -254,8 +277,15 @@ void BoardModel::updateDerived()
         const QPointF centre(it.x + it.w / 2, it.y + it.h / 2);
         double best = -1;
         for (const BoardItem &s : std::as_const(m_items)) {
-            if (!isSection(s) || !QRectF(s.x, s.y, s.w, s.h).contains(centre))
+            if (!isSection(s))
                 continue;
+            // A folded section holds what it held, in the area it unfolds to
+            if (s.collapsed && s.fullH > 0) {
+                if (!s.members.contains(it.id) || !QRectF(s.x, s.y, s.w, s.fullH).contains(centre))
+                    continue;
+            } else if (!QRectF(s.x, s.y, s.w, s.h).contains(centre)) {
+                continue;
+            }
             const double area = s.w * s.h;
             if (best < 0 || area < best) {
                 best = area;
@@ -1075,14 +1105,64 @@ void BoardModel::setNoteTask(int row, const QString &state)
     markDirty();
 }
 
-void BoardModel::toggleCollapsed(const QString &id)
+void BoardModel::toggleCollapsed(const QString &id, double height)
 {
     const int row = indexOf(id);
     if (row < 0)
         return;
     pushUndo();
-    m_items[row].collapsed = !m_items.at(row).collapsed;
-    emitRow(row, {CollapsedRole});
+    BoardItem &it = m_items[row];
+    if (isSection(it)) {
+        // Folded to a strip, what lay in it remembered and hidden; unfolded
+        // to the height it had
+        if (!it.collapsed) {
+            it.members = contentsOf(id);
+            it.fullH = it.h;
+            it.h = std::max(20.0, height);
+        } else {
+            if (it.fullH > 0)
+                it.h = it.fullH;
+            it.fullH = 0;
+            it.members.clear();
+        }
+        it.collapsed = !it.collapsed;
+        emitRow(row, {CollapsedRole, HeightRole});
+    } else {
+        it.collapsed = !it.collapsed;
+        emitRow(row, {CollapsedRole});
+    }
+    structureChanged();
+}
+
+void BoardModel::setFields(const QString &id, const QStringList &fields)
+{
+    const int row = indexOf(id);
+    if (row < 0 || m_items.at(row).fields == fields)
+        return;
+    pushUndo();
+    m_items[row].fields = fields;
+    emitRow(row, {FieldsRole});
+    markDirty();
+}
+
+void BoardModel::setCompact(const QString &id, bool compact, double height)
+{
+    const int row = indexOf(id);
+    if (row < 0 || m_items.at(row).compact == compact)
+        return;
+    pushUndo();
+    BoardItem &it = m_items[row];
+    if (compact) {
+        it.fullH = it.h;
+        if (height > 0)
+            it.h = std::max(20.0, height);
+    } else {
+        if (it.fullH > 0)
+            it.h = it.fullH;
+        it.fullH = 0;
+    }
+    it.compact = compact;
+    emitRow(row, {CompactRole, HeightRole});
     structureChanged();
 }
 
@@ -1203,6 +1283,15 @@ QStringList BoardModel::contentsOf(const QString &sectionId) const
     if (row < 0 || !isSection(m_items.at(row)))
         return {};
     const BoardItem &s = m_items.at(row);
+    // Folded: what it held (still there)
+    if (s.collapsed && s.fullH > 0) {
+        QStringList ids;
+        for (const QString &id : s.members) {
+            if (indexOf(id) >= 0)
+                ids << id;
+        }
+        return ids;
+    }
     const QRectF area(s.x, s.y, s.w, s.h);
     QStringList ids;
     for (const BoardItem &it : m_items) {

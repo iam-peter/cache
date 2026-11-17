@@ -25,6 +25,8 @@ Item {
     required property bool itemCollapsed
     required property string itemTask // a note that is a task: "", "open" or "done"
     required property bool itemLocked
+    required property var itemFields   // a link card's chosen details
+    required property bool itemCompact // a link card folded to its title
     required property bool itemHidden
     required property int descendants
     required property int childCount
@@ -37,9 +39,12 @@ Item {
     readonly property bool isStroke: itemType === "stroke"
     readonly property bool isLink: itemType === "link"
     readonly property bool isBoard: itemType === "board" // another project
+    readonly property bool isField: itemType === "field" // a link's detail, pulled out
     // On a card of its own: notes, web links and other boards
-    readonly property bool framed: isNote || isLink || isBoard
-    readonly property bool connectable: isNote || isShape || isText || isLink || isBoard
+    readonly property bool framed: isNote || isLink || isBoard || isField
+    readonly property bool connectable: isNote || isShape || isText || isLink || isBoard || isField
+    // Folded: as tall as its title (a link card) or strip (a section)
+    readonly property bool fixedHeight: (isLink && itemCompact) || (isSection && itemCollapsed)
 
     // Pictures of the canvas show no selection
     readonly property bool selected: !canvas.exporting && canvas.selection.indexOf(itemId) >= 0
@@ -201,7 +206,8 @@ Item {
         // A note whose task is done: faded, its tick still clear
         opacity: root.isNote && root.itemTask === "done" && !root.editing ? 0.5 : 1
         sourceComponent: root.isNote ? noteBody : root.isShape ? shapeBody : root.isText ? textBody
-                       : root.isSection ? sectionBody : root.isLink ? linkBody : root.isBoard ? boardBody : strokeBody
+                       : root.isSection ? sectionBody : root.isLink ? linkBody : root.isBoard ? boardBody
+                       : root.isField ? fieldBody : strokeBody
     }
 
     // Locked: a small lock in the corner, while it is selected or hovered
@@ -262,6 +268,7 @@ Item {
     Component { id: strokeBody; StrokeBody { card: root } }
     Component { id: linkBody; LinkBody { card: root } }
     Component { id: boardBody; BoardBody { card: root } }
+    Component { id: fieldBody; FieldBody { card: root } }
 
     // --- Mindmap: folding a branch ---------------------------------------
     HoverHandler { id: cardHover }
@@ -547,8 +554,9 @@ Item {
 
                     Tip {
                         visible: !root.isStroke
-                        iconName: root.editing ? "check" : "pencil"
-                        tip: root.editing ? qsTr("Done (Esc)") : root.isSection ? qsTr("Rename") : qsTr("Edit (Enter)")
+                        iconName: root.editing ? "check" : root.isField ? "link" : "pencil"
+                        tip: root.editing ? qsTr("Done (Esc)") : root.isSection ? qsTr("Rename")
+                             : root.isField ? qsTr("Go to its card") : qsTr("Edit (Enter)")
                         onClicked: root.editing ? root.canvas.finishEditing() : root.canvas.startEditing(root.itemId)
                     }
                     Tip {
@@ -582,6 +590,20 @@ Item {
                         }
                     }
                     Tip {
+                        // What a link card shows; pulling details out
+                        visible: root.isLink && !root.formatting && root.itemText !== ""
+                        iconName: "eye"
+                        tip: qsTr("Details shown, and pulling them out as nodes")
+                        onClicked: body.item.openDetails(this)
+                    }
+                    Tip {
+                        visible: (root.isLink || root.isSection) && !root.formatting
+                        iconName: (root.isLink ? root.itemCompact : root.itemCollapsed) ? "chevrons-up-down" : "chevrons-down-up"
+                        tip: root.isLink ? (root.itemCompact ? qsTr("Unfold the card") : qsTr("Fold the card to its title"))
+                                         : (root.itemCollapsed ? qsTr("Unfold the section") : qsTr("Fold the section, hiding what lies in it"))
+                        onClicked: root.isLink ? body.item.setCompact(!root.itemCompact) : Board.toggleCollapsed(root.itemId)
+                    }
+                    Tip {
                         // An issue's changes on Gerrit, as cards beside it
                         visible: root.isLink && !root.formatting && Links.accounts.list.length >= 0
                                  && Links.canRelate(root.itemText)
@@ -590,7 +612,7 @@ Item {
                         onClicked: root.canvas.addRelatedCards(root.itemId)
                     }
                     Tip {
-                        visible: (root.isNote || root.isLink) && !root.formatting
+                        visible: (root.isNote || (root.isLink && !root.itemCompact)) && !root.formatting
                         iconName: "move-vertical"
                         tip: qsTr("Fit the height to the content")
                         onClicked: root.fitToContent()
@@ -647,6 +669,8 @@ Item {
             w = Math.max(minW, w)
             h = Math.max(minH, h)
         }
+        if (fixedHeight)
+            h = start.height
         // What stays: the middle, the opposite side, or (a side resized
         // with Shift) the middle across it
         const across = (side, size, startPos, startSize) =>

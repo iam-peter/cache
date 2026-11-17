@@ -225,6 +225,19 @@ Item {
             cards[id].openBoard()
             return
         }
+        // A link's detail: to its card, if one shows it
+        if (cards[id] && cards[id].isField) {
+            const url = cards[id].itemText
+            for (let row = 0; row < Board.count; ++row) {
+                const it = Board.get(row)
+                if (it.type === "link" && it.text === url && !it.hidden) {
+                    focusItem(it.id)
+                    return
+                }
+            }
+            toast.show(qsTr("Its card is folded away or not on this board: Ctrl+click opens the link"))
+            return
+        }
         if (cards[id] && cards[id].itemLocked) {
             toast.show(qsTr("It's locked. Unlock it to change it."))
             return
@@ -454,8 +467,35 @@ Item {
             const from = toWorld(0, 0), to = toWorld(view.width, view.height)
             if (b.x < from.x || b.y < from.y || b.x + b.width > to.x || b.y + b.height > to.y)
                 centerOn(b.x, b.y, b.width, b.height, view.zoom)
-            toast.show(qsTr("Added %n change(s) of %1", "", added.length).arg(key))
+            toast.show(added.length === 1 ? qsTr("Added 1 change of %1").arg(key)
+                                          : qsTr("Added %1 changes of %2").arg(added.length).arg(key))
         }
+    }
+    // Detail `key` of link card `cardId` (":status", a field's name…) as a
+    // node of its own: beside the card, or beside its section, so folding
+    // the section keeps it in sight; below those pulled out there before
+    function pullOut(cardId, key) {
+        const card = Board.getById(cardId)
+        if (!card || card.type !== "link")
+            return
+        const section = card.section ? Board.getById(card.section) : null
+        const x = Math.round((section ? section.x + section.w : card.x + card.w) + 24)
+        const w = 200, h = 44
+        let y = Math.round(card.y)
+        let moved = true
+        while (moved) {
+            moved = false
+            for (let row = 0; row < Board.count; ++row) {
+                const it = Board.get(row)
+                if (it.type === "field" && Math.abs(it.x - x) < 4 && it.y < y + h && it.y + it.h > y) {
+                    y = Math.round(it.y + it.h + 8)
+                    moved = true
+                }
+            }
+        }
+        const row = Board.addItem("field", x, y, w, h, key, card.text)
+        if (row >= 0)
+            setSelection([Board.get(row).id])
     }
     // An empty one, its address being asked for
     function newLinkCard() {

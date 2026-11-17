@@ -35,6 +35,7 @@ struct LinkInfo
     QString remoteImage; // where `image` came from, when it is kept on disk
     int renderSize = 0;  // a render's longest side in pixels (Figma's); 0: not one
     int unresolved = 0;  // comments still to be resolved (a Gerrit change's)
+    QString label;       // a short name, where the title is long: "600001"; empty: the title
     QString code;    // lines of a file (GitLab), shown highlighted
     QString language;
     int firstLine = 1;
@@ -223,6 +224,11 @@ public:
     // The same for a link card or a hover card: any web page, read as it
     // is. Asked only when someone means it (a card, a pointer resting).
     Q_INVOKABLE QVariantMap card(const QString &url);
+    // The details link cards of service `source` (a card's "source": jira,
+    // gerrit, page…) show unless they say otherwise (see BoardItem::fields);
+    // empty: as usual
+    Q_INVOKABLE QStringList cardFields(const QString &source) const;
+    Q_INVOKABLE void setCardFields(const QString &source, const QStringList &fields);
     // Asks again now (a card's Reload)
     Q_INVOKABLE void reload(const QString &url);
     // Signs in, then keeps the account: accountAdded says how it went.

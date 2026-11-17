@@ -41,7 +41,7 @@ Item {
         transformOrigin: Item.BottomLeft
         x: 0
         y: -height - 4 * body.card.inv
-        width: titleRow.implicitWidth + 20
+        width: titleRow.implicitWidth + 20 + foldButton.width
         height: 28
         radius: Theme.radius
         color: body.card.itemColor ? Theme.swatch(body.card.itemColor) : Theme.s.background_secondary
@@ -83,5 +83,40 @@ Item {
             onCanceled: body.card.release()
             onDoubleClicked: body.card.canvas.startEditing(body.card.itemId)
         }
+
+        // Folding: what lies in it hidden, the section a strip
+        Rectangle {
+            id: foldButton
+            anchors.right: parent.right
+            anchors.rightMargin: 4
+            anchors.verticalCenter: parent.verticalCenter
+            width: 20
+            height: 20
+            radius: Theme.radius
+            color: foldHover.hovered ? Qt.alpha(Theme.text, 0.12) : "transparent"
+            Icon {
+                anchors.centerIn: parent
+                name: body.card.itemCollapsed ? "chevron-right" : "chevron-down"
+                size: 14
+                color: body.card.itemColor ? Styles.TokenInterface.textOn(Theme.swatch(body.card.itemColor)) : Theme.text
+            }
+            HoverHandler { id: foldHover; cursorShape: Qt.PointingHandCursor }
+            TapHandler { onTapped: Board.toggleCollapsed(body.card.itemId) }
+            ToolTip.visible: foldHover.hovered
+            ToolTip.delay: 400
+            ToolTip.text: body.card.itemCollapsed ? qsTr("Unfold the section") : qsTr("Fold the section, hiding what lies in it")
+        }
+    }
+
+    // Folded: what it holds, said
+    Label {
+        visible: body.card.itemCollapsed
+        anchors.left: parent.left
+        anchors.leftMargin: 10
+        anchors.verticalCenter: parent.verticalCenter
+        text: body.card.descendants === 1 ? qsTr("1 item folded away")
+                                          : qsTr("%1 items folded away").arg(body.card.descendants)
+        color: Theme.textMuted
+        font.pixelSize: Styles.Primitives.fontSize.small
     }
 }
