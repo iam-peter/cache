@@ -472,6 +472,10 @@ Item {
                                           : qsTr("Added %1 changes of %2").arg(added.length).arg(key))
         }
     }
+    // The pointer for the tool in hand, over the canvas and over items that
+    // leave presses to it
+    readonly property int toolCursor: spaceHeld || tool === "hand" ? Qt.OpenHandCursor
+                                      : tool === "select" ? Qt.ArrowCursor : Qt.CrossCursor
     Binding {
         target: Theme
         property: "canvasZoom"
@@ -1486,9 +1490,7 @@ Item {
         property point endWorld
         property var points: []
 
-        cursorShape: gesture === "pan" ? Qt.ClosedHandCursor
-                     : view.spaceHeld || view.tool === "hand" ? Qt.OpenHandCursor
-                     : view.tool === "select" ? Qt.ArrowCursor : Qt.CrossCursor
+        cursorShape: gesture === "pan" ? Qt.ClosedHandCursor : view.toolCursor
 
         onEntered: view.pointerInside = true
         onExited: view.pointerInside = false

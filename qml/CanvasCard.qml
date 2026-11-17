@@ -27,6 +27,7 @@ Item {
     required property bool itemLocked
     required property var itemFields   // a link card's chosen details
     required property bool itemCompact // a link card folded to its title
+    required property int sectionDepth // a section's: how many sections it lies in
     required property bool itemHidden
     required property int descendants
     required property int childCount
@@ -69,7 +70,9 @@ Item {
     width: itemWidth
     height: itemHeight
     // Sections lie under everything else
-    z: isSection ? itemZ - 1000000 : itemZ
+    // Sections under the rest, and a section above those it lies in, so
+    // its title and handles can be taken hold of
+    z: isSection ? itemZ - 1000000 + sectionDepth * 10000 : itemZ
     visible: !itemHidden && (!canvas.exporting || canvas.exportSet[itemId] === true)
 
     Component.onCompleted: canvas.registerCard(itemId, root)
@@ -168,7 +171,10 @@ Item {
                  && (root.canvas.tool === "select" || root.canvas.tool === "connector"))
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         preventStealing: true
-        cursorShape: root.canvas.tool === "connector" && root.connectable ? Qt.CrossCursor
+        // Not taking presses (another tool's): the canvas's cursor, which it
+        // would otherwise hide
+        cursorShape: !enabled ? root.canvas.toolCursor
+                     : root.canvas.tool === "connector" && root.connectable ? Qt.CrossCursor
                      : pressed ? Qt.ClosedHandCursor : Qt.ArrowCursor
         onPressed: (mouse) => {
             // A thin line takes clicks only on itself; beside it they go on

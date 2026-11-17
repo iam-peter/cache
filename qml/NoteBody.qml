@@ -408,7 +408,10 @@ Item {
                             }
                             HoverHandler {
                                 id: linkHover
-                                cursorShape: rich.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                // Another tool in hand: its cursor (a click makes a note,
+                                // say, rather than following the link)
+                                cursorShape: rich.hoveredLink && body.card.canvas.tool === "select" ? Qt.PointingHandCursor
+                                             : body.card.canvas.toolCursor
                             }
                         }
                     }

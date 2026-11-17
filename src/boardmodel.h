@@ -143,6 +143,7 @@ public:
         ReadingOrderRole,
         FieldsRole,
         CompactRole,
+        SectionDepthRole, // a section's: how many sections it lies in
     };
     Q_ENUM(Roles)
 
@@ -509,6 +510,7 @@ private:
     QHash<QString, int> m_childCount;
     QHash<QString, QString> m_sectionOf;
     QHash<QString, int> m_sectionOrder;
+    QHash<QString, int> m_sectionDepth; // a section's: how many sections it lies in
     QHash<QString, int> m_readingOrder;
     QVariantList m_wikiEdges;
 };

@@ -294,21 +294,38 @@ void BoardModel::updateDerived()
         }
     }
 
+    // How deep each section lies in others: drawn above those it lies in
+    QHash<QString, int> sectionDepth;
+    for (const BoardItem &s : std::as_const(m_items)) {
+        if (!isSection(s))
+            continue;
+        const QRectF area(s.x, s.y, s.w, s.h);
+        int depth = 0;
+        for (const BoardItem &t : std::as_const(m_items)) {
+            if (t.id != s.id && isSection(t) && t.w * t.h > s.w * s.h
+                && QRectF(t.x, t.y, t.w, t.collapsed && t.fullH > 0 ? t.fullH : t.h).contains(area.center()))
+                ++depth;
+        }
+        if (depth > 0)
+            sectionDepth.insert(s.id, depth);
+    }
+
     const bool treeChanged = hidden != m_hidden || descendants != m_descendants || childCount != m_childCount;
-    const bool sectionsChanged = sectionOf != m_sectionOf || sectionOrder != m_sectionOrder;
+    const bool sectionsChanged = sectionOf != m_sectionOf || sectionOrder != m_sectionOrder || sectionDepth != m_sectionDepth;
     const bool readingChanged = reading != m_readingOrder;
     m_hidden = std::move(hidden);
     m_descendants = std::move(descendants);
     m_childCount = std::move(childCount);
     m_sectionOf = std::move(sectionOf);
     m_sectionOrder = std::move(sectionOrder);
+    m_sectionDepth = std::move(sectionDepth);
     m_readingOrder = std::move(reading);
 
     QList<int> roles;
     if (treeChanged)
         roles << HiddenRole << DescendantsRole << ChildCountRole;
     if (sectionsChanged)
-        roles << SectionIdRole << SectionTitleRole << SectionOrderRole;
+        roles << SectionIdRole << SectionTitleRole << SectionOrderRole << SectionDepthRole;
     if (readingChanged)
         roles << ReadingOrderRole;
     if (!roles.isEmpty())

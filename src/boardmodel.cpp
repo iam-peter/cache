@@ -150,6 +150,7 @@ QVariant BoardModel::data(const QModelIndex &index, int role) const
     case ReadingOrderRole: return m_readingOrder.value(it.id);
     case FieldsRole: return it.fields;
     case CompactRole: return it.compact;
+    case SectionDepthRole: return m_sectionDepth.value(it.id);
     default: return {};
     }
 }
@@ -176,6 +177,7 @@ QHash<int, QByteArray> BoardModel::roleNames() const
         {TaskRole, "itemTask"},
         {FieldsRole, "itemFields"},
         {CompactRole, "itemCompact"},
+        {SectionDepthRole, "sectionDepth"},
         {LockedRole, "itemLocked"},
         {HiddenRole, "itemHidden"},
         {DescendantsRole, "descendants"},
