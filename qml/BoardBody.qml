@@ -56,9 +56,11 @@ Item {
                 iconName: "folder-open"
                 Layout.preferredWidth: 22
                 Layout.preferredHeight: 22
-                ToolTip.visible: hovered
-                ToolTip.delay: 500
-                ToolTip.text: qsTr("Open this project (or double-click)")
+                CanvasTip {
+                    shown: parent.hovered
+                    delay: 500
+                    text: qsTr("Open this project (or double-click)")
+                }
                 onClicked: body.open()
             }
         }

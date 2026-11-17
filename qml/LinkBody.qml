@@ -251,9 +251,11 @@ Item {
                 iconName: "external-link"
                 Layout.preferredHeight: 22
                 Layout.preferredWidth: 22
-                ToolTip.visible: hovered
-                ToolTip.delay: 500
-                ToolTip.text: qsTr("Open in the browser (or Ctrl+click the title)")
+                CanvasTip {
+                    shown: parent.hovered
+                    delay: 500
+                    text: qsTr("Open in the browser (or Ctrl+click the title)")
+                }
                 onClicked: Qt.openUrlExternally(body.url)
             }
             // Comments still to be resolved
@@ -263,10 +265,12 @@ Item {
                 implicitHeight: unresolvedRow.implicitHeight + 4
                 radius: Theme.radius
                 color: Qt.alpha(Theme.s.warning_default, 0.16)
-                ToolTip.visible: unresolvedHover.hovered
-                ToolTip.delay: 500
-                ToolTip.text: (body.info.unresolved || 0) === 1 ? qsTr("1 unresolved comment")
-                              : qsTr("%1 unresolved comments").arg(body.info.unresolved || 0)
+                CanvasTip {
+                    shown: unresolvedHover.hovered
+                    delay: 500
+                    text: (body.info.unresolved || 0) === 1 ? qsTr("1 unresolved comment")
+                                  : qsTr("%1 unresolved comments").arg(body.info.unresolved || 0)
+                }
                 HoverHandler { id: unresolvedHover }
                 Row {
                     id: unresolvedRow
@@ -474,9 +478,11 @@ Item {
                         iconName: "arrow-up-right"
                         Layout.preferredWidth: 24
                         Layout.preferredHeight: 24
-                        ToolTip.visible: hovered
-                        ToolTip.delay: 400
-                        ToolTip.text: qsTr("Pull out as a node of its own, which stays up to date")
+                        CanvasTip {
+                            shown: parent.hovered
+                            delay: 400
+                            text: qsTr("Pull out as a node of its own, which stays up to date")
+                        }
                         onClicked: {
                             body.card.canvas.pullOut(body.card.itemId, modelData.key)
                             details.close()
@@ -490,9 +496,11 @@ Item {
                 Button {
                     visible: details.service !== "" && body.parts.length > 0
                     text: qsTr("For every %1 card").arg(details.service)
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("Cards of %1 that haven't a choice of their own show the same").arg(details.service)
+                    CanvasTip {
+                        shown: parent.hovered
+                        delay: 400
+                        text: qsTr("Cards of %1 that haven't a choice of their own show the same").arg(details.service)
+                    }
                     onClicked: {
                         Links.setCardFields(body.info.source, body.choiceWith("", false))
                         Board.setFields(body.card.itemId, [])

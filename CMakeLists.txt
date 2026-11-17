@@ -76,6 +76,7 @@ qt_add_qml_module(cache
         qml/LinkBody.qml
         qml/FieldBody.qml
         qml/VoteChips.qml
+        qml/CanvasTip.qml
         qml/Redacted.qml
         qml/ExportDialog.qml
         qml/CommandPalette.qml

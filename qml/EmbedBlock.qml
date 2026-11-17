@@ -44,8 +44,10 @@ Rectangle {
                 zoom: Theme.iconZoom // crisp however far the canvas zooms
                 visible: block.note.found
                 iconName: block.segment.expanded ? "chevron-down" : "chevron-right"
-                ToolTip.visible: hovered
-                ToolTip.text: block.segment.expanded ? qsTr("Hide the preview") : qsTr("Show a preview")
+                CanvasTip {
+                    shown: parent.hovered
+                    text: block.segment.expanded ? qsTr("Hide the preview") : qsTr("Show a preview")
+                }
                 onClicked: Board.setEmbed(block.card.index, block.segment.line, !block.segment.expanded)
             }
             Icon {

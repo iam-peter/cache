@@ -43,9 +43,11 @@ Item {
                         ends.canvas.updateLink(mapToItem(ends.parent, mouse.x, mouse.y))
                 }
                 onReleased: (mouse) => ends.canvas.endLink(mapToItem(ends.parent, mouse.x, mouse.y))
-                ToolTip.visible: containsMouse && !pressed
-                ToolTip.delay: 500
-                ToolTip.text: qsTr("Drag onto a side of an item to attach this end there")
+                CanvasTip {
+                    shown: parent.containsMouse && !parent.pressed
+                    delay: 500
+                    text: qsTr("Drag onto a side of an item to attach this end there")
+                }
             }
         }
     }

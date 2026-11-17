@@ -257,9 +257,11 @@ Item {
             anchors.margins: -4
             cursorShape: Qt.PointingHandCursor
             onClicked: Board.setNoteTask(root.index, root.itemTask === "done" ? "open" : "done")
-            ToolTip.visible: containsMouse
-            ToolTip.delay: 600
-            ToolTip.text: root.itemTask === "done" ? qsTr("Done; click to open it again") : qsTr("Mark as done")
+            CanvasTip {
+                shown: parent.containsMouse
+                delay: 600
+                text: root.itemTask === "done" ? qsTr("Done; click to open it again") : qsTr("Mark as done")
+            }
             hoverEnabled: true
         }
     }
@@ -302,8 +304,10 @@ Item {
             cursorShape: Qt.PointingHandCursor
             onClicked: Board.toggleCollapsed(root.itemId)
         }
-        ToolTip.visible: foldHover.hovered
-        ToolTip.text: root.itemCollapsed ? qsTr("Show the branch") : qsTr("Fold the branch")
+        CanvasTip {
+            shown: foldHover.hovered
+            text: root.itemCollapsed ? qsTr("Show the branch") : qsTr("Fold the branch")
+        }
         HoverHandler { id: foldHover }
     }
 
@@ -386,9 +390,11 @@ Item {
                 }
                 onCanceled: root.release()
             }
-            ToolTip.visible: root.isLink && handleArea.containsMouse && !root.canvas.moving && root.canvas.linkFromId === ""
-            ToolTip.delay: 600
-            ToolTip.text: qsTr("Drag to connect; right-click to pull a detail out on this side")
+            CanvasTip {
+                shown: root.isLink && handleArea.containsMouse && !root.canvas.moving && root.canvas.linkFromId === ""
+                delay: 600
+                text: qsTr("Drag to connect; right-click to pull a detail out on this side")
+            }
         }
     }
 
@@ -434,9 +440,11 @@ Item {
     }
     component Tip: IconButton {
         property string tip
-        ToolTip.visible: hovered && tip.length > 0 && !root.canvas.moving
-        ToolTip.delay: 600
-        ToolTip.text: tip
+        CanvasTip {
+            shown: parent.hovered && parent.tip.length > 0 && !root.canvas.moving
+            delay: 600
+            text: parent.tip
+        }
     }
 
     // --- Floating toolbar, for one selected item ---------------------------

@@ -53,10 +53,12 @@ Item {
     readonly property real pad: Styles.Primitives.spacing.sp100
 
     HoverHandler { id: hover }
-    ToolTip.visible: hover.hovered
-    ToolTip.delay: 400
-    ToolTip.text: body.known ? qsTr("%1 · %2: %3").arg(body.name, body.fieldName, body.value || qsTr("none"))
-                             : qsTr("%1 · %2: not read yet").arg(body.name, body.fieldName)
+    CanvasTip {
+        shown: hover.hovered
+        delay: 400
+        text: body.known ? qsTr("%1 · %2: %3").arg(body.name, body.fieldName, body.value || qsTr("none"))
+                                 : qsTr("%1 · %2: not read yet").arg(body.name, body.fieldName)
+    }
     TapHandler {
         acceptedModifiers: Qt.ControlModifier
         onTapped: Qt.openUrlExternally(body.url)

@@ -13,9 +13,11 @@ IconButton {
     iconName: "pipette"
     focusPolicy: Qt.NoFocus
     onClicked: menu.popup(pipette, 0, pipette.height)
-    ToolTip.visible: hovered && !menu.visible
-    ToolTip.delay: 500
-    ToolTip.text: qsTr("Same size as another item: pick what, then click it")
+    CanvasTip {
+        shown: parent.hovered && !menu.visible
+        delay: 500
+        text: qsTr("Same size as another item: pick what, then click it")
+    }
 
     Menu {
         id: menu

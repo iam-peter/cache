@@ -87,9 +87,11 @@ Rectangle {
                 iconName: "external-link"
                 Layout.preferredWidth: 24
                 Layout.preferredHeight: 24
-                ToolTip.visible: hovered
-                ToolTip.delay: 500
-                ToolTip.text: qsTr("Open it in the system's reader")
+                CanvasTip {
+                    shown: parent.hovered
+                    delay: 500
+                    text: qsTr("Open it in the system's reader")
+                }
                 onClicked: Qt.openUrlExternally(block.segment.url)
             }
         }

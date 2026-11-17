@@ -34,9 +34,11 @@ Row {
                 font.features: { "tnum": 1 }
             }
             HoverHandler { id: chipHover }
-            ToolTip.visible: chipHover.hovered
-            ToolTip.delay: 400
-            ToolTip.text: chip.modelData.name + ": " + (chip.modelData.votes || chip.modelData.value)
+            CanvasTip {
+                shown: chipHover.hovered
+                delay: 400
+                text: chip.modelData.name + ": " + (chip.modelData.votes || chip.modelData.value)
+            }
         }
     }
 }

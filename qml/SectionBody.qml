@@ -102,9 +102,11 @@ Item {
             }
             HoverHandler { id: foldHover; cursorShape: Qt.PointingHandCursor }
             TapHandler { onTapped: Board.toggleCollapsed(body.card.itemId) }
-            ToolTip.visible: foldHover.hovered
-            ToolTip.delay: 400
-            ToolTip.text: body.card.itemCollapsed ? qsTr("Unfold the section") : qsTr("Fold the section, hiding what lies in it")
+            CanvasTip {
+                shown: foldHover.hovered
+                delay: 400
+                text: body.card.itemCollapsed ? qsTr("Unfold the section") : qsTr("Fold the section, hiding what lies in it")
+            }
         }
     }
 

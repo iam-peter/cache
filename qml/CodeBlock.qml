@@ -40,8 +40,10 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: done.running ? "check" : "copy"
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Copy the code")
+                CanvasTip {
+                    shown: parent.hovered
+                    text: qsTr("Copy the code")
+                }
                 onClicked: {
                     Board.copyText(block.segment.code)
                     done.restart()
