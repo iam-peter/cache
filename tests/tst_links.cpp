@@ -386,10 +386,11 @@ public:
                         for (int i = 1; i <= 80; ++i)
                             file += "int line" + QByteArray::number(i) + " = " + QByteArray::number(i) + ";\n";
                         body = file.toBase64();
-                    } else if (path.startsWith("/a/changes/?n=8&o=LABELS&q=")) {
-                        const QByteArray q = path.mid(27);
+                    } else if (path.startsWith("/a/changes/?n=") && path.contains("&o=LABELS&q=")) {
+                        const QByteArray q = path.mid(path.indexOf("&q=") + 3);
                         queries << q;
                         body = ")]}'\n" + QByteArray(q.contains("attention:self") || q == "resize"
+                                                     || q == "message:\"QTBUG-12345\" -is:abandoned"
                             ? R"([{"project":"qt/qtbase","_number":600000,"subject":"Fix the crash on resize",
                                   "status":"NEW","labels":{"Code-Review":{"approved":{"name":"Grace Hopper"}}}}])"
                             : "[]");
@@ -1302,7 +1303,7 @@ private slots:
         };
         QVariantMap info = read(server.url("/c/qt/qtbase/+/600000"));
         QCOMPARE(info.value("title").toString(), QStringLiteral("Fix the crash on resize"));
-        QCOMPARE(info.value("site").toString(), QStringLiteral("Gerrit · qt/qtbase"));
+        QCOMPARE(info.value("site").toString(), QStringLiteral("Gerrit · qt/qtbase · dev"));
         QCOMPARE(info.value("summary").toString(), QStringLiteral("The window resized while its scene graph was rendering."));
         // A bot's +1 doesn't make it approved
         QCOMPARE(info.value("status").toString(), QStringLiteral("Open"));
@@ -1311,10 +1312,10 @@ private slots:
         QCOMPARE(field(info, "Code-Review"), QStringLiteral("+1 Grace Hopper, −1 Bob"));
         QCOMPARE(field(info, "Sanity-Review"), QStringLiteral("+1 Qt Sanity Bot"));
         QCOMPARE(field(info, "Owner"), QStringLiteral("Ada Lovelace"));
-        QCOMPARE(field(info, "Branch"), QStringLiteral("dev"));
         QCOMPARE(field(info, "Changes"), QStringLiteral("+12 −4 in 2 files"));
         QCOMPARE(field(info, "Waiting for"), QStringLiteral("Grace Hopper"));
-        QCOMPARE(field(info, "Unresolved comments"), QStringLiteral("2"));
+        QCOMPARE(info.value("unresolved").toInt(), 2);
+        QVERIFY(field(info, "Unresolved comments").isEmpty()); // a badge, not a field
         QCOMPARE(field(info, "Patch set"), QStringLiteral("3"));
         QCOMPARE(field(info, "Tasks"), QStringLiteral("QTBUG-12345"));
         QCOMPARE(field(info, "Topic"), QStringLiteral("resize"));
@@ -1352,6 +1353,20 @@ private slots:
         links.refreshReviews();
         QTRY_COMPARE(reviews.size(), 1);
         QCOMPARE(links.reviews().first().toMap().value("detail").toString(), QStringLiteral("qt/qtbase · 600000"));
+
+        // An issue's changes: those naming its key, not abandoned
+        const QString issue = QStringLiteral("https://qt-project.atlassian.net/browse/QTBUG-12345");
+        QVERIFY(links.canRelate(issue));
+        QVERIFY(!links.canRelate(server.url("/c/qt/qtbase/+/600000"))); // not an issue
+        QSignalSpy related(&links, &Links::relatedFound);
+        links.related(issue);
+        QTRY_COMPARE(related.size(), 1);
+        QCOMPARE(related.at(0).at(0).toString(), issue);
+        QCOMPARE(related.at(0).at(1).toString(), QStringLiteral("QTBUG-12345"));
+        const QVariantList changes = related.at(0).at(2).toList();
+        QCOMPARE(changes.size(), 1);
+        QCOMPARE(changes.first().toMap().value("url").toString(), server.url("/c/qt/qtbase/+/600000"));
+        QVERIFY(server.queries.contains("message:\"QTBUG-12345\" -is:abandoned"));
         // The password went to this host's REST API only
         for (const QByteArray &request : std::as_const(server.requests))
             QVERIFY(request.startsWith("GET /a/"));
@@ -1360,6 +1375,8 @@ private slots:
     void gerritWithoutAccount()
     {
         Links links{Links::Detached{}};
+        // Nothing to ask for an issue's changes
+        QVERIFY(!links.canRelate(QStringLiteral("https://qt-project.atlassian.net/browse/QTBUG-12345")));
         const QString url = QStringLiteral("https://codereview.example/c/qt/qtbase/+/600000");
         links.card(url);
         QTRY_VERIFY(!links.card(url).isEmpty());

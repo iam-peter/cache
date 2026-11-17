@@ -159,6 +159,35 @@ Item {
                 ToolTip.text: qsTr("Open in the browser (or Ctrl+click the title)")
                 onClicked: Qt.openUrlExternally(body.url)
             }
+            // Comments still to be resolved
+            Rectangle {
+                visible: (body.info.unresolved || 0) > 0
+                implicitWidth: unresolvedRow.implicitWidth + 2 * Styles.Primitives.spacing.sp075
+                implicitHeight: unresolvedRow.implicitHeight + 4
+                radius: Theme.radius
+                color: Qt.alpha(Theme.s.warning_default, 0.16)
+                ToolTip.visible: unresolvedHover.hovered
+                ToolTip.delay: 500
+                ToolTip.text: qsTr("%n unresolved comment(s)", "", body.info.unresolved || 0)
+                HoverHandler { id: unresolvedHover }
+                Row {
+                    id: unresolvedRow
+                    anchors.centerIn: parent
+                    spacing: 4
+                    Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        name: "message-square"
+                        size: 11
+                        color: Theme.s.warning_default
+                    }
+                    Label {
+                        text: body.info.unresolved || 0
+                        color: Theme.s.warning_default
+                        font.pixelSize: Styles.Primitives.fontSize.small
+                        font.weight: Styles.Primitives.fontWeight.semiBold
+                    }
+                }
+            }
             Rectangle {
                 visible: (body.info.status || "") !== ""
                 implicitWidth: statusLabel.implicitWidth + 2 * Styles.Primitives.spacing.sp075

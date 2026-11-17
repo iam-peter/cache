@@ -317,6 +317,10 @@ ApplicationWindow {
               enabled: Links.accounts.list.some(a => a.provider === "github") },
             { name: qsTr("Pull requests waiting for my review (GitHub)"), query: "pr:review",
               enabled: Links.accounts.list.some(a => a.provider === "github") },
+            { name: qsTr("Add cards of the issue's Gerrit changes"),
+              enabled: selection.length === 1 && Board.getById(selection[0]).type === "link"
+                       && Links.canRelate(Board.getById(selection[0]).text),
+              run: () => canvasView.addRelatedCards(selection[0]) },
             { name: qsTr("My open changes (Gerrit)"), query: "gerrit:mine",
               enabled: Links.accounts.list.some(a => a.provider === "gerrit") },
             { name: qsTr("Changes waiting for my review (Gerrit)"), query: "gerrit:review",

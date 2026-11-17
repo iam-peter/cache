@@ -49,6 +49,7 @@ QVariantMap LinkInfo::toVariant() const
             {QStringLiteral("version"), version},
             {QStringLiteral("remoteImage"), remoteImage},
             {QStringLiteral("renderSize"), renderSize},
+            {QStringLiteral("unresolved"), unresolved},
             {QStringLiteral("code"), code},
             {QStringLiteral("language"), language},
             {QStringLiteral("firstLine"), firstLine}};
@@ -67,6 +68,7 @@ LinkInfo LinkInfo::fromVariant(const QVariantMap &map)
     info.version = map.value(QStringLiteral("version")).toString();
     info.remoteImage = map.value(QStringLiteral("remoteImage")).toString();
     info.renderSize = map.value(QStringLiteral("renderSize")).toInt();
+    info.unresolved = map.value(QStringLiteral("unresolved")).toInt();
     info.code = map.value(QStringLiteral("code")).toString();
     info.language = map.value(QStringLiteral("language")).toString();
     info.firstLine = map.value(QStringLiteral("firstLine"), 1).toInt();
@@ -815,6 +817,50 @@ void Links::search(const QString &query)
                 emit self->found(query, source, results);
         });
     }
+}
+
+QString Links::issueKey(const QString &url) const
+{
+    return Markdown::issueKey(url);
+}
+
+bool Links::canRelate(const QString &url) const
+{
+    if (Markdown::issueKey(url).isEmpty())
+        return false;
+    return std::any_of(m_resolvers.cbegin(), m_resolvers.cend(), [this](const auto &resolver) {
+        return resolver->relates() && std::any_of(m_accounts->all().cbegin(), m_accounts->all().cend(),
+                                                  [&](const Account &a) { return a.provider == resolver->id(); });
+    });
+}
+
+void Links::related(const QString &url)
+{
+    const QString key = Markdown::issueKey(url);
+    if (!canRelate(url)) {
+        emit relatedFound(url, key, {});
+        return;
+    }
+    struct Gather {
+        QVariantList results;
+        int pending = 1;
+    };
+    auto gather = std::make_shared<Gather>();
+    QPointer<Links> self(this);
+    const auto settle = [self, gather, url, key] {
+        if (--gather->pending == 0 && self)
+            emit self->relatedFound(url, key, gather->results);
+    };
+    for (const auto &resolver : m_resolvers) {
+        if (!resolver->relates())
+            continue;
+        ++gather->pending;
+        resolver->related(key, [gather, settle](const QVariantList &found) {
+            gather->results += found;
+            settle();
+        });
+    }
+    settle();
 }
 
 void Links::refreshReviews()

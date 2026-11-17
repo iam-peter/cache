@@ -242,7 +242,11 @@ void GerritResolver::readChange(const Account &account, const QByteArray &token,
         const QJsonObject change = QJsonDocument::fromJson(jsonOf(body)).object();
         LinkInfo info;
         info.title = change.value(QLatin1String("subject")).toString();
-        info.site = QStringLiteral("Gerrit · %1").arg(change.value(QLatin1String("project")).toString(ref.project));
+        // Its branch too: an issue's cherry-picks share their subject
+        info.site = QStringLiteral("Gerrit · %1 · %2").arg(change.value(QLatin1String("project")).toString(ref.project),
+                                                          change.value(QLatin1String("branch")).toString());
+        if (info.site.endsWith(QLatin1String(" · ")))
+            info.site.chop(3);
         std::tie(info.status, info.tone) = stateOf(change);
 
         const QString current = change.value(QLatin1String("current_revision")).toString();
@@ -259,16 +263,17 @@ void GerritResolver::readChange(const Account &account, const QByteArray &token,
         });
         for (const QString &name : std::as_const(names))
             add(info, name, votesOf(labels.value(name).toObject()));
+        // Shown as a badge beside the state
+        info.unresolved = change.value(QLatin1String("unresolved_comment_count")).toInt();
         add(info, QObject::tr("Owner"), nameOf(change.value(QLatin1String("owner")).toObject()));
-        add(info, QObject::tr("Branch"), change.value(QLatin1String("branch")).toString());
         int files = 0;
         const QJsonObject changed = revision.value(QLatin1String("files")).toObject();
         for (auto it = changed.begin(); it != changed.end(); ++it)
             files += it.key().startsWith(QLatin1Char('/')) ? 0 : 1; // not /COMMIT_MSG, /MERGE_LIST
-        add(info, QObject::tr("Changes"), QObject::tr("+%1 −%2 in %3 files")
-                                              .arg(change.value(QLatin1String("insertions")).toInt())
-                                              .arg(change.value(QLatin1String("deletions")).toInt())
-                                              .arg(files));
+        add(info, QObject::tr("Changes"), (files == 1 ? QObject::tr("+%1 −%2 in %3 file") : QObject::tr("+%1 −%2 in %3 files"))
+                                              .arg(QString::number(change.value(QLatin1String("insertions")).toInt()),
+                                                   QString::number(change.value(QLatin1String("deletions")).toInt()),
+                                                   QString::number(files)));
         // Whose turn it is
         QStringList attention;
         const QJsonObject set = change.value(QLatin1String("attention_set")).toObject();
@@ -276,8 +281,6 @@ void GerritResolver::readChange(const Account &account, const QByteArray &token,
             attention << nameOf(it.value().toObject().value(QLatin1String("account")).toObject());
         attention.removeAll(QString());
         add(info, QObject::tr("Waiting for"), attention.join(QStringLiteral(", ")));
-        const int unresolved = change.value(QLatin1String("unresolved_comment_count")).toInt();
-        add(info, QObject::tr("Unresolved comments"), unresolved > 0 ? QString::number(unresolved) : QString());
         const int patchSet = revision.value(QLatin1String("_number")).toInt();
         add(info, QObject::tr("Patch set"), patchSet > 0 ? QString::number(patchSet) : QString());
         add(info, QObject::tr("Tasks"), message.tasks.join(QStringLiteral(", ")));
@@ -327,6 +330,15 @@ void GerritResolver::readFile(const Account &account, const QByteArray &token, c
 
 void GerritResolver::search(const QString &query, const Results &done)
 {
+    const QString q = query == QLatin1String("gerrit:mine") ? QStringLiteral("is:open owner:self")
+                    : query == QLatin1String("gerrit:review")
+                        ? QStringLiteral("is:open -is:wip reviewer:self -owner:self attention:self")
+                        : query;
+    this->query(q, 8, done);
+}
+
+void GerritResolver::query(const QString &q, int n, const Results &done)
+{
     struct Search {
         QVariantList results;
         int pending = 1;
@@ -338,19 +350,15 @@ void GerritResolver::search(const QString &query, const Results &done)
         if (--search->pending == 0)
             search->done(search->results);
     };
-    const QString q = query == QLatin1String("gerrit:mine") ? QStringLiteral("is:open owner:self")
-                    : query == QLatin1String("gerrit:review")
-                        ? QStringLiteral("is:open -is:wip reviewer:self -owner:self attention:self")
-                        : query;
     for (const Account &account : m_links->accounts()->all()) {
         if (account.provider != id())
             continue;
         ++search->pending;
-        m_links->accounts()->token(account, [this, account, q, search, settle](const QByteArray &token) {
+        m_links->accounts()->token(account, [this, account, q, n, search, settle](const QByteArray &token) {
             if (token.isEmpty())
                 return settle();
             m_links->requestBytes(account.host, account, token,
-                                  QStringLiteral("/a/changes/?n=8&o=LABELS&q=") + enc(q),
+                                  QStringLiteral("/a/changes/?n=%1&o=LABELS&q=").arg(n) + enc(q),
                                   [account, search, settle](int status, const QByteArray &body, const QString &) {
                 if (status == 200) {
                     for (const QJsonValue &v : QJsonDocument::fromJson(jsonOf(body)).array()) {
@@ -378,4 +386,9 @@ void GerritResolver::search(const QString &query, const Results &done)
 void GerritResolver::reviews(const Results &done)
 {
     search(QStringLiteral("gerrit:review"), done);
+}
+
+void GerritResolver::related(const QString &key, const Results &done)
+{
+    query(QStringLiteral("message:\"%1\" -is:abandoned").arg(key), 25, done);
 }

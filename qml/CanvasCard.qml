@@ -582,6 +582,14 @@ Item {
                         }
                     }
                     Tip {
+                        // An issue's changes on Gerrit, as cards beside it
+                        visible: root.isLink && !root.formatting && Links.accounts.list.length >= 0
+                                 && Links.canRelate(root.itemText)
+                        iconName: "git-pull-request"
+                        tip: qsTr("Add cards of its Gerrit changes")
+                        onClicked: root.canvas.addRelatedCards(root.itemId)
+                    }
+                    Tip {
                         visible: (root.isNote || root.isLink) && !root.formatting
                         iconName: "move-vertical"
                         tip: qsTr("Fit the height to the content")

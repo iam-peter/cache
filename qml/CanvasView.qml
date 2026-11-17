@@ -398,6 +398,65 @@ Item {
         if (row >= 0)
             setSelection([Board.get(row).id])
     }
+    // Cards of the changes issue card `id` led to (Gerrit's), beside it and
+    // connected to it; those already on the board are left as they are
+    property var relatedFor: null // {id, url} while Gerrit is asked
+    function addRelatedCards(id) {
+        const item = Board.getById(id)
+        if (!item || item.type !== "link" || !Links.canRelate(item.text))
+            return
+        relatedFor = { id: id, url: item.text }
+        toast.show(qsTr("Asking Gerrit for the changes of %1…").arg(Links.issueKey(item.text)))
+        Links.related(item.text)
+    }
+    Connections {
+        target: Links
+        function onRelatedFound(url, key, results) {
+            const wanted = view.relatedFor
+            if (!wanted || wanted.url !== url)
+                return
+            view.relatedFor = null
+            const issue = Board.getById(wanted.id)
+            if (!issue || !issue.id)
+                return
+            if (results.length === 0) {
+                toast.show(qsTr("Gerrit has no changes naming %1").arg(key))
+                return
+            }
+            const there = new Set()
+            for (let row = 0; row < Board.count; ++row) {
+                const it = Board.get(row)
+                if (it.type === "link")
+                    there.add(it.text)
+            }
+            const fresh = results.filter(r => !there.has(r.url))
+            if (fresh.length === 0) {
+                toast.show(qsTr("The changes of %1 are on the board already").arg(key))
+                return
+            }
+            // A column to the right of the issue
+            const w = 320, h = 190, gap = 24
+            const x = Math.round(issue.x + issue.w + 96)
+            let y = Math.round(issue.y)
+            const added = []
+            for (const r of fresh) {
+                const row = Board.addItem("link", x, y, w, h, "", r.url)
+                if (row < 0)
+                    continue
+                const id = Board.get(row).id
+                Board.addLink(wanted.id, id, "right", "left")
+                added.push(id)
+                y += h + gap
+            }
+            setSelection(added)
+            // The issue and its changes in view, not zoomed in for it
+            const b = Board.boundsOf([wanted.id].concat(added))
+            const from = toWorld(0, 0), to = toWorld(view.width, view.height)
+            if (b.x < from.x || b.y < from.y || b.x + b.width > to.x || b.y + b.height > to.y)
+                centerOn(b.x, b.y, b.width, b.height, view.zoom)
+            toast.show(qsTr("Added %n change(s) of %1", "", added.length).arg(key))
+        }
+    }
     // An empty one, its address being asked for
     function newLinkCard() {
         const row = addLinkCard("")
@@ -2011,6 +2070,32 @@ Item {
                     text: linkCard.info.title || ""
                     font.weight: Styles.Primitives.fontWeight.semiBold
                 }
+                // Comments still to be resolved
+                Rectangle {
+                    Layout.alignment: Qt.AlignTop
+                    visible: (linkCard.info.unresolved || 0) > 0
+                    implicitWidth: hoverUnresolved.implicitWidth + 2 * Styles.Primitives.spacing.sp075
+                    implicitHeight: hoverUnresolved.implicitHeight + 4
+                    radius: Theme.radius
+                    color: Qt.alpha(Theme.s.warning_default, 0.16)
+                    Row {
+                        id: hoverUnresolved
+                        anchors.centerIn: parent
+                        spacing: 4
+                        Icon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            name: "message-square"
+                            size: 11
+                            color: Theme.s.warning_default
+                        }
+                        Label {
+                            text: qsTr("%n unresolved", "", linkCard.info.unresolved || 0)
+                            color: Theme.s.warning_default
+                            font.pixelSize: Styles.Primitives.fontSize.small
+                            font.weight: Styles.Primitives.fontWeight.semiBold
+                        }
+                    }
+                }
                 Rectangle {
                     Layout.alignment: Qt.AlignTop
                     visible: (linkCard.info.status || "") !== ""
@@ -2227,6 +2312,13 @@ Item {
             height: visible ? implicitHeight : 0
             text: qsTr("Copy address")
             onTriggered: Board.copyText(cardMenu.item.text)
+        }
+        MenuItem {
+            visible: cardMenu.item.type === "link" && Links.accounts.list.length >= 0
+                     && Links.canRelate(cardMenu.item.text || "")
+            height: visible ? implicitHeight : 0
+            text: qsTr("Add cards of its Gerrit changes")
+            onTriggered: view.addRelatedCards(cardMenu.item.id)
         }
         MenuItem {
             visible: cardMenu.item.type === "link"

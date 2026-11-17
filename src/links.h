@@ -34,6 +34,7 @@ struct LinkInfo
     QString version;     // of what it shows, as its service counts (a Figma file's)
     QString remoteImage; // where `image` came from, when it is kept on disk
     int renderSize = 0;  // a render's longest side in pixels (Figma's); 0: not one
+    int unresolved = 0;  // comments still to be resolved (a Gerrit change's)
     QString code;    // lines of a file (GitLab), shown highlighted
     QString language;
     int firstLine = 1;
@@ -163,6 +164,15 @@ public:
     // What waits for the user's review there (merge and pull requests),
     // for the Tasks tab
     virtual void reviews(const Results &done) { done({}); }
+    // Whether it can tell what an issue (a Jira key) led to: Gerrit's
+    // changes whose commit message names it
+    virtual bool relates() const { return false; }
+    // What issue `key` led to, as search results
+    virtual void related(const QString &key, const Results &done)
+    {
+        Q_UNUSED(key)
+        done({});
+    }
 };
 
 // Links to what other services hold, read through their resolvers. What
@@ -242,6 +252,14 @@ public:
     QVariantList reviews() const { return m_reviews; }
     // Asks GitLab and GitHub again what waits for the user's review
     Q_INVOKABLE void refreshReviews();
+    // Whether `url` is an issue whose changes a service with an account
+    // can find (Gerrit's, by the issue's key)
+    Q_INVOKABLE bool canRelate(const QString &url) const;
+    // The issue key in `url`: "QTBUG-152002"; empty if none
+    Q_INVOKABLE QString issueKey(const QString &url) const;
+    // The changes issue `url` led to, from every service that can tell:
+    // answered with relatedFound()
+    Q_INVOKABLE void related(const QString &url);
     // The Atlassian sites to search: those with an account of their own,
     // and for an every-site account the sites links have been read from
     QStringList atlassianSites() const;
@@ -283,6 +301,8 @@ signals:
     void accountAdded(bool ok, const QString &message);
     void found(const QString &query, const QString &source, const QVariantList &results);
     void reviewsChanged();
+    // The changes an issue led to: rows as search() gives them
+    void relatedFound(const QString &url, const QString &key, const QVariantList &results);
 
 private:
     struct Entry

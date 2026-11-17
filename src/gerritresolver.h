@@ -32,6 +32,10 @@ public:
     // waiting for their review
     void search(const QString &query, const Results &done) override;
     void reviews(const Results &done) override;
+    // The changes whose commit message names issue `key` (its Task-number
+    // or Fixes), but not abandoned ones
+    bool relates() const override { return true; }
+    void related(const QString &key, const Results &done) override;
 
     // What a link points to
     struct Ref
@@ -51,6 +55,9 @@ public:
     static QByteArray jsonOf(const QByteArray &body);
 
 private:
+    // Changes matching Gerrit query `q` on every account's host, at most `n`
+    // from each
+    void query(const QString &q, int n, const Results &done);
     void readChange(const Account &account, const QByteArray &token, const Ref &ref, const Done &done);
     void readFile(const Account &account, const QByteArray &token, const Ref &ref, const Done &done);
 
