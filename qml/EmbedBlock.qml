@@ -41,6 +41,7 @@ Rectangle {
             spacing: Styles.Primitives.spacing.sp050
 
             IconButton {
+                zoom: Theme.iconZoom // crisp however far the canvas zooms
                 visible: block.note.found
                 iconName: block.segment.expanded ? "chevron-down" : "chevron-right"
                 ToolTip.visible: hovered
@@ -48,6 +49,7 @@ Rectangle {
                 onClicked: Board.setEmbed(block.card.index, block.segment.line, !block.segment.expanded)
             }
             Icon {
+                zoom: Theme.iconZoom // crisp however far the canvas zooms
                 anchors.verticalCenter: parent.verticalCenter
                 name: "link"
                 size: 14

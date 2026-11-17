@@ -12,6 +12,9 @@ Item {
     required property string name
     property color color: Styles.TokenInterface.semantics.text_default
     property int size: 16
+    // Drawn this many times larger than it shows: an icon on the canvas,
+    // which the canvas's zoom enlarges (Theme.iconZoom)
+    property real zoom: 1
 
     implicitWidth: size
     implicitHeight: size
@@ -23,7 +26,8 @@ Item {
         active: icon.name !== ""
         sourceComponent: IconImage {
             source: Icons.source(icon.name)
-            sourceSize: Qt.size(icon.size, icon.size)
+            sourceSize: Qt.size(Math.ceil(icon.size * icon.zoom), Math.ceil(icon.size * icon.zoom))
+            smooth: true
             color: icon.color
             fillMode: Image.PreserveAspectFit
         }

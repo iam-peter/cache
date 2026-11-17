@@ -13,6 +13,11 @@ QtObject {
     // While a picture is exported without its text: what text there is
     // shows as grey bars (Redacted)
     property bool redacting: false
+    // The canvas's zoom, and the scale icons on it are drawn at: in steps,
+    // so zooming doesn't draw them again at every step
+    property real canvasZoom: 1
+    readonly property real iconZoom: canvasZoom <= 1 ? 1 : canvasZoom <= 1.5 ? 1.5 : canvasZoom <= 2 ? 2
+                                   : canvasZoom <= 3 ? 3 : canvasZoom <= 4 ? 4 : 6
     readonly property bool dark: Styles.TokenInterface.dark
 
     // A shortcut as menus show it: the symbols printed on the keys where

@@ -471,6 +471,11 @@ Item {
                                           : qsTr("Added %1 changes of %2").arg(added.length).arg(key))
         }
     }
+    Binding {
+        target: Theme
+        property: "canvasZoom"
+        value: view.zoom
+    }
     // Detail `key` of link card `cardId` (":status", a field's name…) as a
     // node of its own: beside the card, or beside its section, so folding
     // the section keeps it in sight; below those pulled out there before

@@ -58,6 +58,7 @@ Rectangle {
                 Redacted { cover: block.color }
             }
             IconButton {
+                zoom: Theme.iconZoom // crisp however far the canvas zooms
                 visible: doc.pageCount > 1
                 enabled: block.page > 0
                 iconName: "chevron-left"
@@ -73,6 +74,7 @@ Rectangle {
                 font.features: { "tnum": 1 }
             }
             IconButton {
+                zoom: Theme.iconZoom // crisp however far the canvas zooms
                 visible: doc.pageCount > 1
                 enabled: block.page < doc.pageCount - 1
                 iconName: "chevron-right"
@@ -81,6 +83,7 @@ Rectangle {
                 onClicked: block.page = Math.min(doc.pageCount - 1, block.page + 1)
             }
             IconButton {
+                zoom: Theme.iconZoom // crisp however far the canvas zooms
                 iconName: "external-link"
                 Layout.preferredWidth: 24
                 Layout.preferredHeight: 24

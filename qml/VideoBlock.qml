@@ -122,6 +122,7 @@ Rectangle {
         visible: !block.playing || hover.hovered
 
         Icon {
+            zoom: Theme.iconZoom // crisp however far the canvas zooms
             anchors.centerIn: parent
             anchors.horizontalCenterOffset: block.playing ? 0 : 2
             name: block.playing ? "pause" : "play"
@@ -152,6 +153,7 @@ Rectangle {
         color: "#b3000000"
         visible: hover.hovered
         Icon {
+            zoom: Theme.iconZoom // crisp however far the canvas zooms
             anchors.centerIn: parent
             name: "maximize"
             size: 16

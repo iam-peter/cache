@@ -50,6 +50,7 @@ Rectangle {
             radius: 18
             color: Theme.accent
             Icon {
+                zoom: Theme.iconZoom // crisp however far the canvas zooms
                 anchors.centerIn: parent
                 anchors.horizontalCenterOffset: block.player && block.player.playing ? 0 : 1
                 name: block.player && block.player.playing ? "pause" : "play"
@@ -76,6 +77,7 @@ Rectangle {
             RowLayout {
                 Layout.fillWidth: true
                 Icon {
+                    zoom: Theme.iconZoom // crisp however far the canvas zooms
                     name: "music"
                     size: 12
                     color: Theme.textMuted

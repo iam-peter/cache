@@ -57,6 +57,7 @@ Rectangle {
             }
         }
         IconButton {
+            zoom: Theme.iconZoom // crisp however far the canvas zooms
             anchors.verticalCenter: parent.verticalCenter
             iconName: "external-link"
             onClicked: Qt.openUrlExternally(block.segment.url)
@@ -64,6 +65,7 @@ Rectangle {
             ToolTip.text: qsTr("Open")
         }
         IconButton {
+            zoom: Theme.iconZoom // crisp however far the canvas zooms
             anchors.verticalCenter: parent.verticalCenter
             iconName: "folder-open"
             onClicked: Qt.openUrlExternally(block.segment.folder)

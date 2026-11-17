@@ -35,6 +35,7 @@ Rectangle {
                 font.pixelSize: Styles.Primitives.fontSize.small
             }
             IconButton {
+                zoom: Theme.iconZoom // crisp however far the canvas zooms
                 id: copy
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter

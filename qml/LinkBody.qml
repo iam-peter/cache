@@ -201,6 +201,7 @@ Item {
             Layout.fillWidth: true
             spacing: Styles.Primitives.spacing.sp075
             Icon {
+                zoom: Theme.iconZoom // crisp however far the canvas zooms
                 name: "link"
                 size: 12
                 color: Theme.textMuted
@@ -214,6 +215,7 @@ Item {
                 elide: Text.ElideRight
             }
             IconButton {
+                zoom: Theme.iconZoom // crisp however far the canvas zooms
                 visible: body.url !== ""
                 iconName: "external-link"
                 Layout.preferredHeight: 22
@@ -240,6 +242,7 @@ Item {
                     anchors.centerIn: parent
                     spacing: 4
                     Icon {
+                        zoom: Theme.iconZoom // crisp however far the canvas zooms
                         anchors.verticalCenter: parent.verticalCenter
                         name: "message-square"
                         size: 11

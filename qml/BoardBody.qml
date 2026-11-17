@@ -32,6 +32,7 @@ Item {
             Layout.fillWidth: true
             spacing: Styles.Primitives.spacing.sp075
             Icon {
+                zoom: Theme.iconZoom // crisp however far the canvas zooms
                 name: "folder"
                 size: 14
                 color: Theme.textMuted
@@ -50,6 +51,7 @@ Item {
                 font.pixelSize: Styles.Primitives.fontSize.small
             }
             IconButton {
+                zoom: Theme.iconZoom // crisp however far the canvas zooms
                 visible: body.preview.found === true
                 iconName: "folder-open"
                 Layout.preferredWidth: 22
