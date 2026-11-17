@@ -43,6 +43,8 @@ Item {
     // On a card of its own: notes, web links and other boards
     readonly property bool framed: isNote || isLink || isBoard || isField
     readonly property bool connectable: isNote || isShape || isText || isLink || isBoard || isField
+    // A link card's details that can be pulled out as nodes: [{key, name, value}]
+    readonly property var pullable: isLink && body.item && body.item.parts ? body.item.parts.filter(p => p.out) : []
     // Folded: as tall as its title (a link card) or strip (a section)
     readonly property bool fixedHeight: (isLink && itemCompact) || (isSection && itemCollapsed)
 
@@ -354,21 +356,39 @@ Item {
             border.color: Theme.accent
             border.width: 2 * root.inv
             z: 11
+            readonly property string side: ["top", "right", "bottom", "left"][index]
             MouseArea {
+                id: handleArea
                 anchors.fill: parent
                 anchors.margins: -4 * root.inv
                 cursorShape: Qt.CrossCursor
                 preventStealing: true
+                hoverEnabled: true
+                // Right: a link card's details, to pull out on this side
+                acceptedButtons: root.isLink ? Qt.LeftButton | Qt.RightButton : Qt.LeftButton
                 onPressed: (mouse) => {
+                    if (mouse.button === Qt.RightButton) {
+                        root.canvas.openPullMenu(root.itemId, parent.side)
+                        return
+                    }
                     root.linking = true
                     root.lastPoint = mapToItem(root.parent, mouse.x, mouse.y)
                     // Out of this side; where it goes in is up to where it is dropped
-                    root.canvas.beginLink(root.itemId, root.lastPoint, ["top", "right", "bottom", "left"][parent.index])
+                    root.canvas.beginLink(root.itemId, root.lastPoint, parent.side)
                 }
-                onPositionChanged: (mouse) => root.dragTo(mapToItem(root.parent, mouse.x, mouse.y), mouse.modifiers)
-                onReleased: root.release()
+                onPositionChanged: (mouse) => {
+                    if (mouse.buttons & Qt.LeftButton)
+                        root.dragTo(mapToItem(root.parent, mouse.x, mouse.y), mouse.modifiers)
+                }
+                onReleased: (mouse) => {
+                    if (mouse.button === Qt.LeftButton)
+                        root.release()
+                }
                 onCanceled: root.release()
             }
+            ToolTip.visible: root.isLink && handleArea.containsMouse && !root.canvas.moving && root.canvas.linkFromId === ""
+            ToolTip.delay: 600
+            ToolTip.text: qsTr("Drag to connect; right-click to pull a detail out on this side")
         }
     }
 
@@ -436,7 +456,8 @@ Item {
                 scale: root.inv
                 transformOrigin: Item.BottomLeft
                 x: 0
-                y: -height - (root.isSection ? 40 : 10) * root.inv
+                // Clear of the top connection handle while it shows
+                y: -height - (root.isSection ? 40 : root.handles ? 32 : 10) * root.inv
                 width: actions.implicitWidth + 2 * Styles.Primitives.spacing.sp050
                 height: actions.implicitHeight + 2 * Styles.Primitives.spacing.sp050
                 radius: Theme.radius

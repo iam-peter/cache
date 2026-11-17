@@ -1153,7 +1153,8 @@ void BoardModel::setFields(const QString &id, const QStringList &fields)
     markDirty();
 }
 
-int BoardModel::addField(const QString &cardId, double x, double y, double w, double h, const QString &key)
+int BoardModel::addField(const QString &cardId, double x, double y, double w, double h, const QString &key,
+                         const QString &fromSide, const QString &toSide)
 {
     const int card = indexOf(cardId);
     if (m_projectPath.isEmpty() || card < 0 || m_items.at(card).type != QLatin1String("link"))
@@ -1174,6 +1175,8 @@ int BoardModel::addField(const QString &cardId, double x, double y, double w, do
     link.id = newId();
     link.from = cardId;
     link.to = it.id;
+    link.fromSide = isSide(fromSide) ? fromSide : QString();
+    link.toSide = isSide(toSide) ? toSide : QString();
     link.arrow = QStringLiteral("none");
     link.dashed = true;
     m_links.append(link);

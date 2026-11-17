@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
 import QtQuick.Shapes
+import QtQml.Models
 import QtCore
 import QtMultimedia
 import IgittStyle as Styles
@@ -477,28 +478,44 @@ Item {
         value: view.zoom
     }
     // Detail `key` of link card `cardId` (":status", a field's name…) as a
-    // node of its own: beside the card, or beside its section, so folding
-    // the section keeps it in sight; below those pulled out there before
-    function pullOut(cardId, key) {
+    // node of its own on `side` (right, left, top or bottom): outside the
+    // card's section if it is in one, so folding the section keeps it in
+    // sight; past what is there already
+    function pullOut(cardId, key, side) {
         const card = Board.getById(cardId)
         if (!card || card.type !== "link")
             return
+        side = side || "right"
         const section = card.section ? Board.getById(card.section) : null
-        const x = Math.round((section ? section.x + section.w : card.x + card.w) + 24)
-        const w = 200, h = 44
-        let y = Math.round(card.y)
-        let moved = true
-        while (moved) {
-            moved = false
+        const outer = section || card
+        const w = 200, h = 44, gap = 24
+        // A section's title sits above it
+        const above = section ? 40 : 0
+        let x = side === "right" ? outer.x + outer.w + gap : side === "left" ? outer.x - gap - w : card.x
+        let y = side === "bottom" ? outer.y + outer.h + gap : side === "top" ? outer.y - above - gap - h : card.y
+        // Along the side: down beside it, rightwards above or below it
+        const across = side === "left" || side === "right"
+        const taken = (r) => {
             for (let row = 0; row < Board.count; ++row) {
                 const it = Board.get(row)
-                if (it.type === "field" && Math.abs(it.x - x) < 4 && it.y < y + h && it.y + it.h > y) {
-                    y = Math.round(it.y + it.h + 8)
-                    moved = true
-                }
+                if (it.hidden || it.type === "section" || it.type === "stroke")
+                    continue
+                if (it.x < r.x + r.w && it.x + it.w > r.x && it.y < r.y + r.h && it.y + it.h > r.y)
+                    return it
             }
+            return null
         }
-        const row = Board.addField(cardId, x, y, w, h, key)
+        for (let i = 0; i < 200; ++i) {
+            const it = taken({ x: x, y: y, w: w, h: h })
+            if (!it)
+                break
+            if (across)
+                y = it.y + it.h + 8
+            else
+                x = it.x + it.w + 8
+        }
+        const opposite = { right: "left", left: "right", top: "bottom", bottom: "top" }
+        const row = Board.addField(cardId, Math.round(x), Math.round(y), w, h, key, side, opposite[side])
         if (row >= 0)
             setSelection([Board.get(row).id])
     }
@@ -591,6 +608,41 @@ Item {
                 ids.push(it.id)
         }
         setSelection(ids)
+    }
+    // The details of link card `cardId` to pull out on `side`, as a menu
+    function openPullMenu(cardId, side) {
+        const card = cards[cardId]
+        const parts = card ? card.pullable : []
+        if (parts.length === 0) {
+            toast.show(qsTr("This card has no details to pull out yet"))
+            return
+        }
+        pullMenu.cardId = cardId
+        pullMenu.side = side || "right"
+        pullMenu.parts = parts
+        pullMenu.popup()
+    }
+    Menu {
+        id: pullMenu
+        property string cardId
+        property string side: "right"
+        property var parts: []
+        MenuItem {
+            text: qsTr("Pull out as a node")
+            enabled: false
+        }
+        Instantiator {
+            model: pullMenu.parts
+            delegate: MenuItem {
+                required property var modelData
+                readonly property string shortValue: modelData.value.length > 36 ? modelData.value.slice(0, 35) + "…"
+                                                                                : modelData.value
+                text: shortValue !== "" ? qsTr("%1: %2").arg(modelData.name, shortValue) : modelData.name
+                onTriggered: view.pullOut(pullMenu.cardId, modelData.key, pullMenu.side)
+            }
+            onObjectAdded: (index, object) => pullMenu.insertItem(index + 1, object)
+            onObjectRemoved: (index, object) => pullMenu.removeItem(object)
+        }
     }
     function openCardMenu(row) {
         cardMenu.row = row
@@ -2357,6 +2409,12 @@ Item {
             height: visible ? implicitHeight : 0
             text: qsTr("Copy address")
             onTriggered: Board.copyText(cardMenu.item.text)
+        }
+        MenuItem {
+            visible: cardMenu.item.type === "link"
+            height: visible ? implicitHeight : 0
+            text: qsTr("Pull out a detail…")
+            onTriggered: view.openPullMenu(cardMenu.item.id, "right")
         }
         MenuItem {
             visible: cardMenu.item.type === "link" && Links.accounts.list.length >= 0

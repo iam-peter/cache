@@ -273,9 +273,10 @@ public:
     // A link card folded to its title line, `height` tall, or unfolded
     Q_INVOKABLE void setCompact(const QString &id, bool compact, double height = 0);
     // Detail `key` of link card `cardId` pulled out as a "field" item at
-    // (x, y), joined to the card by a dashed connector; one step to undo.
-    // Returns its row.
-    Q_INVOKABLE int addField(const QString &cardId, double x, double y, double w, double h, const QString &key);
+    // (x, y), joined to the card by a dashed connector leaving by
+    // `fromSide` and entering by `toSide`; one step to undo. Returns its row.
+    Q_INVOKABLE int addField(const QString &cardId, double x, double y, double w, double h, const QString &key,
+                             const QString &fromSide = {}, const QString &toSide = {});
     // Lays the branch below `rootId` out as a tree to its right
     Q_INVOKABLE void tidy(const QString &rootId);
 
