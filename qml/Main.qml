@@ -295,7 +295,7 @@ ApplicationWindow {
             { name: qsTr("Select all"), keys: "Ctrl+A", run: () => canvasView.selectAll() },
             { name: locked ? qsTr("Unlock the selection") : qsTr("Lock the selection"), enabled: selection.length > 0,
               run: () => Board.setLocked(selection, !locked) },
-            { name: qsTr("Fit the notes' height to their content"), enabled: selection.length > 0,
+            { name: qsTr("Fit the cards' height to their content"), enabled: selection.length > 0,
               run: () => canvasView.fitToContent() },
             { name: qsTr("Arrange in a row"), enabled: selection.length > 1, run: () => Board.arrange(selection, "row") },
             { name: qsTr("Arrange in a column"), enabled: selection.length > 1,

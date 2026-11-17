@@ -2247,9 +2247,9 @@ Item {
                                          !cardMenu.item.locked)
         }
         MenuItem {
-            visible: cardMenu.item.type === "note"
+            visible: cardMenu.item.type === "note" || cardMenu.item.type === "link"
             height: visible ? implicitHeight : 0
-            text: view.selection.length > 1 ? qsTr("Fit the notes' height to their content")
+            text: view.selection.length > 1 ? qsTr("Fit the cards' height to their content")
                                              : qsTr("Fit the height to the content")
             onTriggered: view.fitToContent()
         }

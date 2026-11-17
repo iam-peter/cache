@@ -82,7 +82,7 @@ Item {
     }
     // A note as tall as what it holds
     function fitToContent() {
-        if (isNote && body.item)
+        if ((isNote || isLink) && body.item)
             body.item.fitToContent()
     }
     function commitGeometry() {
@@ -582,7 +582,7 @@ Item {
                         }
                     }
                     Tip {
-                        visible: root.isNote && !root.formatting
+                        visible: (root.isNote || root.isLink) && !root.formatting
                         iconName: "move-vertical"
                         tip: qsTr("Fit the height to the content")
                         onClicked: root.fitToContent()

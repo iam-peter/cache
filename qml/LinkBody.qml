@@ -39,6 +39,33 @@ Item {
 
     clip: true
 
+    // How tall the words need to be: all but a long description, which
+    // gets four lines here and the rest only when there is room
+    readonly property real textNeed: Math.ceil(words.implicitHeight - summary.implicitHeight
+                                               + Math.min(summary.implicitHeight, 4 * summaryMetrics.lineSpacing)
+                                               + words.anchors.topMargin + words.anchors.bottomMargin)
+    // The picture gets what the words leave, a page's picture as a banner
+    readonly property real pictureRoom: body.height - 2 - textNeed
+    // A picture's own height at this width: a design whole (not taller
+    // than a little more than it is wide), a page's picture as a banner
+    function pictureHeightFor(w) {
+        if (!picture.loaded || picture.implicitWidth <= 0)
+            return 0
+        return picture.design ? Math.min(w * 1.2, w * picture.implicitHeight / picture.implicitWidth) : w / 1.91
+    }
+    // Exactly as tall as what it shows: smaller too
+    function fitToContent() {
+        const shown = pictureHeightFor(body.width - 2)
+        const h = Math.max(body.card.minH, Math.ceil(textNeed + (shown >= 64 ? shown + 2 : 0)))
+        if (Math.abs(h - body.card.height) > 1)
+            Board.setGeometry(body.card.index, body.card.x, body.card.y, body.card.width, h)
+    }
+
+    FontMetrics {
+        id: summaryMetrics
+        font: summary.font
+    }
+
     // Pixels in steps, so a little more zoom doesn't load a picture again
     function step(px) {
         for (const s of [400, 800, 1600, 3200])
@@ -58,7 +85,7 @@ Item {
             else if (status !== Image.Loading)
                 loaded = false
         }
-        visible: !body.editing && loaded && body.height > 150
+        visible: !body.editing && loaded && body.pictureRoom >= 64
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
@@ -66,7 +93,7 @@ Item {
         // A design is the point: most of the card, whole; a page's picture
         // is a banner
         readonly property bool design: body.info.kind === "design"
-        height: !visible ? 0 : design ? body.height * 0.68 : Math.min(body.height * 0.5, width / 1.91)
+        height: !visible ? 0 : design ? body.pictureRoom : Math.min(body.pictureRoom, width / 1.91)
         source: body.info.image || ""
         fillMode: design ? Image.PreserveAspectFit : Image.PreserveAspectCrop
         asynchronous: true
@@ -96,6 +123,7 @@ Item {
     }
 
     ColumnLayout {
+        id: words
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: picture.visible ? picture.bottom : parent.top
@@ -168,6 +196,7 @@ Item {
             }
         }
         Label {
+            id: summary
             Layout.fillWidth: true
             // Its lines, or as many as the card has room for
             Layout.fillHeight: true
@@ -187,11 +216,14 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.minimumHeight: 0
+            implicitHeight: lines.implicitHeight + 2 * Styles.Primitives.spacing.sp050
             visible: (body.info.code || "") !== ""
             radius: Theme.radius
             color: Theme.codeBackground
             clip: true
             Row {
+                id: lines
                 x: Styles.Primitives.spacing.sp075
                 y: Styles.Primitives.spacing.sp050
                 spacing: Styles.Primitives.spacing.sp100
@@ -224,7 +256,7 @@ Item {
         // An issue's fields, as many as fit
         GridLayout {
             Layout.fillWidth: true
-            visible: (body.info.fields || []).length > 0 && body.height > 190
+            visible: (body.info.fields || []).length > 0
             columns: 2
             columnSpacing: Styles.Primitives.spacing.sp150
             rowSpacing: 0
