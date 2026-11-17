@@ -384,9 +384,14 @@ Links::Links(QObject *parent)
     m_page = std::make_unique<PageResolver>(this);
 }
 
+// What saved answers hold: raised when a resolver reads more than it
+// did, so answers saved before are asked again (and shown till then)
+constexpr int kAnswersVersion = 2;
+
 void Links::save()
 {
     QJsonObject all;
+    all.insert(QStringLiteral("version"), kAnswersVersion);
     QJsonObject sites;
     for (auto it = m_moved.cbegin(); it != m_moved.cend(); ++it)
         sites.insert(it.key(), it.value());
@@ -1038,6 +1043,8 @@ void Links::load()
     if (!file.open(QIODevice::ReadOnly))
         return;
     const QJsonObject all = QJsonDocument::fromJson(file.readAll()).object();
+    // Saved by a Cache that read less: shown, but asked again at once
+    const bool outdated = all.value(QStringLiteral("version")).toInt() != kAnswersVersion;
     const QJsonObject sites = all.value(QStringLiteral("sites")).toObject();
     for (auto it = sites.begin(); it != sites.end(); ++it)
         m_moved.insert(it.key(), it.value().toString());
@@ -1047,7 +1054,8 @@ void Links::load()
         const QJsonObject o = it.value().toObject();
         Entry entry;
         entry.info = LinkInfo::fromVariant(o.value(QStringLiteral("info")).toObject().toVariantMap());
-        entry.fetched = QDateTime::fromString(o.value(QStringLiteral("fetched")).toString(), Qt::ISODate);
+        if (!outdated)
+            entry.fetched = QDateTime::fromString(o.value(QStringLiteral("fetched")).toString(), Qt::ISODate);
         m_entries.insert(it.key(), entry);
     }
 }

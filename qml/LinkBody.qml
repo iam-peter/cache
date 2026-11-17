@@ -26,8 +26,17 @@ Item {
     readonly property bool ownChoice: card.itemFields.length > 0
     readonly property var chosen: ownChoice ? card.itemFields
                                 : Links.revision >= 0 ? Links.cardFields(info.source || "") : []
+    // A part (":votes"…) shows unless the choice hides it ("-:votes"), so a
+    // part that came after the choice shows. Choices kept before they said
+    // what they hide name only what they show: of the parts, the votes
+    // came later.
+    readonly property bool olderChoice: !chosen.some(k => k.startsWith("-"))
     function shows(part) {
-        return chosen.length === 0 || chosen.indexOf(part) >= 0
+        if (chosen.length === 0 || chosen.indexOf(part) >= 0)
+            return true
+        if (chosen.indexOf("-" + part) >= 0)
+            return false
+        return !olderChoice || part === ":votes"
     }
     readonly property var allFields: info.fields || []
     readonly property var shownFields: {
@@ -60,11 +69,15 @@ Item {
     function isShown(key) {
         return key.startsWith(":") ? shows(key) : shownFields.some(f => f.name === key)
     }
+    // The choice shown now, as kept: the parts and fields shown, and the
+    // parts hidden ("-:picture"), so parts that come later show
+    function choiceWith(key, on) {
+        return parts.map(p => (p.key === key ? on : isShown(p.key)) ? p.key : p.key.startsWith(":") ? "-" + p.key : "")
+                    .filter(k => k !== "").concat([":none"])
+    }
     // Shows `key` or not: the card's own choice from now on
     function choose(key, on) {
-        let list = parts.filter(p => p.key === key ? on : isShown(p.key)).map(p => p.key)
-        // Shown nothing: still a choice, not "as usual"
-        Board.setFields(card.itemId, list.length > 0 ? list : [":none"])
+        Board.setFields(card.itemId, choiceWith(key, on))
     }
     // Folded to its title line, and a line of its chosen details, or unfolded
     readonly property real compactHeight: Math.ceil(words.anchors.topMargin + words.anchors.bottomMargin
@@ -481,8 +494,7 @@ Item {
                     ToolTip.delay: 400
                     ToolTip.text: qsTr("Cards of %1 that haven't a choice of their own show the same").arg(details.service)
                     onClicked: {
-                        Links.setCardFields(body.info.source,
-                                            body.parts.filter(p => body.isShown(p.key)).map(p => p.key).concat([":none"]))
+                        Links.setCardFields(body.info.source, body.choiceWith("", false))
                         Board.setFields(body.card.itemId, [])
                     }
                 }
