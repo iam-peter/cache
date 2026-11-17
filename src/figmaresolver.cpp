@@ -384,8 +384,11 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
                             if (status != 200) {
                                 // Said in the palette: a wrong id, or a token
                                 // without the folders:read scope
+                                // Refused: not a team (an organisation's id, say),
+                                // or a token without folders:read
                                 listing->errors << (folderStatus == 403 || status == 403
-                                    ? QObject::tr("team %1: %2 (a token needs the folders:read scope to list a team's files)")
+                                    ? QObject::tr("team %1: %2 Is it a team's id, the number after /team/ in its address "
+                                                  "(not the organisation's, after /files/)? The token needs folders:read too.")
                                           .arg(team, folderStatus == 403 ? folderError : error)
                                     : QObject::tr("team %1: %2").arg(team, folderError));
                                 settle();
