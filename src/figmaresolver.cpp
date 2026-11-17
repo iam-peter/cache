@@ -9,6 +9,7 @@
 #include <QNetworkReply>
 #include <QRegularExpression>
 #include <QSet>
+#include <QTimer>
 #include <QUrlQuery>
 
 #include <algorithm>
@@ -106,7 +107,15 @@ bool FigmaResolver::handles(const QUrl &url) const
            && m_links->accounts()->find(id(), fixedHost()).has_value();
 }
 
+// Answers Figma may give otherwise when asked again (busy, failing for now)
+constexpr int kRetries = 2;
+
 void FigmaResolver::get(const QByteArray &token, const QString &path, const Links::JsonReply &reply)
+{
+    get(token, path, reply, 0);
+}
+
+void FigmaResolver::get(const QByteArray &token, const QString &path, const Links::JsonReply &reply, int attempt)
 {
     QNetworkRequest request(QUrl(m_api + path));
     request.setRawHeader("X-Figma-Token", token);
@@ -116,9 +125,17 @@ void FigmaResolver::get(const QByteArray &token, const QString &path, const Link
     // Rendering a large frame takes Figma a while
     request.setTransferTimeout(60000);
     QNetworkReply *r = m_links->network()->get(request);
-    QObject::connect(r, &QNetworkReply::finished, r, [r, reply] {
+    QObject::connect(r, &QNetworkReply::finished, r, [this, r, reply, token, path, attempt] {
         r->deleteLater();
         const int status = r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        // Figma busy, or failing for now ("Error retrieving file, please
+        // try again later"): asked again a little later, twice at most
+        if ((status == 429 || status >= 500) && attempt < kRetries) {
+            const int wait = std::clamp(r->rawHeader("Retry-After").toInt(), 0, 30);
+            QTimer::singleShot((wait > 0 ? wait : 3 * (attempt + 1)) * 1000 / m_retrySpeedUp, m_links,
+                               [this, token, path, reply, attempt] { get(token, path, reply, attempt + 1); });
+            return;
+        }
         // A bare list too (the folder endpoints may answer one): as "items"
         const QJsonDocument document = QJsonDocument::fromJson(r->readAll());
         const QJsonObject json = document.isArray() ? QJsonObject{{QStringLiteral("items"), document.array()}}
@@ -313,6 +330,7 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
         QStringList errors;
         QHash<QString, QString> libraryErrors; // by team: said only if its files were listed
         QSet<QString> frames;                  // "file node" of the frames listed
+        QSet<QString> seen;                    // "file node" of what library files hold, listed
         int pending = 1;
         int folders = 0;
         // A folder's files and subfolders, named by its path
@@ -325,6 +343,19 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
         std::function<void(const QString &team, const QString &kind, const QString &after, int page)> library;
     };
     auto listing = std::make_shared<Listing>();
+    // Something a library file holds, once
+    const auto addEntry = [listing](const QString &file, const QString &node, const QString &title, const QString &kind,
+                                    const QString &page, const QString &description) {
+        if (node.isEmpty() || title.isEmpty() || listing->seen.contains(file + QLatin1Char(' ') + node))
+            return;
+        listing->seen.insert(file + QLatin1Char(' ') + node);
+        listing->components << QVariantMap{{QStringLiteral("name"), title},
+                                           {QStringLiteral("description"), description},
+                                           {QStringLiteral("file"), file},
+                                           {QStringLiteral("node"), node},
+                                           {QStringLiteral("kind"), kind},
+                                           {QStringLiteral("page"), page}};
+    };
     const QStringList teams = account.teams;
     const QStringList libraries = account.libraries;
     // What the list is of: the teams and the library files
@@ -365,7 +396,7 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
                 {QStringLiteral("thumbnail"), file.value(QLatin1String("thumbnail_url")).toString()}};
         }
     };
-    m_links->accounts()->token(account, [this, teams, libraries, listing, settle, addFiles](const QByteArray &token) {
+    m_links->accounts()->token(account, [this, teams, libraries, listing, settle, addFiles, addEntry](const QByteArray &token) {
         if (token.isEmpty()) {
             listing->errors << QObject::tr("the keychain has no Figma token: sign in again in Settings, Accounts");
             settle();
@@ -466,10 +497,36 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
         };
         // A library file: its pages' component sets, components and frames
         // (file_content:read), published or not
-        listing->readLibrary = [this, token, listing, settle](const QString &key) {
+        listing->readLibrary = [this, token, listing, settle, addEntry](const QString &key) {
+            // Published sets and components at any depth (library_content:read;
+            // without it, those on the pages only)
+            for (const QString kind : {QStringLiteral("component_sets"), QStringLiteral("components")}) {
+                ++listing->pending;
+                get(token, QStringLiteral("/v1/files/%1/%2").arg(key, kind),
+                    [listing, settle, key, kind, addEntry](int status, const QJsonObject &json, const QString &) {
+                        const bool sets = kind == QLatin1String("component_sets");
+                        const QJsonArray items = json.value(QLatin1String("meta")).toObject()
+                                                     .value(QLatin1String(sets ? "component_sets" : "components")).toArray();
+                        for (const QJsonValue &v : items) {
+                            const QJsonObject item = v.toObject();
+                            const QJsonObject frame = item.value(QLatin1String("containing_frame")).toObject();
+                            if (!sets && (!frame.value(QLatin1String("containingComponentSet")).toString().isEmpty()
+                                          || !frame.value(QLatin1String("containingStateGroup")).toString().isEmpty()
+                                          || frame.value(QLatin1String("containingStateGroup")).isObject()))
+                                continue; // a set's variant
+                            if (status == 200)
+                                addEntry(key, item.value(QLatin1String("node_id")).toString(),
+                                                item.value(QLatin1String("name")).toString(),
+                                                sets ? QStringLiteral("set") : QStringLiteral("component"),
+                                                frame.value(QLatin1String("pageName")).toString(),
+                                                item.value(QLatin1String("description")).toString());
+                        }
+                        settle();
+                    });
+            }
             ++listing->pending;
             get(token, QStringLiteral("/v1/files/%1?depth=2").arg(key),
-                [listing, settle, key](int status, const QJsonObject &json, const QString &error) {
+                [listing, settle, key, addEntry](int status, const QJsonObject &json, const QString &error) {
                     if (status != 200) {
                         listing->errors << QObject::tr("library %1: %2").arg(key, error);
                         settle();
@@ -483,23 +540,15 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
                                                       {QStringLiteral("name"), name},
                                                       {QStringLiteral("project"), QObject::tr("Library")},
                                                       {QStringLiteral("thumbnail"), json.value(QLatin1String("thumbnailUrl")).toString()}};
-                    QSet<QString> seen;
                     const auto add = [&](const QString &node, const QString &title, const QString &kind, const QString &page,
                                          const QString &description) {
-                        if (node.isEmpty() || title.isEmpty() || seen.contains(node))
-                            return;
-                        seen.insert(node);
-                        listing->components << QVariantMap{{QStringLiteral("name"), title},
-                                                           {QStringLiteral("description"), description},
-                                                           {QStringLiteral("file"), key},
-                                                           {QStringLiteral("node"), node},
-                                                           {QStringLiteral("kind"), kind},
-                                                           {QStringLiteral("page"), page}};
+                        addEntry(key, node, title, kind, page, description);
                     };
-                    // What lies on its pages
+                    // Its pages, and what lies on them
                     for (const QJsonValue &p : json.value(QLatin1String("document")).toObject().value(QLatin1String("children")).toArray()) {
                         const QJsonObject page = p.toObject();
                         const QString pageName = page.value(QLatin1String("name")).toString();
+                        add(page.value(QLatin1String("id")).toString(), pageName, QStringLiteral("page"), pageName, {});
                         for (const QJsonValue &c : page.value(QLatin1String("children")).toArray()) {
                             const QJsonObject node = c.toObject();
                             const QString type = node.value(QLatin1String("type")).toString();
@@ -650,19 +699,25 @@ void FigmaResolver::search(const QString &query, const Results &done)
                             : atWord.match(name).hasMatch() ? 2
                             : name.contains(words.value(0)) ? 3 : 4;
             const QString kind = c.value(QStringLiteral("kind")).toString();
-            const int order = kind == QLatin1String("set") ? 0 : kind == QLatin1String("component") ? 1 : 2;
-            hits.append({match * 3 + order, c});
+            const int order = kind == QLatin1String("set") ? 0 : kind == QLatin1String("component") ? 1
+                            : kind == QLatin1String("page") ? 2 : 3;
+            hits.append({match * 4 + order, c});
         }
         std::stable_sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) { return a.rank < b.rank; });
         for (const Hit &hit : hits.mid(0, kComponentResults)) {
             const QVariantMap &c = hit.item;
             const QString file = fileNames.value(c.value(QStringLiteral("file")).toString(), c.value(QStringLiteral("page")).toString());
             const QString kind = c.value(QStringLiteral("kind")).toString();
+            // Where in the file: its page, unless it is one
+            const QString page = c.value(QStringLiteral("page")).toString();
+            const QString where = kind == QLatin1String("page") || page.isEmpty() || page == file
+                                      ? file : file + QStringLiteral(" · ") + page;
             results << QVariantMap{
                 {QStringLiteral("title"), c.value(QStringLiteral("name")).toString()},
-                {QStringLiteral("detail"), kind == QLatin1String("set") ? QObject::tr("Figma · %1 · component set").arg(file)
-                                         : kind == QLatin1String("frame") ? QObject::tr("Figma · %1 · frame").arg(file)
-                                                                          : QObject::tr("Figma · %1 · component").arg(file)},
+                {QStringLiteral("detail"), kind == QLatin1String("set") ? QObject::tr("Figma · %1 · component set").arg(where)
+                                         : kind == QLatin1String("frame") ? QObject::tr("Figma · %1 · frame").arg(where)
+                                         : kind == QLatin1String("page") ? QObject::tr("Figma · %1 · page").arg(where)
+                                                                         : QObject::tr("Figma · %1 · component").arg(where)},
                 {QStringLiteral("image"), c.value(QStringLiteral("thumbnail"))},
                 {QStringLiteral("url"), QStringLiteral("https://www.figma.com/design/%1/%2?node-id=%3")
                                             .arg(c.value(QStringLiteral("file")).toString(),

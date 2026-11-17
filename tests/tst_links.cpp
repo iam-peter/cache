@@ -163,6 +163,13 @@ public:
                              "containing_frame":{"name":"Button","pageName":"Components","containingComponentSet":"15737:7099"}},
                             {"key":"c2","file_key":"QwErTy111111","node_id":"1:2","name":"Icon Button",
                              "containing_frame":{"pageName":"Components"}}],"cursor":{}}})";
+                    } else if (request.startsWith("GET /v1/files/LiBrArY12345/component_sets ")) {
+                        // Published, deeper in than its pages' top level
+                        body = R"({"status":200,"error":false,"meta":{"component_sets":[
+                            {"key":"sb","file_key":"LiBrArY12345","node_id":"40:1","name":"Split Button",
+                             "containing_frame":{"name":"Menus","pageName":"Buttons"}}]}})";
+                    } else if (request.startsWith("GET /v1/files/LiBrArY12345/components ")) {
+                        body = R"({"status":200,"error":false,"meta":{"components":[]}})";
                     } else if (request.startsWith("GET /v2/folders/530533745/meta ")) {
                         body = R"({"id":"530533745","name":"Design System"})";
                     } else if (request.startsWith("GET /v2/folders/530533745/files ")) {
@@ -173,7 +180,7 @@ public:
                         // A library file named under the account: sets and frames
                         // on its pages, a set deeper in, a set of another library
                         body = R"({"name":"Ignite Product Components","thumbnailUrl":"https://example.org/i.png",
-                            "document":{"children":[{"name":"Buttons","type":"CANVAS","children":[
+                            "document":{"children":[{"id":"0:1","name":"Buttons","type":"CANVAS","children":[
                                 {"id":"15737:7099","name":"Button","type":"COMPONENT_SET"},
                                 {"id":"15737:7000","name":"Button guidelines","type":"FRAME"},
                                 {"id":"15737:7001","name":"note","type":"TEXT"}]}]},
@@ -195,6 +202,13 @@ public:
                     } else if (request.startsWith("GET /v1/projects/7/files ")) {
                         body = R"({"files":[{"key":"AbCdEf123456","name":"Design System","thumbnail_url":"https://example.org/t.png"},
                             {"key":"ZyXwVu987654","name":"Marketing site"}]})";
+                    } else if (request.startsWith("GET /v1/files/AbCdEf123456/nodes?ids=55%3A1&depth=1 ") && flaky++ == 0) {
+                        // Figma failing for now: fine when asked again
+                        status = "500 Internal Server Error";
+                        body = R"({"status":500,"err":"Error retrieving file, please try again later"})";
+                    } else if (request.startsWith("GET /v1/files/AbCdEf123456/nodes?ids=55%3A1&depth=1 ")) {
+                        body = R"({"name":"Design System","version":"1","nodes":{"55:1":{"document":{"id":"55:1",
+                            "name":"Toolbar","type":"FRAME","absoluteBoundingBox":{"x":0,"y":0,"width":200,"height":40}}}}})";
                     } else if (request.startsWith("GET /v1/files/AbCdEf123456/nodes?ids=12%3A34&depth=1 ")) {
                         body = R"({"name":"Design System","lastModified":"2026-11-15T08:00:00Z","editorType":"figma",
                             "thumbnailUrl":"https://example.org/thumb.png","version":")" + version + R"(",
@@ -231,6 +245,7 @@ public:
     QByteArray renderBase = "https://example.org"; // where its renders are
     int renders = 0;
     QList<QByteArray> scales;                      // each render's
+    int flaky = 0;                                 // asks for node 55:1
 };
 
 // A stand-in for GitLab's API: one project, group/app, with one of each
@@ -926,6 +941,14 @@ private slots:
         links.card(gone);
         QTRY_VERIFY(links.card(gone).value("error").toString().contains(QStringLiteral("no such frame")));
 
+        // Figma failing for now ("try again later"): asked again, then read
+        static_cast<FigmaResolver *>(links.resolver(QStringLiteral("figma")))->setRetrySpeedUp(100);
+        const QString flaky = QStringLiteral("https://www.figma.com/design/AbCdEf123456/DS?node-id=55-1");
+        links.card(flaky);
+        QTRY_COMPARE(links.card(flaky).value("title").toString(), QStringLiteral("Toolbar"));
+        QVERIFY(links.card(flaky).value("error").toString().isEmpty());
+        QCOMPARE(api.flaky, 2);
+
         // The token went to the API only, as Figma wants it
         for (const QByteArray &request : std::as_const(api.requests))
             QVERIFY(!request.contains("Authorization"));
@@ -1040,10 +1063,10 @@ private slots:
             titles << b.toMap().value("title").toString();
         QCOMPARE(titles, (QStringList{QStringLiteral("Button"), QStringLiteral("Button Group"), QStringLiteral("Buttons"),
                                       QStringLiteral("Icon Button")}));
-        QCOMPARE(buttons.at(0).toMap().value("detail").toString(), QStringLiteral("Figma · App screens · component set"));
+        QCOMPARE(buttons.at(0).toMap().value("detail").toString(), QStringLiteral("Figma · App screens · Components · component set"));
         QCOMPARE(buttons.at(0).toMap().value("url").toString(),
                  QStringLiteral("https://www.figma.com/design/QwErTy111111/App-screens?node-id=15737-7099"));
-        QCOMPARE(buttons.at(2).toMap().value("detail").toString(), QStringLiteral("Figma · App screens · frame"));
+        QCOMPARE(buttons.at(2).toMap().value("detail").toString(), QStringLiteral("Figma · App screens · Components · frame"));
         // A library file named by its address, no team needed: its sets and
         // frames, the file itself, but not another library's set
         links.accounts()->setTeams(QStringLiteral("figma"), QStringLiteral("figma.com"), QString());
@@ -1057,9 +1080,14 @@ private slots:
         titles.clear();
         for (const QVariant &b : found.value("figma"))
             titles << b.toMap().value("title").toString();
-        QCOMPARE(titles, (QStringList{QStringLiteral("Button"), QStringLiteral("Button guidelines"), QStringLiteral("Toggle Button")}));
+        // The page too, and a published set deeper in (the last two in
+        // either order: they match alike)
+        QCOMPARE(titles.mid(0, 3), (QStringList{QStringLiteral("Button"), QStringLiteral("Buttons"), QStringLiteral("Button guidelines")}));
+        QCOMPARE(QSet<QString>(titles.begin() + 3, titles.end()),
+                 (QSet<QString>{QStringLiteral("Split Button"), QStringLiteral("Toggle Button")}));
+        QCOMPARE(found.value("figma").at(1).toMap().value("detail").toString(), QStringLiteral("Figma · Ignite Product Components · page"));
         QCOMPARE(found.value("figma").first().toMap().value("detail").toString(),
-                 QStringLiteral("Figma · Ignite Product Components · component set"));
+                 QStringLiteral("Figma · Ignite Product Components · Buttons · component set"));
         QCOMPARE(found.value("figma").first().toMap().value("url").toString(),
                  QStringLiteral("https://www.figma.com/design/LiBrArY12345/Ignite-Product-Components?node-id=15737-7099"));
         found.clear();
@@ -1076,7 +1104,7 @@ private slots:
         links.search(QStringLiteral("button"));
         QTRY_VERIFY(found.contains("figma"));
         QCOMPARE(found.value("figma").first().toMap().value("detail").toString(),
-                 QStringLiteral("Figma · Ignite Product Components · component set"));
+                 QStringLiteral("Figma · Ignite Product Components · Buttons · component set"));
         found.clear();
         links.search(QStringLiteral("ignite"));
         QTRY_VERIFY(found.contains("figma"));

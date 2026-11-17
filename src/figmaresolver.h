@@ -41,17 +41,21 @@ public:
 
     // Tests: where the API is
     void setApi(const QString &base) { m_api = base; }
+    // Tests: asking again after a failure this many times sooner
+    void setRetrySpeedUp(int factor) { m_retrySpeedUp = std::max(1, factor); }
 
 private:
     // What a link points to, its render (if a frame) at least `pixels`
     // large, else as large as before or the usual size
     void read(const QUrl &url, int pixels, const Done &done);
     void get(const QByteArray &token, const QString &path, const Links::JsonReply &reply);
+    void get(const QByteArray &token, const QString &path, const Links::JsonReply &reply, int attempt);
 
     void listFiles(const Account &account, const std::function<void()> &done);
 
     Links *m_links;
     QString m_api = QStringLiteral("https://api.figma.com");
+    int m_retrySpeedUp = 1;
     QVariantList m_files; // [{key, name, project, thumbnail}] of the teams
     // Their libraries' published component sets and components (not a
     // set's variants), and the frames they are in: [{name, description,
