@@ -826,7 +826,7 @@ void Links::discover(const QString &host)
         });
 }
 
-void Links::search(const QString &query)
+void Links::search(const QString &query, const QStringList &sources)
 {
     if (query.trimmed().size() < 3)
         return;
@@ -834,6 +834,8 @@ void Links::search(const QString &query)
     QPointer<Links> self(this);
     for (const auto &resolver : m_resolvers) {
         const QString source = resolver->id();
+        if (!sources.isEmpty() && !sources.contains(source))
+            continue;
         resolver->search(query.trimmed(), [self, query, source](const QVariantList &results) {
             if (self)
                 emit self->found(query, source, results);

@@ -254,7 +254,8 @@ public:
     std::optional<std::pair<Account, QString>> accountFor(const QString &provider, const QUrl &url) const;
     // Searches every service with an account for `query` (three letters or
     // more); each answers with found(), its source being the resolver's id
-    Q_INVOKABLE void search(const QString &query);
+    // Only those of `sources` (their ids: jira, figma…) when given
+    Q_INVOKABLE void search(const QString &query, const QStringList &sources = {});
     QVariantList reviews() const { return m_reviews; }
     // Asks GitLab and GitHub again what waits for the user's review
     Q_INVOKABLE void refreshReviews();
