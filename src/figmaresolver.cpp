@@ -290,6 +290,9 @@ QString idOf(const QJsonObject &item)
 // Folders can nest; this deep, and this many, is plenty for a palette
 constexpr int kFolderDepth = 4;
 constexpr int kMaxFolders = 300;
+// A team library's components, a page at a time
+constexpr int kLibraryPage = 1000;
+constexpr int kLibraryPages = 10;
 
 } // namespace
 
@@ -300,19 +303,31 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
         return; // already being read
     struct Listing {
         QVariantList files;
+        QVariantList components;
         QStringList errors;
+        QHash<QString, QString> libraryErrors; // by team: said only if its files were listed
         int pending = 1;
         int folders = 0;
         // A folder's files and subfolders, named by its path
         std::function<void(const QString &id, const QString &name, int depth)> walk;
+        // A page of a team library's component sets or components
+        std::function<void(const QString &team, const QString &kind, const QString &after, int page)> library;
     };
     auto listing = std::make_shared<Listing>();
     const QStringList teams = account.teams;
     const auto settle = [this, listing, teams] {
         if (--listing->pending > 0)
             return;
-        listing->walk = nullptr; // it holds the listing
+        listing->walk = nullptr; // they hold the listing
+        listing->library = nullptr;
+        for (auto it = listing->libraryErrors.cbegin(); it != listing->libraryErrors.cend(); ++it) {
+            const QString team = QStringLiteral("team %1").arg(it.key());
+            if (std::none_of(listing->errors.cbegin(), listing->errors.cend(),
+                             [&](const QString &e) { return e.startsWith(team + QLatin1Char(':')); }))
+                listing->errors << it.value();
+        }
         m_files = listing->files;
+        m_components = listing->components;
         m_listErrors = listing->errors;
         m_filesRead = QDateTime::currentDateTimeUtc();
         m_filesOf = teams;
@@ -361,7 +376,54 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
                     settle();
                 });
         };
+        // Published component sets and components (team_library_content:read)
+        listing->library = [this, token, listing, settle](const QString &team, const QString &kind, const QString &after,
+                                                          int page) {
+            ++listing->pending;
+            QString path = QStringLiteral("/v1/teams/%1/%2?page_size=%3").arg(team, kind, QString::number(kLibraryPage));
+            if (!after.isEmpty())
+                path += QStringLiteral("&after=") + after;
+            get(token, path, [listing, settle, team, kind, page](int status, const QJsonObject &json, const QString &error) {
+                if (status != 200) {
+                    // Said once a team, and only if nothing else is found
+                    if (kind == QLatin1String("component_sets") && page == 0)
+                        listing->libraryErrors[team] = (status == 403
+                            ? QObject::tr("team %1's components: %2 The token needs team_library_content:read.").arg(team, error)
+                            : QObject::tr("team %1's components: %2").arg(team, error));
+                    settle();
+                    return;
+                }
+                const QJsonObject meta = json.value(QLatin1String("meta")).toObject();
+                const QJsonArray items = meta.value(QLatin1String(kind == QLatin1String("components") ? "components"
+                                                                                                         : "component_sets")).toArray();
+                const bool sets = kind == QLatin1String("component_sets");
+                for (const QJsonValue &v : items) {
+                    const QJsonObject item = v.toObject();
+                    const QJsonObject frame = item.value(QLatin1String("containing_frame")).toObject();
+                    // A set's variants: the set stands for them
+                    if (!sets && (!frame.value(QLatin1String("containingComponentSet")).toString().isEmpty()
+                                  || !frame.value(QLatin1String("containingStateGroup")).toString().isEmpty()
+                                  || frame.value(QLatin1String("containingStateGroup")).isObject()))
+                        continue;
+                    listing->components << QVariantMap{
+                        {QStringLiteral("name"), item.value(QLatin1String("name")).toString()},
+                        {QStringLiteral("description"), item.value(QLatin1String("description")).toString()},
+                        {QStringLiteral("file"), item.value(QLatin1String("file_key")).toString()},
+                        {QStringLiteral("node"), item.value(QLatin1String("node_id")).toString()},
+                        {QStringLiteral("set"), sets},
+                        {QStringLiteral("thumbnail"), item.value(QLatin1String("thumbnail_url")).toString()},
+                        {QStringLiteral("page"), frame.value(QLatin1String("pageName")).toString()}};
+                }
+                // A full page: there may be more
+                const QString next = meta.value(QLatin1String("cursor")).toObject().value(QLatin1String("after")).toVariant().toString();
+                if (items.size() >= kLibraryPage && !next.isEmpty() && page + 1 < kLibraryPages && listing->library)
+                    listing->library(team, kind, next, page + 1);
+                settle();
+            });
+        };
         for (const QString &team : teams) {
+            listing->library(team, QStringLiteral("component_sets"), {}, 0);
+            listing->library(team, QStringLiteral("components"), {}, 0);
             ++listing->pending;
             // Folders (folders:read); else, for tokens made before them,
             // projects (projects:read)
@@ -437,6 +499,33 @@ void FigmaResolver::search(const QString &query, const Results &done)
                                             .arg(file.value(QStringLiteral("key")).toString(),
                                                  QString::fromUtf8(QUrl::toPercentEncoding(QString(name).replace(QLatin1Char(' '), QLatin1Char('-')))))}};
             if (results.size() >= 8)
+                break;
+        }
+        // Components and component sets by name (or description), in the
+        // file they are in
+        QHash<QString, QString> fileNames;
+        for (const QVariant &v : std::as_const(m_files))
+            fileNames.insert(v.toMap().value(QStringLiteral("key")).toString(), v.toMap().value(QStringLiteral("name")).toString());
+        int components = 0;
+        for (const QVariant &v : std::as_const(m_components)) {
+            const QVariantMap c = v.toMap();
+            const QString name = c.value(QStringLiteral("name")).toString();
+            const QString lower = (name + QLatin1Char(' ') + c.value(QStringLiteral("description")).toString()).toLower();
+            if (!std::all_of(words.cbegin(), words.cend(), [&](const QString &w) { return lower.contains(w); }))
+                continue;
+            const QString file = fileNames.value(c.value(QStringLiteral("file")).toString(), c.value(QStringLiteral("page")).toString());
+            results << QVariantMap{
+                {QStringLiteral("title"), name},
+                {QStringLiteral("detail"), c.value(QStringLiteral("set")).toBool()
+                                               ? QObject::tr("Figma · %1 · component set").arg(file)
+                                               : QObject::tr("Figma · %1 · component").arg(file)},
+                {QStringLiteral("image"), c.value(QStringLiteral("thumbnail"))},
+                {QStringLiteral("url"), QStringLiteral("https://www.figma.com/design/%1/%2?node-id=%3")
+                                            .arg(c.value(QStringLiteral("file")).toString(),
+                                                 QString::fromUtf8(QUrl::toPercentEncoding(QString(file.isEmpty() ? QStringLiteral("Figma") : file)
+                                                                                               .replace(QLatin1Char(' '), QLatin1Char('-')))),
+                                                 c.value(QStringLiteral("node")).toString().replace(QLatin1Char(':'), QLatin1Char('-')))}};
+            if (++components >= 8)
                 break;
         }
         // Nothing found, and a team couldn't be listed: why

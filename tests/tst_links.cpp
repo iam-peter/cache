@@ -141,6 +141,21 @@ public:
                         body = R"({"status":403,"err":"Invalid token"})";
                     } else if (request.startsWith("GET /v1/me ")) {
                         body = R"({"handle":"Ada"})";
+                    } else if (request.startsWith("GET /v1/teams/1234567/component_sets?page_size=1000 ")
+                               || request.startsWith("GET /v1/teams/1234567/components?page_size=1000 ")) {
+                        body = R"({"status":200,"error":false,"meta":{"components":[],"component_sets":[],"cursor":{}}})";
+                    } else if (request.startsWith("GET /v1/teams/2345678/component_sets?page_size=1000 ")) {
+                        // A team library: a set (with a variant) and a component
+                        body = R"({"status":200,"error":false,"meta":{"component_sets":[
+                            {"key":"s1","file_key":"QwErTy111111","node_id":"15737:7099","name":"Button",
+                             "description":"Primary and secondary","thumbnail_url":"https://example.org/b.png",
+                             "containing_frame":{"name":"Buttons","pageName":"Components"}}],"cursor":{}}})";
+                    } else if (request.startsWith("GET /v1/teams/2345678/components?page_size=1000 ")) {
+                        body = R"({"status":200,"error":false,"meta":{"components":[
+                            {"key":"c1","file_key":"QwErTy111111","node_id":"15737:7100","name":"Size=Large, State=Default",
+                             "containing_frame":{"name":"Button","pageName":"Components","containingComponentSet":"15737:7099"}},
+                            {"key":"c2","file_key":"QwErTy111111","node_id":"1:2","name":"Icon Button",
+                             "containing_frame":{"pageName":"Components"}}],"cursor":{}}})";
                     } else if (request.startsWith("GET /v2/teams/2345678/folders ")) {
                         // Folders, nested (folders:read)
                         body = R"({"folders":[{"id":"11","name":"App","parent_folder_id":null}]})";
@@ -987,9 +1002,20 @@ private slots:
         found.clear();
         links.search(QStringLiteral("icon"));
         QTRY_VERIFY(found.contains("figma"));
-        QCOMPARE(found.value("figma").size(), 1);
+        QCOMPARE(found.value("figma").size(), 2); // the file, then the library's Icon Button
         QCOMPARE(found.value("figma").first().toMap().value("detail").toString(), QStringLiteral("Figma · App / Icons"));
         QVERIFY(found.value("figma").first().toMap().value("url").toString().contains(QStringLiteral("IcOnS2222222")));
+        // Its library's component sets and components by name, not a set's variants
+        found.clear();
+        links.search(QStringLiteral("button"));
+        QTRY_VERIFY(found.contains("figma"));
+        const QVariantList buttons = found.value("figma");
+        QCOMPARE(buttons.size(), 2);
+        QCOMPARE(buttons.at(0).toMap().value("title").toString(), QStringLiteral("Button"));
+        QCOMPARE(buttons.at(0).toMap().value("detail").toString(), QStringLiteral("Figma · App screens · component set"));
+        QCOMPARE(buttons.at(0).toMap().value("url").toString(),
+                 QStringLiteral("https://www.figma.com/design/QwErTy111111/App-screens?node-id=15737-7099"));
+        QCOMPARE(buttons.at(1).toMap().value("title").toString(), QStringLiteral("Icon Button"));
         // A team Figma won't list: why, where the files would be
         links.accounts()->setTeams(QStringLiteral("figma"), QStringLiteral("figma.com"), QStringLiteral("9999999"));
         found.clear();
