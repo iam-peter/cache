@@ -163,6 +163,16 @@ public:
                              "containing_frame":{"name":"Button","pageName":"Components","containingComponentSet":"15737:7099"}},
                             {"key":"c2","file_key":"QwErTy111111","node_id":"1:2","name":"Icon Button",
                              "containing_frame":{"pageName":"Components"}}],"cursor":{}}})";
+                    } else if (request.startsWith("GET /v1/files/LiBrArY12345?depth=2 ")) {
+                        // A library file named under the account: sets and frames
+                        // on its pages, a set deeper in, a set of another library
+                        body = R"({"name":"Ignite Product Components","thumbnailUrl":"https://example.org/i.png",
+                            "document":{"children":[{"name":"Buttons","type":"CANVAS","children":[
+                                {"id":"15737:7099","name":"Button","type":"COMPONENT_SET"},
+                                {"id":"15737:7000","name":"Button guidelines","type":"FRAME"},
+                                {"id":"15737:7001","name":"note","type":"TEXT"}]}]},
+                            "componentSets":{"20:5":{"key":"t","name":"Toggle Button"},
+                                             "30:1":{"key":"r","name":"Remote Button","remote":true}}})";
                     } else if (request.startsWith("GET /v2/teams/2345678/folders ")) {
                         // Folders, nested (folders:read)
                         body = R"({"folders":[{"id":"11","name":"App","parent_folder_id":null}]})";
@@ -1028,6 +1038,29 @@ private slots:
         QCOMPARE(buttons.at(0).toMap().value("url").toString(),
                  QStringLiteral("https://www.figma.com/design/QwErTy111111/App-screens?node-id=15737-7099"));
         QCOMPARE(buttons.at(2).toMap().value("detail").toString(), QStringLiteral("Figma · App screens · frame"));
+        // A library file named by its address, no team needed: its sets and
+        // frames, the file itself, but not another library's set
+        links.accounts()->setTeams(QStringLiteral("figma"), QStringLiteral("figma.com"), QString());
+        links.accounts()->setLibraries(QStringLiteral("figma"), QStringLiteral("figma.com"),
+            QStringLiteral("https://www.figma.com/design/LiBrArY12345/Ignite-Product-Components?node-id=15737-7099"));
+        QCOMPARE(links.accounts()->find(QStringLiteral("figma"), QStringLiteral("figma.com"))->libraries,
+                 QStringList{QStringLiteral("LiBrArY12345")});
+        found.clear();
+        links.search(QStringLiteral("button"));
+        QTRY_VERIFY(found.contains("figma"));
+        titles.clear();
+        for (const QVariant &b : found.value("figma"))
+            titles << b.toMap().value("title").toString();
+        QCOMPARE(titles, (QStringList{QStringLiteral("Button"), QStringLiteral("Button guidelines"), QStringLiteral("Toggle Button")}));
+        QCOMPARE(found.value("figma").first().toMap().value("detail").toString(),
+                 QStringLiteral("Figma · Ignite Product Components · component set"));
+        QCOMPARE(found.value("figma").first().toMap().value("url").toString(),
+                 QStringLiteral("https://www.figma.com/design/LiBrArY12345/Ignite-Product-Components?node-id=15737-7099"));
+        found.clear();
+        links.search(QStringLiteral("ignite"));
+        QTRY_VERIFY(found.contains("figma"));
+        QCOMPARE(found.value("figma").first().toMap().value("title").toString(), QStringLiteral("Ignite Product Components"));
+        links.accounts()->setLibraries(QStringLiteral("figma"), QStringLiteral("figma.com"), QString());
         // A team Figma won't list: why, where the files would be
         links.accounts()->setTeams(QStringLiteral("figma"), QStringLiteral("figma.com"), QStringLiteral("9999999"));
         found.clear();

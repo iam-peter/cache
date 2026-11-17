@@ -64,6 +64,9 @@ struct Account
     QStringList aliases;
     // Figma: the teams whose files the command palette searches (their ids)
     QStringList teams;
+    // Figma: library files whose components, sets and frames it searches
+    // too (their keys), published in a listed team or not
+    QStringList libraries;
 
     static inline const QString kEverySite = QStringLiteral("*.atlassian.net");
     bool everySite() const { return host == kEverySite; }
@@ -100,6 +103,8 @@ public:
     // The teams whose files are searched, from their ids or addresses
     // (figma.com/files/team/123/…)
     Q_INVOKABLE void setTeams(const QString &provider, const QString &host, const QString &teams);
+    // The library files searched, from their addresses or keys
+    Q_INVOKABLE void setLibraries(const QString &provider, const QString &host, const QString &libraries);
     const QList<Account> &all() const { return m_accounts; }
     // The account's token, or empty when there is none. From the keychain
     // the first time, in the background: unlocking it may ask the user.

@@ -115,6 +115,7 @@ Accounts::Accounts(bool persistent, QObject *parent)
                         settings.value(QStringLiteral("user")).toString(),
                         settings.value(QStringLiteral("aliases")).toStringList(),
                         settings.value(QStringLiteral("teams")).toStringList()};
+        account.libraries = settings.value(QStringLiteral("libraries")).toStringList();
         if (!account.provider.isEmpty() && !account.host.isEmpty())
             m_accounts.append(account);
     }
@@ -129,7 +130,8 @@ QVariantList Accounts::list() const
                             {QStringLiteral("host"), a.host},
                             {QStringLiteral("user"), a.user},
                             {QStringLiteral("aliases"), a.aliases},
-                            {QStringLiteral("teams"), a.teams}};
+                            {QStringLiteral("teams"), a.teams},
+                            {QStringLiteral("libraries"), a.libraries}};
     return list;
 }
 
@@ -179,6 +181,29 @@ void Accounts::setTeams(const QString &provider, const QString &host, const QStr
         if (a.provider != provider || a.host.compare(host, Qt::CaseInsensitive) != 0 || a.teams == ids)
             continue;
         a.teams = ids;
+        if (m_persistent)
+            store();
+        emit changed();
+    }
+}
+
+void Accounts::setLibraries(const QString &provider, const QString &host, const QString &libraries)
+{
+    // A file's address, figma.com/design/<key>/… (or file/, board/…), or
+    // its key alone
+    static const QRegularExpression inAddress(QStringLiteral(R"((?:design|file|board|proto|slides)/([A-Za-z0-9]{10,}))"));
+    static const QRegularExpression alone(QStringLiteral(R"(^[A-Za-z0-9]{10,}$)"));
+    QStringList keys;
+    for (const QString &entry : libraries.split(QRegularExpression(QStringLiteral("[\\s,;]+")), Qt::SkipEmptyParts)) {
+        const QRegularExpressionMatch inside = inAddress.match(entry);
+        const QString key = inside.hasMatch() ? inside.captured(1) : alone.match(entry).hasMatch() ? entry : QString();
+        if (!key.isEmpty() && !keys.contains(key))
+            keys << key;
+    }
+    for (Account &a : m_accounts) {
+        if (a.provider != provider || a.host.compare(host, Qt::CaseInsensitive) != 0 || a.libraries == keys)
+            continue;
+        a.libraries = keys;
         if (m_persistent)
             store();
         emit changed();
@@ -317,11 +342,14 @@ void Accounts::add(const Account &account)
             // Signing in again keeps the aliases and teams
             const QStringList aliases = a.aliases;
             const QStringList teams = a.teams;
+            const QStringList libraries = a.libraries;
             a = account;
             if (a.aliases.isEmpty())
                 a.aliases = aliases;
             if (a.teams.isEmpty())
                 a.teams = teams;
+            if (a.libraries.isEmpty())
+                a.libraries = libraries;
             emit changed();
             return;
         }
@@ -341,6 +369,7 @@ void Accounts::store() const
         settings.setValue(QStringLiteral("user"), m_accounts.at(i).user);
         settings.setValue(QStringLiteral("aliases"), m_accounts.at(i).aliases);
         settings.setValue(QStringLiteral("teams"), m_accounts.at(i).teams);
+        settings.setValue(QStringLiteral("libraries"), m_accounts.at(i).libraries);
     }
     settings.endArray();
 }

@@ -244,6 +244,7 @@ Dialog {
                             Layout.fillWidth: true
                             spacing: Styles.Primitives.spacing.sp100
                             Label {
+                                Layout.preferredWidth: 64 // the fields beside each other line up
                                 text: qsTr("Teams")
                                 color: Theme.textMuted
                                 font.pixelSize: Styles.Primitives.fontSize.small
@@ -256,6 +257,27 @@ Dialog {
                                 font.pixelSize: Styles.Primitives.fontSize.small
                                 onEditingFinished: Links.accounts.setTeams(account.modelData.provider,
                                                                            account.modelData.host, text)
+                            }
+                        }
+                        // Figma: library files whose components it searches, too
+                        RowLayout {
+                            visible: account.modelData.provider === "figma"
+                            Layout.fillWidth: true
+                            spacing: Styles.Primitives.spacing.sp100
+                            Label {
+                                Layout.preferredWidth: 64 // the fields beside each other line up
+                                text: qsTr("Libraries")
+                                color: Theme.textMuted
+                                font.pixelSize: Styles.Primitives.fontSize.small
+                            }
+                            TextField {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 100 // fills the row; its text doesn't widen the dialog
+                                text: (account.modelData.libraries || []).join(", ")
+                                placeholderText: qsTr("Library file addresses (figma.com/design/…), for searching their components")
+                                font.pixelSize: Styles.Primitives.fontSize.small
+                                onEditingFinished: Links.accounts.setLibraries(account.modelData.provider,
+                                                                               account.modelData.host, text)
                             }
                         }
                         // Old addresses of the same site: their links are read from this host

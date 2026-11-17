@@ -210,7 +210,9 @@ request; the [website](pages/) is published from `pages/` by the
   boards, prototypes, slides and branches alike. With the teams given
   under its account, the command palette searches their files (scope
   folders:read) and their libraries' published components and component
-  sets (team_library_content:read). The token goes to Figma's API only. Renders, like every link card's picture, are kept in
+  sets (team_library_content:read); library files named under it too
+  (their pages' component sets, components and frames, published or
+  not). The token goes to Figma's API only. Renders, like every link card's picture, are kept in
   Cache's cache folder, so they show at once when a project opens; a
   design is rendered again only once its file has changed. Jira Cloud takes your email and an API token from
   id.atlassian.com, which works on every Atlassian Cloud site you can
