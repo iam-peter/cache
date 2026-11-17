@@ -392,6 +392,18 @@ public:
                             "current_revision":"abc","revisions":{"abc":{"_number":3,"commit":{"message":
                             "Fix the crash on resize\n\nThe window resized while its scene\ngraph was rendering.\n\nPick-to: 6.10\nTask-number: QTBUG-12345\nChange-Id: I0123\n"},
                             "files":{"/COMMIT_MSG":{},"src/a.cpp":{},"src/b.cpp":{}}}}})";
+                    } else if (path == "/a/changes/qt/qtbase~600008" + options || path == "/a/changes/qt/qtbase~600009" + options) {
+                        // Held back by the CI bot's Verified -1; 600009 no longer merges
+                        body = ")]}'\n" R"({"project":"qt/qtbase","branch":"dev","subject":"Draw gradients","status":"NEW",
+                            "_number":)" + path.mid(21, 6) + R"(,"owner":{"name":"Ada Lovelace"},
+                            "labels":{"Code-Review":{"all":[{"value":1,"name":"Grace Hopper"}]},
+                                      "Verified":{"rejected":{"name":"Qt CI Patch Build Bot"},
+                                                  "all":[{"value":-1,"name":"Qt CI Patch Build Bot"}]}},
+                            "current_revision":"def","revisions":{"def":{"_number":1,"commit":{"message":"Draw gradients\n"}}}})";
+                    } else if (path == "/a/changes/qt/qtbase~600008/revisions/current/mergeable") {
+                        body = ")]}'\n" R"({"submit_type":"CHERRY_PICK","mergeable":true})";
+                    } else if (path == "/a/changes/qt/qtbase~600009/revisions/current/mergeable") {
+                        body = ")]}'\n" R"({"submit_type":"CHERRY_PICK","mergeable":false})";
                     } else if (path == "/a/changes/qt/qtbase~600000/revisions/3/files/src/corelib/foo.cpp/content") {
                         QByteArray file;
                         for (int i = 1; i <= 80; ++i)
@@ -1343,6 +1355,14 @@ private slots:
 
         // By number only
         QCOMPARE(read(server.url("/600000")).value("title").toString(), QStringLiteral("Fix the crash on resize"));
+
+        // Held back: by which label; no longer merging, above all
+        info = read(server.url("/c/qt/qtbase/+/600008"));
+        QCOMPARE(info.value("status").toString(), QStringLiteral("Verified −1"));
+        QCOMPARE(info.value("tone").toString(), QStringLiteral("failed"));
+        info = read(server.url("/c/qt/qtbase/+/600009"));
+        QCOMPARE(info.value("status").toString(), QStringLiteral("Merge conflict"));
+        QCOMPARE(info.value("tone").toString(), QStringLiteral("failed"));
 
         // A file of a patch set, from a little before the line pointed at
         info = read(server.url("/c/qt/qtbase/+/600000/3/src/corelib/foo.cpp#40"));

@@ -49,24 +49,49 @@ void add(LinkInfo &info, const QString &name, const QString &value)
 }
 
 // A change's state as people say it, and its tone
-QPair<QString, QString> stateOf(const QJsonObject &change)
+// The label holding a change back, as people say it: "Verified −1"
+// (its lowest vote, with the votes known), else "Verified rejected"
+QString rejectedBy(const QJsonObject &labels)
+{
+    // A reviewer's veto before a bot's
+    QStringList names = labels.keys();
+    std::stable_sort(names.begin(), names.end(), [](const QString &a, const QString &b) {
+        return (a == QLatin1String("Code-Review")) > (b == QLatin1String("Code-Review"));
+    });
+    for (const QString &name : std::as_const(names)) {
+        const QJsonObject label = labels.value(name).toObject();
+        if (!label.contains(QLatin1String("rejected")))
+            continue;
+        int lowest = 0;
+        for (const QJsonValue &v : label.value(QLatin1String("all")).toArray())
+            lowest = std::min(lowest, v.toObject().value(QLatin1String("value")).toInt());
+        return lowest < 0 ? QStringLiteral("%1 \u2212%2").arg(name, QString::number(-lowest))
+                          : QObject::tr("%1 rejected").arg(name);
+    }
+    return {};
+}
+
+// A change's state as people say it, and its tone. `mergeable`: whether it
+// still merges, when known (an open change's)
+QPair<QString, QString> stateOf(const QJsonObject &change, std::optional<bool> mergeable = std::nullopt)
 {
     const QString status = change.value(QLatin1String("status")).toString();
     if (status == QLatin1String("MERGED"))
         return {QObject::tr("Merged"), QStringLiteral("done")};
     if (status == QLatin1String("ABANDONED"))
         return {QObject::tr("Abandoned"), QStringLiteral("todo")};
+    if (!mergeable && change.value(QLatin1String("mergeable")).isBool())
+        mergeable = change.value(QLatin1String("mergeable")).toBool();
+    if (mergeable == false)
+        return {QObject::tr("Merge conflict"), QStringLiteral("failed")};
     if (change.value(QLatin1String("work_in_progress")).toBool())
         return {QObject::tr("WIP"), QStringLiteral("todo")};
-    // Rejected by any label (a bot's too); approved by a reviewer
-    bool rejected = false;
+    // Held back by any label (a bot's too); approved by a reviewer
     const QJsonObject labels = change.value(QLatin1String("labels")).toObject();
-    for (auto it = labels.begin(); it != labels.end(); ++it)
-        rejected = rejected || it.value().toObject().contains(QLatin1String("rejected"));
-    const bool approved = labels.value(QLatin1String("Code-Review")).toObject().contains(QLatin1String("approved"));
-    if (rejected)
-        return {QObject::tr("Rejected"), QStringLiteral("failed")};
-    if (approved)
+    const QString rejected = rejectedBy(labels);
+    if (!rejected.isEmpty())
+        return {rejected, QStringLiteral("failed")};
+    if (labels.value(QLatin1String("Code-Review")).toObject().contains(QLatin1String("approved")))
         return {QObject::tr("Approved"), QStringLiteral("done")};
     return {QObject::tr("Open"), QStringLiteral("progress")};
 }
@@ -233,8 +258,9 @@ void GerritResolver::readChange(const Account &account, const QByteArray &token,
     const QString path = ref.base + QStringLiteral("/a/changes/") + changeId(ref)
                          + QStringLiteral("?o=DETAILED_LABELS&o=DETAILED_ACCOUNTS&o=CURRENT_REVISION&o=CURRENT_COMMIT"
                                           "&o=CURRENT_FILES");
+    Links *links = m_links;
     m_links->requestBytes(account.host, account, token, path,
-                          [account, ref, done](int status, const QByteArray &body, const QString &error) {
+                          [links, account, token, ref, done](int status, const QByteArray &body, const QString &error) {
         if (status != 200) {
             done(std::nullopt, QStringLiteral("%1: %2").arg(account.host, status == 404 ? QObject::tr("Not found") : error));
             return;
@@ -287,7 +313,21 @@ void GerritResolver::readChange(const Account &account, const QByteArray &token,
         add(info, QObject::tr("Tasks"), message.tasks.join(QStringLiteral(", ")));
         add(info, QObject::tr("Topic"), change.value(QLatin1String("topic")).toString());
         add(info, QObject::tr("Updated"), when(change.value(QLatin1String("updated")).toString()));
-        done(info, {});
+        // An open change: whether it still merges, which Gerrit says apart
+        // (unless it says so in the change)
+        if (change.value(QLatin1String("status")).toString() != QLatin1String("NEW")
+            || change.value(QLatin1String("mergeable")).isBool()) {
+            done(info, {});
+            return;
+        }
+        links->requestBytes(account.host, account, token,
+                            ref.base + QStringLiteral("/a/changes/") + changeId(ref) + QStringLiteral("/revisions/current/mergeable"),
+                            [change, info, done](int status, const QByteArray &body, const QString &) mutable {
+            const QJsonObject merge = QJsonDocument::fromJson(jsonOf(body)).object();
+            if (status == 200 && merge.value(QLatin1String("mergeable")).isBool())
+                std::tie(info.status, info.tone) = stateOf(change, merge.value(QLatin1String("mergeable")).toBool());
+            done(info, {});
+        });
     });
 }
 
