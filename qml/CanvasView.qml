@@ -498,7 +498,7 @@ Item {
                 }
             }
         }
-        const row = Board.addItem("field", x, y, w, h, key, card.text)
+        const row = Board.addField(cardId, x, y, w, h, key)
         if (row >= 0)
             setSelection([Board.get(row).id])
     }

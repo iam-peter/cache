@@ -218,7 +218,7 @@ void BoardModel::updateDerived()
     // to, and on from there
     QHash<QString, QStringList> children;
     for (const BoardLink &link : std::as_const(m_links)) {
-        if (link.from != link.to && !children.value(link.from).contains(link.to))
+        if (branches(link) && !children.value(link.from).contains(link.to))
             children[link.from].append(link.to);
     }
     QSet<QString> hidden;
@@ -997,10 +997,18 @@ void BoardModel::setLink(const QString &id, const QVariantMap &values)
 // ---------------------------------------------------------------------------
 // Mindmaps
 
+bool BoardModel::branches(const BoardLink &link) const
+{
+    if (link.from == link.to)
+        return false;
+    const int to = indexOf(link.to);
+    return to < 0 || m_items.at(to).type != QLatin1String("field");
+}
+
 QString BoardModel::parentOf(const QString &id) const
 {
     for (const BoardLink &link : m_links) {
-        if (link.to == id && link.from != id)
+        if (link.to == id && branches(link))
             return link.from;
     }
     return {};
@@ -1010,7 +1018,7 @@ QStringList BoardModel::childrenOf(const QString &id) const
 {
     QList<int> rows;
     for (const BoardLink &link : m_links) {
-        const int row = link.from == id && link.to != id ? indexOf(link.to) : -1;
+        const int row = link.from == id && branches(link) ? indexOf(link.to) : -1;
         if (row >= 0 && !rows.contains(row))
             rows << row;
     }
@@ -1143,6 +1151,34 @@ void BoardModel::setFields(const QString &id, const QStringList &fields)
     m_items[row].fields = fields;
     emitRow(row, {FieldsRole});
     markDirty();
+}
+
+int BoardModel::addField(const QString &cardId, double x, double y, double w, double h, const QString &key)
+{
+    const int card = indexOf(cardId);
+    if (m_projectPath.isEmpty() || card < 0 || m_items.at(card).type != QLatin1String("link"))
+        return -1;
+    BoardItem it;
+    it.id = newId();
+    it.type = QStringLiteral("field");
+    it.x = x;
+    it.y = y;
+    it.w = std::max(20.0, w);
+    it.h = std::max(20.0, h);
+    it.shape = key;
+    it.text = m_items.at(card).text;
+    it.z = topZ() + 1;
+    pushUndo();
+    const int row = appendItem(it);
+    BoardLink link;
+    link.id = newId();
+    link.from = cardId;
+    link.to = it.id;
+    link.arrow = QStringLiteral("none");
+    link.dashed = true;
+    m_links.append(link);
+    structureChanged();
+    return row;
 }
 
 void BoardModel::setCompact(const QString &id, bool compact, double height)

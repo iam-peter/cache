@@ -62,7 +62,8 @@ struct BoardItem
 
 // A connector from one item to another, or from an item back to itself.
 // Connectors also make the mindmap: an item's children are what its
-// connectors point to (loops don't count).
+// connectors point to (loops don't count, nor connectors to a detail
+// pulled out of a link card, which is no branch to fold away).
 struct BoardLink
 {
     QString id;
@@ -271,6 +272,10 @@ public:
     Q_INVOKABLE void setFields(const QString &id, const QStringList &fields);
     // A link card folded to its title line, `height` tall, or unfolded
     Q_INVOKABLE void setCompact(const QString &id, bool compact, double height = 0);
+    // Detail `key` of link card `cardId` pulled out as a "field" item at
+    // (x, y), joined to the card by a dashed connector; one step to undo.
+    // Returns its row.
+    Q_INVOKABLE int addField(const QString &cardId, double x, double y, double w, double h, const QString &key);
     // Lays the branch below `rootId` out as a tree to its right
     Q_INVOKABLE void tidy(const QString &rootId);
 
@@ -420,6 +425,8 @@ private:
     void restore(BoardState state);
     int appendItem(const BoardItem &item);
     void structureChanged(); // links or folds changed
+    // Whether a connector makes a branch of the mindmap
+    bool branches(const BoardLink &link) const;
     void textsChanged();     // wiki edges may have changed
     void updateDerived();
     QStringList importMedia(const QStringList &paths);

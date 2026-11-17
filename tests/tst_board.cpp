@@ -923,6 +923,36 @@ private slots:
         QVERIFY(again.getById(inside).value("hidden").toBool());
     }
 
+    void pulledOutDetailsAreConnectedNotBranches()
+    {
+        BoardModel board;
+        board.load(project("pulledout"));
+        const QString section = board.get(board.addItem("section", 0, 0, 600, 400)).value("id").toString();
+        const QString card = board.get(board.addItem("link", 40, 40, 320, 200, {}, QStringLiteral("https://example.org/a"))).value("id").toString();
+        const int row = board.addField(card, 700, 40, 200, 44, QStringLiteral(":status"));
+        const QString field = board.get(row).value("id").toString();
+        QCOMPARE(board.get(row).value("type").toString(), QStringLiteral("field"));
+        QCOMPARE(board.get(row).value("text").toString(), QStringLiteral("https://example.org/a"));
+        const QVariantMap link = board.linksVariant().first().toMap();
+        QCOMPARE(link.value("from").toString(), card);
+        QCOMPARE(link.value("to").toString(), field);
+        QVERIFY(link.value("dashed").toBool());
+        QCOMPARE(link.value("arrow").toString(), QStringLiteral("none"));
+        // Not a branch: the card's fold doesn't take it
+        QVERIFY(board.childrenOf(card).isEmpty());
+        QVERIFY(board.parentOf(field).isEmpty());
+        // The card's section folded: the card and connector hidden, the detail not
+        board.toggleCollapsed(section);
+        QVERIFY(board.getById(card).value("hidden").toBool());
+        QVERIFY(!board.getById(field).value("hidden").toBool());
+        QVERIFY(board.linksVariant().first().toMap().value("hidden").toBool());
+        // One step to undo
+        board.undo();
+        board.undo();
+        QCOMPARE(board.indexOf(field), -1);
+        QVERIFY(board.linksVariant().isEmpty());
+    }
+
     void linkCardsChooseAndFold()
     {
         const QString dir = project("cardchoices");

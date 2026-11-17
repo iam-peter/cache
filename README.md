@@ -166,8 +166,9 @@ request; the [website](pages/) is published from `pages/` by the
   each field), for that card or for every card of its service; a card
   folds to its title line. Any detail (a ticket's status, a review's
   votes, unresolved comments) can be **pulled out** as a node of its own
-  that stays up to date: beside the card's section, so folding the
-  section keeps it in sight, and made narrow, a traffic light.
+  that stays up to date, joined to its card by a dashed line: beside the
+  card's section, so folding the section keeps it in sight, and made
+  narrow, a traffic light.
 - **Linked issues and pages**: with an Atlassian account (Settings,
   Accounts), a link to a Jira issue shows the issue's summary and status
   after it, and its type, priority, assignee and when it changed while
