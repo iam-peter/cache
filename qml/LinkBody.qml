@@ -63,10 +63,18 @@ Item {
         // Shown nothing: still a choice, not "as usual"
         Board.setFields(card.itemId, list.length > 0 ? list : [":none"])
     }
-    // Folded to its title line, or unfolded
+    // Folded to its title line, and a line of its chosen details, or unfolded
     readonly property real compactHeight: Math.ceil(words.anchors.topMargin + words.anchors.bottomMargin
                                                     + headerRow.implicitHeight + words.spacing
-                                                    + titleMetrics.lineSpacing + 2)
+                                                    + titleMetrics.lineSpacing + 2
+                                                    + (shownFields.length > 0 ? words.spacing + detailMetrics.lineSpacing : 0))
+    // Folded, as its chosen details come and go: as tall as it needs
+    function fitCompact() {
+        if (compact && known && !card.itemLocked && Math.abs(card.itemHeight - compactHeight) > 1)
+            Board.setGeometry(card.index, card.posX, card.posY, card.itemWidth, compactHeight)
+    }
+    onCompactHeightChanged: Qt.callLater(fitCompact)
+    onKnownChanged: Qt.callLater(fitCompact)
     function setCompact(on) {
         Board.setCompact(card.itemId, on, compactHeight)
     }
@@ -79,6 +87,13 @@ Item {
     FontMetrics {
         id: titleMetrics
         font: title.font
+    }
+    FontMetrics {
+        id: detailMetrics
+        font: compactDetails.font
+    }
+    function escaped(text) {
+        return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     }
 
     function commit() {
@@ -291,6 +306,20 @@ Item {
                 acceptedModifiers: Qt.ControlModifier
                 onTapped: Qt.openUrlExternally(body.url)
             }
+        }
+        // Folded: its chosen details on one line
+        Label {
+            id: compactDetails
+            Layout.fillWidth: true
+            visible: body.compact && body.shownFields.length > 0
+            textFormat: Text.StyledText
+            text: body.shownFields.map(f => "<font color=\"" + Theme.textMuted + "\">" + body.escaped(f.name) + "</font> "
+                                             + body.escaped(f.value)).join("  ·  ")
+            elide: Text.ElideRight
+            maximumLineCount: 1
+            font.pixelSize: Styles.Primitives.fontSize.small
+            color: Theme.text
+            Redacted { cover: body.card.fillColor }
         }
         Label {
             id: summary

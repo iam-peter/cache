@@ -397,6 +397,7 @@ public:
                         body = ")]}'\n" R"({"project":"qt/qtbase","branch":"dev","subject":"Draw gradients","status":"NEW",
                             "_number":)" + path.mid(21, 6) + R"(,"owner":{"name":"Ada Lovelace"},
                             "labels":{"Code-Review":{"all":[{"value":1,"name":"Grace Hopper"}]},
+                                      "Sanity-Review":{"all":[{"value":0,"name":"Qt Sanity Bot"}]},
                                       "Verified":{"rejected":{"name":"Qt CI Patch Build Bot"},
                                                   "all":[{"value":-1,"name":"Qt CI Patch Build Bot"}]}},
                             "current_revision":"def","revisions":{"def":{"_number":1,"commit":{"message":"Draw gradients\n"}}}})";
@@ -1359,6 +1360,7 @@ private slots:
         // Held back: by which label; no longer merging, above all
         info = read(server.url("/c/qt/qtbase/+/600008"));
         QCOMPARE(info.value("status").toString(), QStringLiteral("Verified −1"));
+        QCOMPARE(field(info, "Sanity-Review"), QStringLiteral("no votes")); // listed though nobody voted
         QCOMPARE(info.value("tone").toString(), QStringLiteral("failed"));
         info = read(server.url("/c/qt/qtbase/+/600009"));
         QCOMPARE(info.value("status").toString(), QStringLiteral("Merge conflict"));

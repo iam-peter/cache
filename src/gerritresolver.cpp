@@ -288,8 +288,11 @@ void GerritResolver::readChange(const Account &account, const QByteArray &token,
         std::stable_sort(names.begin(), names.end(), [](const QString &a, const QString &b) {
             return (a == QLatin1String("Code-Review")) > (b == QLatin1String("Code-Review"));
         });
-        for (const QString &name : std::as_const(names))
-            add(info, name, votesOf(labels.value(name).toObject()));
+        // Every label, voted on or not yet
+        for (const QString &name : std::as_const(names)) {
+            const QString votes = votesOf(labels.value(name).toObject());
+            info.fields.append({name, votes.isEmpty() ? QObject::tr("no votes") : votes});
+        }
         // Shown as a badge beside the state
         info.unresolved = change.value(QLatin1String("unresolved_comment_count")).toInt();
         add(info, QObject::tr("Owner"), nameOf(change.value(QLatin1String("owner")).toObject()));
