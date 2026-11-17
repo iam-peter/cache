@@ -2193,6 +2193,10 @@ Item {
                         }
                     }
                 }
+                VoteChips {
+                    Layout.alignment: Qt.AlignTop
+                    badges: linkCard.info.badges || []
+                }
                 Rectangle {
                     Layout.alignment: Qt.AlignTop
                     visible: (linkCard.info.status || "") !== ""

@@ -36,6 +36,9 @@ struct LinkInfo
     int renderSize = 0;  // a render's longest side in pixels (Figma's); 0: not one
     int unresolved = 0;  // comments still to be resolved (a Gerrit change's)
     QString label;       // a short name, where the title is long: "600001"; empty: the title
+    // Chips beside the status: [{name, short, value, tone}], such as a
+    // review label's vote ("Code-Review", "CR", "+2", "done")
+    QVariantList badges;
     QString code;    // lines of a file (GitLab), shown highlighted
     QString language;
     int firstLine = 1;

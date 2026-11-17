@@ -1344,6 +1344,14 @@ private slots:
         const QVariantList fields = info.value("fields").toList();
         QCOMPARE(fields.first().toMap().value("name").toString(), QStringLiteral("Code-Review"));
         QCOMPARE(field(info, "Code-Review"), QStringLiteral("+1 Grace Hopper, −1 Bob"));
+        // Chips beside the status: a label's lowest vote if against, else its highest
+        const QVariantList badges = info.value("badges").toList();
+        QCOMPARE(badges.size(), 2);
+        QCOMPARE(badges.at(0).toMap().value("short").toString(), QStringLiteral("CR"));
+        QCOMPARE(badges.at(0).toMap().value("value").toString(), QStringLiteral("−1"));
+        QCOMPARE(badges.at(0).toMap().value("tone").toString(), QStringLiteral("failed"));
+        QCOMPARE(badges.at(1).toMap().value("short").toString(), QStringLiteral("SR"));
+        QCOMPARE(badges.at(1).toMap().value("value").toString(), QStringLiteral("+1"));
         QCOMPARE(field(info, "Sanity-Review"), QStringLiteral("+1 Qt Sanity Bot"));
         QCOMPARE(field(info, "Owner"), QStringLiteral("Ada Lovelace"));
         QCOMPARE(field(info, "Changes"), QStringLiteral("+12 −4 in 2 files"));

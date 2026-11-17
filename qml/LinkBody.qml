@@ -48,6 +48,9 @@ Item {
             list.push({ key: ":description", name: qsTr("Description"), value: "", out: false })
         if ((info.status || "") !== "")
             list.push({ key: ":status", name: qsTr("Status"), value: info.status, out: true })
+        if ((info.badges || []).length > 0)
+            list.push({ key: ":votes", name: qsTr("Votes beside the status"),
+                        value: info.badges.map(b => b.name + " " + b.value).join(", "), out: false })
         for (const f of allFields)
             list.push({ key: f.name, name: f.name, value: f.value, out: true })
         if ((info.unresolved || 0) > 0)
@@ -270,6 +273,10 @@ Item {
                         font.weight: Styles.Primitives.fontWeight.semiBold
                     }
                 }
+            }
+            VoteChips {
+                visible: badges.length > 0 && body.shows(":votes")
+                badges: body.info.badges || []
             }
             Rectangle {
                 visible: (body.info.status || "") !== "" && body.shows(":status")

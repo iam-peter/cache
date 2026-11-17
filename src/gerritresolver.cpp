@@ -288,10 +288,30 @@ void GerritResolver::readChange(const Account &account, const QByteArray &token,
         std::stable_sort(names.begin(), names.end(), [](const QString &a, const QString &b) {
             return (a == QLatin1String("Code-Review")) > (b == QLatin1String("Code-Review"));
         });
-        // Every label, voted on or not yet
+        // Every label, voted on or not yet; a chip for each voted on: its
+        // lowest vote if against, else its highest ("CR +2")
         for (const QString &name : std::as_const(names)) {
-            const QString votes = votesOf(labels.value(name).toObject());
+            const QJsonObject label = labels.value(name).toObject();
+            const QString votes = votesOf(label);
             info.fields.append({name, votes.isEmpty() ? QObject::tr("no votes") : votes});
+            int lowest = 0, highest = 0;
+            for (const QJsonValue &v : label.value(QLatin1String("all")).toArray()) {
+                const int value = v.toObject().value(QLatin1String("value")).toInt();
+                lowest = std::min(lowest, value);
+                highest = std::max(highest, value);
+            }
+            const int shown = lowest < 0 ? lowest : highest;
+            if (shown == 0)
+                continue;
+            QString initials;
+            for (const QString &word : name.split(QLatin1Char('-'), Qt::SkipEmptyParts))
+                initials += word.at(0).toUpper();
+            info.badges.append(QVariantMap{
+                {QStringLiteral("name"), name},
+                {QStringLiteral("short"), initials},
+                {QStringLiteral("value"), shown > 0 ? QStringLiteral("+%1").arg(shown) : QStringLiteral("\u2212%1").arg(-shown)},
+                {QStringLiteral("tone"), shown > 0 ? QStringLiteral("done") : QStringLiteral("failed")},
+                {QStringLiteral("votes"), votes}});
         }
         // Shown as a badge beside the state
         info.unresolved = change.value(QLatin1String("unresolved_comment_count")).toInt();

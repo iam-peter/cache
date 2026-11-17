@@ -75,6 +75,7 @@ qt_add_qml_module(cache
         qml/StrokeBody.qml
         qml/LinkBody.qml
         qml/FieldBody.qml
+        qml/VoteChips.qml
         qml/Redacted.qml
         qml/ExportDialog.qml
         qml/CommandPalette.qml

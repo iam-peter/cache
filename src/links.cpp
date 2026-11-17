@@ -51,6 +51,7 @@ QVariantMap LinkInfo::toVariant() const
             {QStringLiteral("renderSize"), renderSize},
             {QStringLiteral("unresolved"), unresolved},
             {QStringLiteral("label"), label},
+            {QStringLiteral("badges"), badges},
             {QStringLiteral("code"), code},
             {QStringLiteral("language"), language},
             {QStringLiteral("firstLine"), firstLine}};
@@ -71,6 +72,7 @@ LinkInfo LinkInfo::fromVariant(const QVariantMap &map)
     info.renderSize = map.value(QStringLiteral("renderSize")).toInt();
     info.unresolved = map.value(QStringLiteral("unresolved")).toInt();
     info.label = map.value(QStringLiteral("label")).toString();
+    info.badges = map.value(QStringLiteral("badges")).toList();
     info.code = map.value(QStringLiteral("code")).toString();
     info.language = map.value(QStringLiteral("language")).toString();
     info.firstLine = map.value(QStringLiteral("firstLine"), 1).toInt();
