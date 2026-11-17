@@ -54,7 +54,8 @@ private:
     QString m_api = QStringLiteral("https://api.figma.com");
     QVariantList m_files; // [{key, name, project, thumbnail}] of the teams
     // Their libraries' published component sets and components (not a
-    // set's variants): [{name, file, node, set, thumbnail, page}]
+    // set's variants), and the frames they are in: [{name, description,
+    // file, node, kind (set, component, frame), thumbnail, page}]
     QVariantList m_components;
     QDateTime m_filesRead;
     QStringList m_filesOf; // the teams they are of

@@ -145,11 +145,18 @@ public:
                                || request.startsWith("GET /v1/teams/1234567/components?page_size=1000 ")) {
                         body = R"({"status":200,"error":false,"meta":{"components":[],"component_sets":[],"cursor":{}}})";
                     } else if (request.startsWith("GET /v1/teams/2345678/component_sets?page_size=1000 ")) {
-                        // A team library: a set (with a variant) and a component
+                        // A team library, a small page at a time: sets (one with
+                        // a variant), a component, and the frame they are in
+                        body = R"({"status":200,"error":false,"meta":{"component_sets":[
+                            {"key":"s2","file_key":"QwErTy111111","node_id":"15737:7200","name":"Button Group",
+                             "containing_frame":{"name":"Buttons","nodeId":"15737:7000","pageName":"Components"}}],
+                            "cursor":{"after":5}}})";
+                    } else if (request.startsWith("GET /v1/teams/2345678/component_sets?page_size=1000&after=5 ")) {
                         body = R"({"status":200,"error":false,"meta":{"component_sets":[
                             {"key":"s1","file_key":"QwErTy111111","node_id":"15737:7099","name":"Button",
                              "description":"Primary and secondary","thumbnail_url":"https://example.org/b.png",
-                             "containing_frame":{"name":"Buttons","pageName":"Components"}}],"cursor":{}}})";
+                             "containing_frame":{"name":"Buttons","nodeId":"15737:7000","pageName":"Components"}}],
+                            "cursor":{}}})";
                     } else if (request.startsWith("GET /v1/teams/2345678/components?page_size=1000 ")) {
                         body = R"({"status":200,"error":false,"meta":{"components":[
                             {"key":"c1","file_key":"QwErTy111111","node_id":"15737:7100","name":"Size=Large, State=Default",
@@ -1009,13 +1016,18 @@ private slots:
         found.clear();
         links.search(QStringLiteral("button"));
         QTRY_VERIFY(found.contains("figma"));
+        // Best first: the name itself (from the second page), names starting
+        // with it, the frame they are in, then a word of a name
         const QVariantList buttons = found.value("figma");
-        QCOMPARE(buttons.size(), 2);
-        QCOMPARE(buttons.at(0).toMap().value("title").toString(), QStringLiteral("Button"));
+        QStringList titles;
+        for (const QVariant &b : buttons)
+            titles << b.toMap().value("title").toString();
+        QCOMPARE(titles, (QStringList{QStringLiteral("Button"), QStringLiteral("Button Group"), QStringLiteral("Buttons"),
+                                      QStringLiteral("Icon Button")}));
         QCOMPARE(buttons.at(0).toMap().value("detail").toString(), QStringLiteral("Figma · App screens · component set"));
         QCOMPARE(buttons.at(0).toMap().value("url").toString(),
                  QStringLiteral("https://www.figma.com/design/QwErTy111111/App-screens?node-id=15737-7099"));
-        QCOMPARE(buttons.at(1).toMap().value("title").toString(), QStringLiteral("Icon Button"));
+        QCOMPARE(buttons.at(2).toMap().value("detail").toString(), QStringLiteral("Figma · App screens · frame"));
         // A team Figma won't list: why, where the files would be
         links.accounts()->setTeams(QStringLiteral("figma"), QStringLiteral("figma.com"), QStringLiteral("9999999"));
         found.clear();

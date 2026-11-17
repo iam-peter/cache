@@ -8,6 +8,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QRegularExpression>
+#include <QSet>
 #include <QUrlQuery>
 
 #include <algorithm>
@@ -292,7 +293,9 @@ constexpr int kFolderDepth = 4;
 constexpr int kMaxFolders = 300;
 // A team library's components, a page at a time
 constexpr int kLibraryPage = 1000;
-constexpr int kLibraryPages = 10;
+constexpr int kLibraryPages = 40;
+// Component results shown for a search, best first
+constexpr int kComponentResults = 12;
 
 } // namespace
 
@@ -306,6 +309,7 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
         QVariantList components;
         QStringList errors;
         QHash<QString, QString> libraryErrors; // by team: said only if its files were listed
+        QSet<QString> frames;                  // "file node" of the frames listed
         int pending = 1;
         int folders = 0;
         // A folder's files and subfolders, named by its path
@@ -383,7 +387,7 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
             QString path = QStringLiteral("/v1/teams/%1/%2?page_size=%3").arg(team, kind, QString::number(kLibraryPage));
             if (!after.isEmpty())
                 path += QStringLiteral("&after=") + after;
-            get(token, path, [listing, settle, team, kind, page](int status, const QJsonObject &json, const QString &error) {
+            get(token, path, [listing, settle, team, kind, after, page](int status, const QJsonObject &json, const QString &error) {
                 if (status != 200) {
                     // Said once a team, and only if nothing else is found
                     if (kind == QLatin1String("component_sets") && page == 0)
@@ -400,6 +404,19 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
                 for (const QJsonValue &v : items) {
                     const QJsonObject item = v.toObject();
                     const QJsonObject frame = item.value(QLatin1String("containing_frame")).toObject();
+                    const QString file = item.value(QLatin1String("file_key")).toString();
+                    // The frame it is in, once: a page of buttons, say
+                    const QString frameNode = frame.value(QLatin1String("nodeId")).toString(frame.value(QLatin1String("node_id")).toString());
+                    const QString frameName = frame.value(QLatin1String("name")).toString();
+                    if (!frameNode.isEmpty() && !frameName.isEmpty() && !listing->frames.contains(file + QLatin1Char(' ') + frameNode)) {
+                        listing->frames.insert(file + QLatin1Char(' ') + frameNode);
+                        listing->components << QVariantMap{
+                            {QStringLiteral("name"), frameName},
+                            {QStringLiteral("file"), file},
+                            {QStringLiteral("node"), frameNode},
+                            {QStringLiteral("kind"), QStringLiteral("frame")},
+                            {QStringLiteral("page"), frame.value(QLatin1String("pageName")).toString()}};
+                    }
                     // A set's variants: the set stands for them
                     if (!sets && (!frame.value(QLatin1String("containingComponentSet")).toString().isEmpty()
                                   || !frame.value(QLatin1String("containingStateGroup")).toString().isEmpty()
@@ -408,15 +425,16 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
                     listing->components << QVariantMap{
                         {QStringLiteral("name"), item.value(QLatin1String("name")).toString()},
                         {QStringLiteral("description"), item.value(QLatin1String("description")).toString()},
-                        {QStringLiteral("file"), item.value(QLatin1String("file_key")).toString()},
+                        {QStringLiteral("file"), file},
                         {QStringLiteral("node"), item.value(QLatin1String("node_id")).toString()},
-                        {QStringLiteral("set"), sets},
+                        {QStringLiteral("kind"), sets ? QStringLiteral("set") : QStringLiteral("component")},
                         {QStringLiteral("thumbnail"), item.value(QLatin1String("thumbnail_url")).toString()},
                         {QStringLiteral("page"), frame.value(QLatin1String("pageName")).toString()}};
                 }
-                // A full page: there may be more
+                // More after these, while Figma gives a cursor on (its pages
+                // may be smaller than asked for)
                 const QString next = meta.value(QLatin1String("cursor")).toObject().value(QLatin1String("after")).toVariant().toString();
-                if (items.size() >= kLibraryPage && !next.isEmpty() && page + 1 < kLibraryPages && listing->library)
+                if (!items.isEmpty() && !next.isEmpty() && next != after && page + 1 < kLibraryPages && listing->library)
                     listing->library(team, kind, next, page + 1);
                 settle();
             });
@@ -501,32 +519,51 @@ void FigmaResolver::search(const QString &query, const Results &done)
             if (results.size() >= 8)
                 break;
         }
-        // Components and component sets by name (or description), in the
-        // file they are in
+        // Components, component sets and their frames by name (or
+        // description), best first: the name itself, then names starting
+        // with it, then a word of the name; sets before components before
+        // frames. Named with the file they are in.
         QHash<QString, QString> fileNames;
         for (const QVariant &v : std::as_const(m_files))
             fileNames.insert(v.toMap().value(QStringLiteral("key")).toString(), v.toMap().value(QStringLiteral("name")).toString());
-        int components = 0;
+        const QString phrase = words.join(QLatin1Char(' '));
+        struct Hit {
+            int rank;
+            QVariantMap item;
+        };
+        QList<Hit> hits;
+        // The first word at the start of a word of the name
+        const QRegularExpression atWord(QStringLiteral("(^|[^\\p{L}\\p{N}])") + QRegularExpression::escape(words.value(0)));
         for (const QVariant &v : std::as_const(m_components)) {
             const QVariantMap c = v.toMap();
-            const QString name = c.value(QStringLiteral("name")).toString();
-            const QString lower = (name + QLatin1Char(' ') + c.value(QStringLiteral("description")).toString()).toLower();
-            if (!std::all_of(words.cbegin(), words.cend(), [&](const QString &w) { return lower.contains(w); }))
+            const QString name = c.value(QStringLiteral("name")).toString().toLower();
+            const QString text = name + QLatin1Char(' ') + c.value(QStringLiteral("description")).toString().toLower();
+            if (!std::all_of(words.cbegin(), words.cend(), [&](const QString &w) { return text.contains(w); }))
                 continue;
+            const int match = name == phrase ? 0
+                            : name.startsWith(phrase) ? 1
+                            : atWord.match(name).hasMatch() ? 2
+                            : name.contains(words.value(0)) ? 3 : 4;
+            const QString kind = c.value(QStringLiteral("kind")).toString();
+            const int order = kind == QLatin1String("set") ? 0 : kind == QLatin1String("component") ? 1 : 2;
+            hits.append({match * 3 + order, c});
+        }
+        std::stable_sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) { return a.rank < b.rank; });
+        for (const Hit &hit : hits.mid(0, kComponentResults)) {
+            const QVariantMap &c = hit.item;
             const QString file = fileNames.value(c.value(QStringLiteral("file")).toString(), c.value(QStringLiteral("page")).toString());
+            const QString kind = c.value(QStringLiteral("kind")).toString();
             results << QVariantMap{
-                {QStringLiteral("title"), name},
-                {QStringLiteral("detail"), c.value(QStringLiteral("set")).toBool()
-                                               ? QObject::tr("Figma · %1 · component set").arg(file)
-                                               : QObject::tr("Figma · %1 · component").arg(file)},
+                {QStringLiteral("title"), c.value(QStringLiteral("name")).toString()},
+                {QStringLiteral("detail"), kind == QLatin1String("set") ? QObject::tr("Figma · %1 · component set").arg(file)
+                                         : kind == QLatin1String("frame") ? QObject::tr("Figma · %1 · frame").arg(file)
+                                                                          : QObject::tr("Figma · %1 · component").arg(file)},
                 {QStringLiteral("image"), c.value(QStringLiteral("thumbnail"))},
                 {QStringLiteral("url"), QStringLiteral("https://www.figma.com/design/%1/%2?node-id=%3")
                                             .arg(c.value(QStringLiteral("file")).toString(),
                                                  QString::fromUtf8(QUrl::toPercentEncoding(QString(file.isEmpty() ? QStringLiteral("Figma") : file)
                                                                                                .replace(QLatin1Char(' '), QLatin1Char('-')))),
                                                  c.value(QStringLiteral("node")).toString().replace(QLatin1Char(':'), QLatin1Char('-')))}};
-            if (++components >= 8)
-                break;
         }
         // Nothing found, and a team couldn't be listed: why
         if (results.isEmpty()) {
