@@ -118,10 +118,15 @@ void FigmaResolver::get(const QByteArray &token, const QString &path, const Link
     QObject::connect(r, &QNetworkReply::finished, r, [r, reply] {
         r->deleteLater();
         const int status = r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        const QJsonObject json = QJsonDocument::fromJson(r->readAll()).object();
+        // A bare list too (the folder endpoints may answer one): as "items"
+        const QJsonDocument document = QJsonDocument::fromJson(r->readAll());
+        const QJsonObject json = document.isArray() ? QJsonObject{{QStringLiteral("items"), document.array()}}
+                                                    : document.object();
         QString error = r->errorString();
         if (json.value(QLatin1String("err")).isString())
             error = json.value(QLatin1String("err")).toString();
+        else if (json.value(QLatin1String("message")).isString())
+            error = json.value(QLatin1String("message")).toString();
         reply(status, json, error);
     });
 }
@@ -262,6 +267,32 @@ void FigmaResolver::read(const QUrl &url, int pixels, const Done &done)
     });
 }
 
+namespace {
+
+// The items of a list Figma answered with, however it wraps them (the
+// folder endpoints' answers aren't documented): a bare array, or under
+// one of `keys`
+QJsonArray itemsOf(const QJsonObject &json, std::initializer_list<const char *> keys)
+{
+    for (const char *key : keys) {
+        const QJsonValue value = json.value(QLatin1String(key));
+        if (value.isArray())
+            return value.toArray();
+    }
+    return json.value(QLatin1String("items")).toArray();
+}
+
+QString idOf(const QJsonObject &item)
+{
+    return item.value(QLatin1String("id")).toVariant().toString();
+}
+
+// Folders can nest; this deep, and this many, is plenty for a palette
+constexpr int kFolderDepth = 4;
+constexpr int kMaxFolders = 300;
+
+} // namespace
+
 void FigmaResolver::listFiles(const Account &account, const std::function<void()> &done)
 {
     m_listing << done;
@@ -271,12 +302,16 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
         QVariantList files;
         QStringList errors;
         int pending = 1;
+        int folders = 0;
+        // A folder's files and subfolders, named by its path
+        std::function<void(const QString &id, const QString &name, int depth)> walk;
     };
     auto listing = std::make_shared<Listing>();
     const QStringList teams = account.teams;
     const auto settle = [this, listing, teams] {
         if (--listing->pending > 0)
             return;
+        listing->walk = nullptr; // it holds the listing
         m_files = listing->files;
         m_listErrors = listing->errors;
         m_filesRead = QDateTime::currentDateTimeUtc();
@@ -285,47 +320,90 @@ void FigmaResolver::listFiles(const Account &account, const std::function<void()
         for (const auto &w : waiting)
             w();
     };
-    m_links->accounts()->token(account, [this, teams, listing, settle](const QByteArray &token) {
+    const auto addFiles = [listing](const QJsonObject &json, const QString &folder) {
+        for (const QJsonValue &f : itemsOf(json, {"files"})) {
+            const QJsonObject file = f.toObject();
+            const QString key = file.value(QLatin1String("key")).toString();
+            if (key.isEmpty())
+                continue;
+            listing->files << QVariantMap{
+                {QStringLiteral("key"), key},
+                {QStringLiteral("name"), file.value(QLatin1String("name")).toString()},
+                {QStringLiteral("project"), folder},
+                {QStringLiteral("thumbnail"), file.value(QLatin1String("thumbnail_url")).toString()}};
+        }
+    };
+    m_links->accounts()->token(account, [this, teams, listing, settle, addFiles](const QByteArray &token) {
         if (token.isEmpty()) {
             listing->errors << QObject::tr("the keychain has no Figma token: sign in again in Settings, Accounts");
             settle();
             return;
         }
-        for (const QString &team : teams) {
-            ++listing->pending;
-            get(token, QStringLiteral("/v1/teams/%1/projects").arg(team),
-                [this, token, team, listing, settle](int status, const QJsonObject &json, const QString &error) {
-                    if (status != 200) {
-                        // Said in the palette: a wrong id, or a token
-                        // without the projects:read scope
-                        listing->errors << (status == 403
-                            ? QObject::tr("team %1: %2 (a token needs the projects:read scope to list a team's files)")
-                                  .arg(team, error)
-                            : QObject::tr("team %1: %2").arg(team, error));
-                    }
-                    if (status == 200) {
-                        for (const QJsonValue &value : json.value(QLatin1String("projects")).toArray()) {
-                            const QJsonObject project = value.toObject();
-                            const QString name = project.value(QLatin1String("name")).toString();
-                            const QString id = project.value(QLatin1String("id")).toVariant().toString();
-                            ++listing->pending;
-                            get(token, QStringLiteral("/v1/projects/%1/files").arg(id),
-                                [listing, settle, name](int status, const QJsonObject &json, const QString &) {
-                                    if (status == 200) {
-                                        for (const QJsonValue &f : json.value(QLatin1String("files")).toArray()) {
-                                            const QJsonObject file = f.toObject();
-                                            listing->files << QVariantMap{
-                                                {QStringLiteral("key"), file.value(QLatin1String("key")).toString()},
-                                                {QStringLiteral("name"), file.value(QLatin1String("name")).toString()},
-                                                {QStringLiteral("project"), name},
-                                                {QStringLiteral("thumbnail"), file.value(QLatin1String("thumbnail_url")).toString()}};
-                                        }
-                                    }
-                                    settle();
-                                });
+        listing->walk = [this, token, listing, settle, addFiles](const QString &id, const QString &name, int depth) {
+            if (++listing->folders > kMaxFolders)
+                return;
+            listing->pending += 2;
+            get(token, QStringLiteral("/v2/folders/%1/files").arg(id),
+                [settle, addFiles, name](int status, const QJsonObject &json, const QString &) {
+                    if (status == 200)
+                        addFiles(json, name);
+                    settle();
+                });
+            get(token, QStringLiteral("/v2/folders/%1/folders").arg(id),
+                [listing, settle, name, depth](int status, const QJsonObject &json, const QString &) {
+                    if (status == 200 && depth < kFolderDepth && listing->walk) {
+                        for (const QJsonValue &v : itemsOf(json, {"folders"})) {
+                            const QJsonObject sub = v.toObject();
+                            listing->walk(idOf(sub), name + QStringLiteral(" / ") + sub.value(QLatin1String("name")).toString(),
+                                          depth + 1);
                         }
                     }
                     settle();
+                });
+        };
+        for (const QString &team : teams) {
+            ++listing->pending;
+            // Folders (folders:read); else, for tokens made before them,
+            // projects (projects:read)
+            get(token, QStringLiteral("/v2/teams/%1/folders").arg(team),
+                [this, token, team, listing, settle, addFiles](int status, const QJsonObject &json, const QString &error) {
+                    if (status == 200) {
+                        for (const QJsonValue &v : itemsOf(json, {"folders"})) {
+                            const QJsonObject folder = v.toObject();
+                            if (listing->walk)
+                                listing->walk(idOf(folder), folder.value(QLatin1String("name")).toString(), 0);
+                        }
+                        settle();
+                        return;
+                    }
+                    const QString folderError = error;
+                    const int folderStatus = status;
+                    get(token, QStringLiteral("/v1/teams/%1/projects").arg(team),
+                        [this, token, team, listing, settle, addFiles, folderError, folderStatus](
+                            int status, const QJsonObject &json, const QString &error) {
+                            if (status != 200) {
+                                // Said in the palette: a wrong id, or a token
+                                // without the folders:read scope
+                                listing->errors << (folderStatus == 403 || status == 403
+                                    ? QObject::tr("team %1: %2 (a token needs the folders:read scope to list a team's files)")
+                                          .arg(team, folderStatus == 403 ? folderError : error)
+                                    : QObject::tr("team %1: %2").arg(team, folderError));
+                                settle();
+                                return;
+                            }
+                            for (const QJsonValue &value : itemsOf(json, {"projects"})) {
+                                const QJsonObject project = value.toObject();
+                                const QString name = project.value(QLatin1String("name")).toString();
+                                ++listing->pending;
+                                get(token, QStringLiteral("/v1/projects/%1/files").arg(idOf(project)),
+                                    [settle, addFiles, name](int status, const QJsonObject &json, const QString &) {
+                                        if (status == 200)
+                                            addFiles(json, name);
+                                        settle();
+                                    });
+                            }
+                            settle();
+                        });
                 });
         }
         settle();

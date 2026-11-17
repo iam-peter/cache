@@ -141,6 +141,17 @@ public:
                         body = R"({"status":403,"err":"Invalid token"})";
                     } else if (request.startsWith("GET /v1/me ")) {
                         body = R"({"handle":"Ada"})";
+                    } else if (request.startsWith("GET /v2/teams/2345678/folders ")) {
+                        // Folders, nested (folders:read)
+                        body = R"({"folders":[{"id":"11","name":"App","parent_folder_id":null}]})";
+                    } else if (request.startsWith("GET /v2/folders/11/files ")) {
+                        body = R"({"files":[{"key":"QwErTy111111","name":"App screens"}]})";
+                    } else if (request.startsWith("GET /v2/folders/11/folders ")) {
+                        body = R"({"folders":[{"id":"12","name":"Icons","parent_folder_id":"11"}]})";
+                    } else if (request.startsWith("GET /v2/folders/12/files ")) {
+                        body = R"([{"key":"IcOnS2222222","name":"Icon set"}])"; // a bare list
+                    } else if (request.startsWith("GET /v2/folders/12/folders ")) {
+                        body = R"({"folders":[]})";
                     } else if (request.startsWith("GET /v1/teams/1234567/projects ")) {
                         body = R"({"projects":[{"id":7,"name":"Web"}]})";
                     } else if (request.startsWith("GET /v1/projects/7/files ")) {
@@ -958,6 +969,14 @@ private slots:
         QCOMPARE(found.value("figma").size(), 1);
         QCOMPARE(found.value("figma").first().toMap().value("url").toString(),
                  QStringLiteral("https://www.figma.com/design/AbCdEf123456/Design-System"));
+        // A team listed through its folders, and their subfolders
+        links.accounts()->setTeams(QStringLiteral("figma"), QStringLiteral("figma.com"), QStringLiteral("2345678"));
+        found.clear();
+        links.search(QStringLiteral("icon"));
+        QTRY_VERIFY(found.contains("figma"));
+        QCOMPARE(found.value("figma").size(), 1);
+        QCOMPARE(found.value("figma").first().toMap().value("detail").toString(), QStringLiteral("Figma · App / Icons"));
+        QVERIFY(found.value("figma").first().toMap().value("url").toString().contains(QStringLiteral("IcOnS2222222")));
         // A team Figma won't list: why, where the files would be
         links.accounts()->setTeams(QStringLiteral("figma"), QStringLiteral("figma.com"), QStringLiteral("9999999"));
         found.clear();

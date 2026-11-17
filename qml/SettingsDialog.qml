@@ -381,7 +381,7 @@ Dialog {
                         textFormat: Text.StyledText
                         linkColor: Theme.s.text_link
                         text: providerBox.fixed
-                              ? qsTr("Figma: a personal access token, made in Figma under Settings, Security, with read access to file content.")
+                              ? qsTr("Figma: a personal access token, made in Figma under Settings, Security, with the scopes file_content:read and, to search a team's files, folders:read.")
                               : providerBox.gitlab
                               ? qsTr("GitLab: a personal access token with the read_api scope, made under your avatar, Edit profile, Access tokens.")
                               : providerBox.github
