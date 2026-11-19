@@ -73,7 +73,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: test-log-linux
@@ -119,7 +119,7 @@ jobs:
           stamp=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d%H%M%S)
           packaging/deb/build-deb.sh AppDir "$base+git$stamp.${GITHUB_SHA::7}" cache-linux-x64.deb
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cache-linux
           path: |
@@ -167,7 +167,7 @@ jobs:
           & build/Release/tst_board.exe -platform offscreen -v1 2>&1 | Out-Host
           "exit code: $LASTEXITCODE (0x{0:X8})" -f $LASTEXITCODE
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: test-log-windows
@@ -240,7 +240,7 @@ jobs:
           $p = Start-Process Cache/cache.exe -ArgumentList "--workspace", $workspace, "--grab", $png -Wait -PassThru -NoNewWindow
           if ($p.ExitCode -ne 0 -or -not (Test-Path $png)) { throw "The window did not show from the zip" }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cache-windows
           path: |
@@ -275,7 +275,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: test-log-macos
@@ -298,7 +298,7 @@ jobs:
             --workspace "$RUNNER_TEMP/workspace" --grab "$RUNNER_TEMP/window.png"
           test -s "$RUNNER_TEMP/window.png"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cache-macos
           path: cache-macos.dmg
@@ -310,7 +310,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: cache-*
           path: artifacts
