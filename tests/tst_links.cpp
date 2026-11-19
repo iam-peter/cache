@@ -1364,9 +1364,12 @@ private slots:
         QTRY_VERIFY(image().startsWith(QStringLiteral("file:")));
         const QString kept = QUrl(image()).toLocalFile();
         QVERIFY(kept.startsWith(folder.path()));
-        QFile file(kept);
-        QVERIFY(file.open(QIODevice::ReadOnly));
-        QCOMPARE(file.readAll(), QByteArray("PNG-of-1.png"));
+        {
+            // Closed again: Windows won't delete a file that is open
+            QFile file(kept);
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            QCOMPARE(file.readAll(), QByteArray("PNG-of-1.png"));
+        }
         QCOMPARE(api.renders, 1);
 
         // Asked again, the file unchanged: no new render, the same picture
