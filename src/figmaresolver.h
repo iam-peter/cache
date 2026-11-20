@@ -21,6 +21,8 @@ public:
     void resolve(const QUrl &url, const Done &done) override;
     // A frame rendered `pixels` large on its longest side (up to 4× its size)
     bool sharpen(const QUrl &url, int pixels, const Done &done) override;
+    // The teams', folders' and libraries' lists: read anew when next searched
+    void forget() override { m_filesRead = {}; }
     void signIn(const Account &account, const QByteArray &token, const SignedIn &done) override;
     // Its accounts are for figma.com, whatever the link's host
     QString fixedHost() const override { return QStringLiteral("figma.com"); }

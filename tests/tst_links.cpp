@@ -1487,6 +1487,17 @@ private slots:
         // By number only
         QCOMPARE(read(server.url("/600000")).value("title").toString(), QStringLiteral("Fix the crash on resize"));
 
+        // Read again on demand: what was read shows meanwhile; busy while reading
+        const qsizetype before = server.requests.size();
+        QSignalSpy busy(&links, &Links::busyChanged);
+        links.refresh();
+        QCOMPARE(links.card(server.url("/c/qt/qtbase/+/600000")).value("title").toString(),
+                 QStringLiteral("Fix the crash on resize"));
+        QVERIFY(links.busy());
+        QTRY_VERIFY(!links.busy());
+        QVERIFY(busy.size() >= 2);
+        QVERIFY(server.requests.size() > before);
+
         // Held back: by which label; no longer merging, above all
         info = read(server.url("/c/qt/qtbase/+/600008"));
         QCOMPARE(info.value("status").toString(), QStringLiteral("Verified −1"));
@@ -1524,7 +1535,7 @@ private slots:
         QVERIFY(server.queries.contains("is:open owner:self"));
         QSignalSpy reviews(&links, &Links::reviewsChanged);
         links.refreshReviews();
-        QTRY_COMPARE(reviews.size(), 1);
+        QTRY_VERIFY(!links.reviews().isEmpty()); // read already by the refresh above
         QCOMPARE(links.reviews().first().toMap().value("detail").toString(), QStringLiteral("qt/qtbase · 600000"));
 
         // An issue's changes: those naming its key, not abandoned

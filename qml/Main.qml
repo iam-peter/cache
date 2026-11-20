@@ -27,6 +27,12 @@ ApplicationWindow {
         Component.onDestruction: splitState = split.saveState()
     }
 
+    // The newest details of links, reviews and search lists: each link read
+    // again as it shows (what was read shows till then)
+    function refreshLinks() {
+        Links.refresh()
+    }
+
     // Plain Text items use the application font
     readonly property font uiFont: Theme.uiFont
     onUiFontChanged: Fonts.setApplicationFont(uiFont)
@@ -67,6 +73,7 @@ ApplicationWindow {
     Shortcut { sequences: ["Ctrl+2"]; onActivated: canvasView.fitSelection() }
     Shortcut { sequences: [StandardKey.Preferences, "Ctrl+,"]; onActivated: settingsDialog.open() }
     Shortcut { sequences: ["F1"]; onActivated: helpDialog.open() }
+    Shortcut { sequences: ["F5"]; onActivated: win.refreshLinks() }
     Shortcut { sequences: ["Ctrl+Shift+T"]; enabled: !win.popupOpen; onActivated: templates.open() }
     Shortcut { sequences: ["Ctrl+Shift+H"]; enabled: !win.popupOpen; onActivated: historyDialog.open() }
 
@@ -197,6 +204,26 @@ ApplicationWindow {
             }
 
             ToolSeparator {}
+
+            // Links, reviews and the services' lists read anew; turning while
+            // links are being read
+            IconButton {
+                id: refreshButton
+                styles: [Styles.ButtonStyle.medium]
+                iconName: "refresh-cw"
+                onClicked: win.refreshLinks()
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Get the newest details of links, reviews and search lists (F5)")
+                RotationAnimator {
+                    target: refreshButton.contentItem
+                    from: 0
+                    to: 360
+                    duration: 900
+                    loops: Animation.Infinite
+                    running: Links.busy
+                    onRunningChanged: if (!running) refreshButton.contentItem.rotation = 0
+                }
+            }
 
             IconButton {
                 styles: [Styles.ButtonStyle.medium]
@@ -336,6 +363,7 @@ ApplicationWindow {
             { name: qsTr("History…"), keys: "Ctrl+Shift+H", enabled: History.available, run: () => historyDialog.open() },
             { name: qsTr("Show or hide the sidebar"), keys: "Ctrl+B", run: () => sidebar.visible = !sidebar.visible },
             { name: qsTr("Settings"), keys: "Ctrl+,", run: () => settingsDialog.open() },
+            { name: qsTr("Refresh links and reviews"), keys: "F5", run: () => win.refreshLinks() },
             { name: qsTr("Keyboard shortcuts"), keys: "F1", run: () => helpDialog.open() },
         ]
     }
@@ -389,6 +417,7 @@ ApplicationWindow {
                     ["Ctrl+Shift+T / H", qsTr("Templates / history")],
                     ["Ctrl+B", qsTr("Show or hide the sidebar")],
                     ["Ctrl+,", qsTr("Settings")],
+                    ["F5", qsTr("Get the newest details of links, reviews and search lists")],
                 ]
                 delegate: RowLayout {
                     id: shortcutRow

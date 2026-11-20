@@ -173,6 +173,9 @@ public:
     // What waits for the user's review there (merge and pull requests),
     // for the Tasks tab
     virtual void reviews(const Results &done) { done({}); }
+    // What it keeps besides answers to links (lists to search): forgotten,
+    // so it is read anew when next needed
+    virtual void forget() {}
     // Whether it can tell what an issue (a Jira key) led to: Gerrit's
     // changes whose commit message names it
     virtual bool relates() const { return false; }
@@ -196,6 +199,8 @@ class Links : public QObject
     // Goes up whenever something about a link came in: bindings that call
     // info() ask again
     Q_PROPERTY(int revision READ revision NOTIFY revisionChanged)
+    // Whether links are being read now
+    Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(Accounts *accounts READ accounts CONSTANT)
     // [{id, name, fixedHost, needsUser}] of the resolvers that sign in
     Q_PROPERTY(QVariantList providers READ providers CONSTANT)
@@ -267,6 +272,10 @@ public:
     QVariantList reviews() const { return m_reviews; }
     // Asks GitLab and GitHub again what waits for the user's review
     Q_INVOKABLE void refreshReviews();
+    // Everything read anew: each link when next shown (what was read shows
+    // till then), the services' search lists, what waits for review
+    Q_INVOKABLE void refresh();
+    bool busy() const { return m_reading > 0; }
     // Whether `url` is an issue whose changes a service with an account
     // can find (Gerrit's, by the issue's key)
     Q_INVOKABLE bool canRelate(const QString &url) const;
@@ -313,6 +322,7 @@ public:
 
 signals:
     void revisionChanged();
+    void busyChanged();
     void accountAdded(bool ok, const QString &message);
     void found(const QString &query, const QString &source, const QVariantList &results);
     void reviewsChanged();
@@ -358,6 +368,7 @@ private:
     QString m_imageFolder;
     QSet<QString> m_downloading; // pictures being fetched, by their address
     QSet<QString> m_sharpening;  // entries a sharper picture is asked for
+    int m_reading = 0;           // entries being read
     QHash<QString, int> m_sharpened; // the largest step asked for, by entry
     bool m_loaded = false;
     QTimer m_bump; // answers come in batches: one revision for each

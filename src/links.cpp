@@ -618,6 +618,8 @@ QVariantMap Links::lookUp(const QString &url, LinkResolver *resolver)
     const bool resting = entry.failed.isValid() && entry.failed.secsTo(now) < kRetrySeconds;
     if (!fresh && !resting && !entry.pending) {
         entry.pending = true;
+        if (m_reading++ == 0)
+            emit busyChanged();
         QPointer<Links> self(this);
         resolver->resolve(QUrl(url), [self, key](const std::optional<LinkInfo> &info, const QString &error) {
             if (!self)
@@ -636,6 +638,8 @@ QVariantMap Links::lookUp(const QString &url, LinkResolver *resolver)
 void Links::settle(const QString &key, const std::optional<LinkInfo> &info, const QString &error)
 {
     Entry &entry = m_entries[key];
+    if (entry.pending && --m_reading == 0)
+        emit busyChanged();
     entry.pending = false;
     if (!info) {
         // What was known stays shown; asked again in a while
@@ -927,6 +931,19 @@ void Links::related(const QString &url)
         });
     }
     settle();
+}
+
+void Links::refresh()
+{
+    for (Entry &entry : m_entries) {
+        entry.fetched = {};
+        entry.failed = {};
+    }
+    m_sharpened.clear();
+    for (const auto &resolver : m_resolvers)
+        resolver->forget();
+    refreshReviews();
+    touch(); // the cards ask again
 }
 
 void Links::refreshReviews()
