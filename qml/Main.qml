@@ -364,6 +364,7 @@ ApplicationWindow {
             { name: qsTr("Show or hide the sidebar"), keys: "Ctrl+B", run: () => sidebar.visible = !sidebar.visible },
             { name: qsTr("Settings"), keys: "Ctrl+,", run: () => settingsDialog.open() },
             { name: qsTr("Refresh links and reviews"), keys: "F5", run: () => win.refreshLinks() },
+            { name: qsTr("Copy the selection's links"), enabled: selection.length > 0, run: () => canvasView.copyLinks() },
             { name: qsTr("Keyboard shortcuts"), keys: "F1", run: () => helpDialog.open() },
         ]
     }

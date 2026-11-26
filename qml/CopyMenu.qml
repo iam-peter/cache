@@ -29,6 +29,11 @@ Menu {
         text: qsTr("Media only")
         onTriggered: menu.canvas.copyNotes("media")
     }
+    // Every web address in them: link cards, pulled-out details, notes
+    KeyedMenuItem {
+        text: qsTr("Links")
+        onTriggered: menu.canvas.copyLinks()
+    }
     MenuSeparator {}
     // HTML with the images inside, and the plain text: what Teams, mail and
     // office documents take

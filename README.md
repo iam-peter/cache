@@ -241,6 +241,11 @@ request; the [website](pages/) is published from `pages/` by the
     only** copies; and **Media only**, the images and files as files
     named after the media (`screenshot123.png` for
     `![screenshot123](assets/paste-….png)`). Paste one, then the other.
+    **Links** copies every web address in the selection (link cards, details
+    pulled out of them, addresses in notes), each once in reading order:
+    one a line as text, and named as their cards name them ("QTBUG-123
+    Fix the crash") where rich text is taken. Also in a selection's item
+    menu and the command palette.
   - `Ctrl+Shift+C` (or the selection toolbar) copies the selection as a
     picture, at twice the screen's resolution, without selection marks.
   - **⋯ → Export a picture…** copies or saves (PNG or one-page PDF) the

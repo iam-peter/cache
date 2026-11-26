@@ -332,6 +332,12 @@ public:
     Prompt promptOf(const QStringList &ids) const;
     Q_INVOKABLE bool copyImageFile(const QString &path) const;
     Q_INVOKABLE void copyText(const QString &text) const;
+    // The web addresses items hold, in reading order, each once: link cards'
+    // and pulled-out details', and those written in notes, shapes and text
+    Q_INVOKABLE QStringList linksOf(const QStringList &ids) const;
+    // Links [{url, title}] to paste: one address a line, and as titled
+    // links for what takes rich text
+    Q_INVOKABLE void copyLinks(const QVariantList &links) const;
     Q_INVOKABLE QString tempPath(const QString &name) const;
     Q_INVOKABLE bool copyFile(const QString &from, const QString &to) const;
     Q_INVOKABLE bool writePdf(const QString &imagePath, const QString &pdfPath) const;

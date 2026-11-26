@@ -571,6 +571,26 @@ Item {
     // mentions named after the files "media" copies) or "media" (their
     // images and files): for a chat's prompt box, which takes text or files
     // in one paste, never both
+    // The selection's links, each named as its card names it: an issue's
+    // key and summary, a change's number and subject, a page's title
+    function copyLinks() {
+        const urls = Board.linksOf(selection)
+        if (urls.length === 0) {
+            toast.show(qsTr("No links in the selection"))
+            return
+        }
+        const links = urls.map(url => {
+            const info = Links.card(url)
+            const title = info.title || ""
+            const key = Links.issueKey(url)
+            const name = info.label && info.label !== title ? info.label + " " + title
+                       : key !== "" && title === key && info.summary ? key + " " + info.summary
+                       : title
+            return { url: url, title: name }
+        })
+        Board.copyLinks(links)
+        toast.show(urls.length === 1 ? qsTr("Copied 1 link") : qsTr("Copied %1 links").arg(urls.length))
+    }
     function copyNotes(mode) {
         if (selection.length === 0)
             return
@@ -2415,6 +2435,12 @@ Item {
             height: visible ? implicitHeight : 0
             text: qsTr("Copy address")
             onTriggered: Board.copyText(cardMenu.item.text)
+        }
+        MenuItem {
+            visible: view.selection.length > 1
+            height: visible ? implicitHeight : 0
+            text: qsTr("Copy the selection's links")
+            onTriggered: view.copyLinks()
         }
         MenuItem {
             visible: cardMenu.item.type === "link"

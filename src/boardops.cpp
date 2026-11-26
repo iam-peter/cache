@@ -1583,6 +1583,61 @@ void BoardModel::copyText(const QString &text) const
     QGuiApplication::clipboard()->setText(text);
 }
 
+QStringList BoardModel::linksOf(const QStringList &ids) const
+{
+    QList<const BoardItem *> items;
+    for (const QString &id : ids) {
+        const int row = indexOf(id);
+        if (row >= 0)
+            items << &m_items.at(row);
+    }
+    std::stable_sort(items.begin(), items.end(), [this](const BoardItem *a, const BoardItem *b) {
+        return m_readingOrder.value(a->id) < m_readingOrder.value(b->id);
+    });
+    // An address in text: up to a space or bracket, without the sentence's
+    // full stop or comma after it
+    static const QRegularExpression address(QStringLiteral(R"(https?://[^\s<>()\[\]"'`]+)"));
+    QStringList links;
+    const auto take = [&](const QString &url) {
+        QString u = url;
+        while (!u.isEmpty() && QStringLiteral(".,;:!?").contains(u.back()))
+            u.chop(1);
+        if (u.size() > 8 && !links.contains(u))
+            links << u;
+    };
+    for (const BoardItem *it : std::as_const(items)) {
+        if (it->type == QLatin1String("link") || it->type == QLatin1String("field")) {
+            if (it->text.startsWith(QLatin1String("http")))
+                take(it->text);
+            continue;
+        }
+        if (it->type == QLatin1String("note") || it->type == QLatin1String("shape") || it->type == QLatin1String("text")) {
+            auto matches = address.globalMatch(it->text);
+            while (matches.hasNext())
+                take(matches.next().captured(0));
+        }
+    }
+    return links;
+}
+
+void BoardModel::copyLinks(const QVariantList &links) const
+{
+    QStringList lines, html;
+    for (const QVariant &v : links) {
+        const QVariantMap link = v.toMap();
+        const QString url = link.value(QStringLiteral("url")).toString();
+        if (url.isEmpty())
+            continue;
+        const QString title = link.value(QStringLiteral("title")).toString();
+        lines << url;
+        html << QStringLiteral("<a href=\"%1\">%2</a>").arg(url.toHtmlEscaped(), (title.isEmpty() ? url : title).toHtmlEscaped());
+    }
+    auto *data = new QMimeData;
+    data->setText(lines.join(QLatin1Char('\n')));
+    data->setHtml(html.join(QStringLiteral("<br>\n")));
+    QGuiApplication::clipboard()->setMimeData(data);
+}
+
 bool BoardModel::copyImageFile(const QString &path) const
 {
     const QImage image(toLocalPath(path));

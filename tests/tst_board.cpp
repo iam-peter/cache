@@ -852,6 +852,38 @@ private slots:
                  QStringLiteral("an image of [other.png](media:assets/other.png)"));
     }
 
+    void copyingLinks()
+    {
+        BoardModel board;
+        board.load(project("links"));
+        // In reading order: rows of 120 px, left to right
+        const QString jira = board.get(board.addItem("link", 0, 0, 320, 100, {},
+                                                     QStringLiteral("https://qt-project.atlassian.net/browse/QTBUG-1"))).value("id").toString();
+        const QString gerrit = board.get(board.addItem("link", 400, 0, 320, 100, {},
+                                                       QStringLiteral("https://codereview.qt-project.org/c/qt/qtbase/+/600001"))).value("id").toString();
+        const QString note = board.get(board.addNote(0, 300, QStringLiteral(
+            "# Links\n\nSee [the spec](https://example.org/spec) and https://example.org/b.\n"
+            "Again: https://qt-project.atlassian.net/browse/QTBUG-1"), 320, 200)).value("id").toString();
+        const QString field = board.get(board.addItem("field", 400, 300, 200, 44, QStringLiteral(":status"),
+                                                      QStringLiteral("https://codereview.qt-project.org/c/qt/qtbase/+/600001"))).value("id").toString();
+        const QString shape = board.get(board.addItem("shape", 0, 600, 120, 80, QStringLiteral("rect"))).value("id").toString();
+        // Each once, the full stop after one left out; nothing from a shape without
+        QCOMPARE(board.linksOf({field, shape, note, gerrit, jira}),
+                 (QStringList{QStringLiteral("https://qt-project.atlassian.net/browse/QTBUG-1"),
+                              QStringLiteral("https://codereview.qt-project.org/c/qt/qtbase/+/600001"),
+                              QStringLiteral("https://example.org/spec"), QStringLiteral("https://example.org/b")}));
+        QVERIFY(board.linksOf({shape}).isEmpty());
+
+        // An address a line, and titled links
+        board.copyLinks({QVariantMap{{"url", QStringLiteral("https://qt-project.atlassian.net/browse/QTBUG-1")},
+                                     {"title", QStringLiteral("QTBUG-1 Fix the crash & more")}},
+                         QVariantMap{{"url", QStringLiteral("https://example.org/b")}}});
+        const QMimeData *data = QGuiApplication::clipboard()->mimeData();
+        QCOMPARE(data->text(), QStringLiteral("https://qt-project.atlassian.net/browse/QTBUG-1\nhttps://example.org/b"));
+        QVERIFY(data->html().contains(QStringLiteral("<a href=\"https://qt-project.atlassian.net/browse/QTBUG-1\">QTBUG-1 Fix the crash &amp; more</a>")));
+        QVERIFY(data->html().contains(QStringLiteral("<a href=\"https://example.org/b\">https://example.org/b</a>")));
+    }
+
     void clipboardHtmlForTeams()
     {
         BoardModel board;
